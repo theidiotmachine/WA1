@@ -1,0 +1,11 @@
+[package]
+name = "main"
+version = "0.1.0"
+authors = ["theidiotmachine <dinsdt@googlemail.com>"]
+edition = "2018"
+
+[dependencies]
+ress = { path = "../ress" }
+ast = { path = "../ast" }
+parser = { path = "../parser" }
+writer = { path = "../writer" }

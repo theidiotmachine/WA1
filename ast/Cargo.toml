@@ -1,0 +1,15 @@
+[package]
+name = "ast"
+version = "0.4.0"
+authors = ["rfm <r@robertmasen.pizza>", "theidiotmachine <dinsdt@googlemail.com>"]
+edition = "2018"
+description = "Rusty-TypeScript Abstract Syntax Tree. Started life as resast by Robert Masen."
+repository = "https://github.com/FreeMasen/resast"
+license = "MIT"
+keywords = ["JavaScript", "parsing", "JS", "ES", "ECMA"]
+categories = ["parsing", "text-processing", "web-programming"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ress = { path = "../ress" }

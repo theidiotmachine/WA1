@@ -1,0 +1,14 @@
+[package]
+name = "ress"
+version = "0.8.1"
+authors = ["Robert Masen <r@robertmasen.pizza>",  "theidiotmachine <dinsdt@googlemail.com>"]
+description = "A scanner/tokenizer for JS files, repurposed"
+keywords = ["JavaScript", "parsing", "JS", "ES", "ECMA", "TS"]
+categories = ["parsing", "text-processing", "web-programming"]
+license = "MIT"
+repository = "https://github.com/freemasen/ress"
+readme = "./README.md"
+edition = "2018"
+
+[dependencies]
+log = "0.4"
