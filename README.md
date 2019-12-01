@@ -1,3 +1,45 @@
+# WA1
+
+This is the WebAssembly1 project. It needs a fancy name. At some point it will get that.
+
+## Building
+
+To build, first you need Rust. Install cargo. Then, run
+
+> cargo build
+
+in the root. At the moment, 
+
+> cargo run
+
+will parse `main/src/one.ws` and generate `out.wasm` in the root. This will produce a function `addd` that adds two numbers.
+
+## Running
+
+To run, you will need some way of running wasm. The easiest is to use a webpage that looks like this
+
+```html
+<html>
+<body>
+  <script>
+    fetch('out.wasm').then(response =>
+      response.arrayBuffer()
+    ).then(bytes =>
+      WebAssembly.instantiate(bytes, {imports: {}})
+    ).then(results => {
+      window.addd = results.instance.exports.addd;
+    });
+  </script>
+</body>
+</html>
+```
+
+Serve it with http-server; install that with 
+
+> npm install -g http-server
+
+and manually call in your browser in the debugger by typing the function name (called `addd` out of the box).
+
 ## TODO
 
 ### Short term
