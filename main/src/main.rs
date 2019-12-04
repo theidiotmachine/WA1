@@ -21,12 +21,14 @@ extern crate writer;
 
 fn main() {
     let js = include_str!("one.ws");
+    println!("go");
     let mut builder = Builder::new();
+    println!("parse");
     let mut p = builder
         .js(js)
         .build()
         .unwrap();
     let script = p.parse().unwrap();
     println!("{:#?}", script);
-    writer::write(script);  
+    writer::write(script, &String::from("out.wasm"));  
 }

@@ -1,4 +1,4 @@
-use crate::types::Type;
+use types::Type;
 use crate::stmt::Stmt;
 use crate::stmt::VariableDecl;
 use crate::stmt::ClosureRef;

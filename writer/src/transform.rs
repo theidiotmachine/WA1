@@ -7,30 +7,31 @@ use parity_wasm::builder::{FunctionDefinition, FunctionBuilder};
 use std::collections::HashMap;
 
 pub use errs::Error;
+pub use types::Type;
 
 fn get_ir_type(r#type: &Type) -> ValueType {
     match r#type {
         Type::Number => ValueType::F64,
         //if we end up at runtime generating such an argument, just pass an empty int and be done. It's probably a generic.
-        Type::Void => ValueType::I32, 
+        Type::FakeVoid => ValueType::I32, 
         _ => panic!()
     }
 }
 
 fn get_ir_return_type(r#type: &Type) -> Option<ValueType> {
     match r#type {
-        Type::Void => None,
+        Type::RealVoid => None,
         _ => Some(get_ir_type(r#type))
     }
 }
 
-fn transform_expr(
-    expr: &Expr,
+fn transform_typed_expr(
+    typed_expr: &TypedExpr,
     global_var_map: &HashMap<String, u32>,
     local_var_map: &HashMap<String, u32>,
     errors: &mut Vec<Error>
 ) -> Vec<Instruction> {
-    match expr {
+    match &typed_expr.expr {
         Expr::FloatLiteral(v) => {
             vec![Instruction::F64Const(v.to_bits())]
         },
@@ -63,10 +64,12 @@ fn transform_expr(
             let mut vi: Vec<Instruction> = vec![];
                     
             if bo.op.is_assign_operator() {
-                
+                panic!();
             } else if bo.op.is_simple_operator() {
-                vi.append(&mut transform_expr(&bo.lhs, global_var_map, local_var_map, errors));
-                vi.append(&mut transform_expr(&bo.rhs, global_var_map, local_var_map, errors));
+                vi.append(&mut transform_typed_expr(&bo.lhs, global_var_map, local_var_map, errors));
+                vi.append(&mut transform_typed_expr(&bo.rhs, global_var_map, local_var_map, errors));
+            } else {
+                panic!();
             }
             match bo.op {
                 BinaryOperator::Plus => {
@@ -90,7 +93,7 @@ fn transform_expr(
         },
 
         Expr::Parens(p) => {
-            transform_expr(&p, global_var_map, local_var_map, errors)
+            transform_typed_expr(&p, global_var_map, local_var_map, errors)
         },
 
         _ => { errors.push(Error::NotYetImplemented(String::from("operator"))); vec![] },
@@ -107,7 +110,7 @@ fn transform_stmt(stmt: &Stmt,
             match o_expr {
                 None => vec![Instruction::Return],
                 Some(expr) => {
-                    let mut this_vi = transform_expr(&expr, global_var_map, local_var_map, errors);
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, errors);
                     this_vi.push(Instruction::Return);
                     this_vi
                 }
@@ -118,7 +121,7 @@ fn transform_stmt(stmt: &Stmt,
             let mut vi = vec![];
             match &v.init {
                 Some(expr) => {
-                    let mut this_vi = transform_expr(&expr, global_var_map, local_var_map, errors);
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, errors);
                     vi.append(& mut this_vi);
                     //then set the variable
                     let o_idx = local_var_map.get(&v.internal_name);
@@ -133,7 +136,7 @@ fn transform_stmt(stmt: &Stmt,
         },
         Stmt::Expr(e) => {
             // an expr returns something, so run it
-            let mut this_vi = transform_expr(&e, global_var_map, local_var_map, errors);
+            let mut this_vi = transform_typed_expr(&e, global_var_map, local_var_map, errors);
             // now pop what it returned
             this_vi.push(Instruction::Drop);
             this_vi
@@ -193,4 +196,8 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
         }
     }
     m.build()
+}
+
+#[cfg(test)]
+mod test {
 }

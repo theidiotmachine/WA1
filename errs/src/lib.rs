@@ -10,6 +10,9 @@ pub enum Error {
     Other(String),
     NotYetImplemented(String),
     VariableNotRecognised(String),
+    TypeFailureUnaryOperator,
+    TypeFailureBinaryOperator,
+    TypeFailureVariableCreation,
 }
 
 impl Display for Error {
@@ -23,6 +26,9 @@ impl Display for Error {
             Error::Other(ref msg) => write!(f, "{}", msg),
             Error::NotYetImplemented(ref msg) => write!(f, "Not yet implemented: {}", msg),
             Error::VariableNotRecognised(ref var_name) => write!(f, "Var not recognised: {}", var_name),
+            Error::TypeFailureUnaryOperator => write!(f, "Type failure unary operator"),
+            Error::TypeFailureBinaryOperator => write!(f, "Type failure binary operator"),
+            Error::TypeFailureVariableCreation => write!(f, "Type failure variable creation"),
         }
     }
 }

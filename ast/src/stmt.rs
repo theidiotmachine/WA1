@@ -1,6 +1,6 @@
-use crate::expr::Expr;
+use crate::expr::TypedExpr;
 use crate::func::FuncDecl;
-use crate::types::Type;
+use types::Type;
 
 pub mod prelude {
     pub use super::Stmt;
@@ -16,7 +16,7 @@ pub struct VariableDecl {
     pub orig_name: String,
     pub r#type: Type,
     pub constant: bool,
-    pub init: Option<Expr>,
+    pub init: Option<TypedExpr>,
     pub closure_source: bool,
     pub arg: bool,
 }
@@ -27,7 +27,7 @@ pub struct GlobalVariableDecl {
     pub name: String,
     pub r#type: Type,
     pub constant: bool,
-    pub init: Option<Expr>,
+    pub init: Option<TypedExpr>,
     pub export: bool,
 }
 
@@ -42,12 +42,12 @@ pub struct ClosureRef {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     /// Any expression
-    Expr(Expr),
+    Expr(TypedExpr),
     /// a function declaration. This might compile to a closure creation, a function pointer, or a no op 
     /// this is wrong - in JS this is an expression
     FuncDecl(FuncDecl),
     /// variable declaration
     Variable(VariableDecl),
     /// return statement
-    Return(Option<Expr>),
+    Return(Option<TypedExpr>),
 }

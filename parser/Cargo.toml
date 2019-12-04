@@ -17,5 +17,6 @@ edition = "2018"
 ress = { path = "../ress" }
 ast = { path = "../ast" }
 errs = { path = "../errs" }
+types = {path = "../types"}
 log = "0.4"
 backtrace = "0"

@@ -1,7 +1,6 @@
 pub mod stmt;
 pub mod expr;
 pub mod func;
-pub mod types;
 
 use stmt::GlobalVariableDecl;
 use stmt::Stmt;
@@ -11,10 +10,12 @@ use std::collections::HashMap;
 pub mod prelude {
     pub use super::stmt::prelude::*;
     pub use super::func::prelude::*;
-    pub use super::types::prelude::*;
     pub use super::expr::prelude::*;
     pub use super::Program;
 }
+
+#[macro_use]
+extern crate lazy_static;
 
 /// a fully parsed 'program'. A set of globals (with initialisations)
 #[derive(PartialEq, Debug)]

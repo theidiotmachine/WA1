@@ -42,12 +42,19 @@ and manually call in your browser in the debugger by typing the function name (c
 
 ## TODO
 
-### Short term
-1. typing inference
-1. function calling
-1. assignments and consts
-1. options (?)
-1. a runtime
+1. [ ] typing inference
+    1. [x] every expr needs a return type!
+    1. [ ] functions are exprs, not statements
+1. [ ] control flow
+    1. [ ] if
+    1. [ ] while
+    1. [ ] simple for loops
+1. [ ] function calling
+    1. [ ] function return type inference
+    1. [ ] functions as first class objects (but not closures)
+1. [ ] assignments and consts
+1. [ ] options (?)
+1. [ ] a runtime
     1. a gc...
     1. ...but don't allocate gc unless you have to! If the function is pure, just delete after
     1. this is surprisingly hard. thoughts
@@ -58,19 +65,18 @@ and manually call in your browser in the debugger by typing the function name (c
         1. if it can't figure it out you are full gc
         1. realistically this is what most pointers will be, so this may be a pessimisation
         1. certainly if you are passed into a virtual function, or into a function pointer, we have to gc you because who knows what will happen?
-1. structs, ptrs
-    1. opt: booleans are 1 bit in structs, 32 bits on the heap
-1. closure generation and usage
-    1. optimisation - don't capture consts, you have all the information to roll them inline
-    1. right now functions are statements, not expressions, this is obviously wrong
-1. containers
-    1. map/foreach are macros
-1. numbers
+1. [ ] structs, ptrs
+    1. opt: booleans are 1 bit in structs, 32 bits on the heap?
+1. [ ] closure generation and usage
+    1. [ ] optimisation - don't capture consts, you have all the information to roll them inline. This is awesome because I don't think JS can do this
+1. [ ] containers
+    1. [ ] map/foreach are macros
+    1. [ ] more complex for loops (in, of)
+1. [ ] numbers
     1. option 1 - everything is an f64 except for indexes which are i32 and the compiler figures it out
     1. option 2 - everything is a fixed width 64 bit number excecpt for other things
     1. colors are special and magic
-
-### Long term
 1. imports, exports
-    1. write a linker (!)
-    1. write an export format equiv to ts.d
+  1. imports need to be rolled into the function index map
+  1. write a linker (!)
+  1. write an export format equiv to ts.d

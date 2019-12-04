@@ -13,3 +13,5 @@ categories = ["parsing", "text-processing", "web-programming"]
 
 [dependencies]
 ress = { path = "../ress" }
+types = {path="../types"}
+lazy_static = "1.4.0"
