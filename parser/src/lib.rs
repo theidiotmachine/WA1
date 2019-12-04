@@ -1270,11 +1270,18 @@ impl<'b> Parser<'b> {
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    
     #[test]
     fn add_test() {
-        let add = "eexport function addd(x: number, y: number, z: number): number {
+        let add = "export function addd(x: number, y: number, z: number): number {
             let a = 1;
             return x + y + z + a;
         }";
+
+        let mut builder = Builder::new();
+        let mut p = builder.js(add).build().unwrap();
+        let script = p.parse().unwrap();
+        println!("{:#?}", script);
     }
 }
