@@ -26,6 +26,66 @@ fn get_ir_return_type(r#type: &Type) -> Option<ValueType> {
     }
 }
 
+fn transform_lvalue_get(
+    l_value: &TypedLValueExpr,
+    global_var_map: &HashMap<String, u32>,
+    local_var_map: &HashMap<String, u32>,
+    errors: &mut Vec<Error>
+) -> Vec<Instruction> {
+    match &l_value.expr {
+        LValueExpr::GlobalVariableAssign(name) => {
+            let o_idx = global_var_map.get(name);
+            match o_idx {
+                None => { errors.push(Error::VariableNotRecognised(name.clone())); vec![] },
+                Some(idx) => {
+                    vec![Instruction::GetGlobal(*idx)]
+                }
+            }
+        },
+
+        LValueExpr::LocalVariableAssign(name) => {
+            let o_idx = local_var_map.get(name);
+            match o_idx {
+                None => { errors.push(Error::VariableNotRecognised(name.clone())); vec![] },
+                Some(idx) => {
+                    vec![Instruction::GetLocal(*idx)]
+                }
+            }
+        },
+        _ => { errors.push(Error::NotYetImplemented(String::from("lvalue get"))); vec![] }
+    }
+}
+
+fn transform_lvalue_tee(
+    l_value: &TypedLValueExpr,
+    global_var_map: &HashMap<String, u32>,
+    local_var_map: &HashMap<String, u32>,
+    errors: &mut Vec<Error>
+) -> Vec<Instruction> {
+    match &l_value.expr {
+        LValueExpr::GlobalVariableAssign(name) => {
+            let o_idx = global_var_map.get(name);
+            match o_idx {
+                None => { errors.push(Error::VariableNotRecognised(name.clone())); vec![] },
+                Some(idx) => {
+                    vec![Instruction::SetGlobal(*idx), Instruction::GetGlobal(*idx)]
+                }
+            }
+        },
+
+        LValueExpr::LocalVariableAssign(name) => {
+            let o_idx = local_var_map.get(name);
+            match o_idx {
+                None => { errors.push(Error::VariableNotRecognised(name.clone())); vec![] },
+                Some(idx) => {
+                    vec![Instruction::TeeLocal(*idx)]
+                }
+            }
+        },
+        _ => { errors.push(Error::NotYetImplemented(String::from("lvalue get"))); vec![] }
+    }
+}
+
 fn transform_typed_expr(
     typed_expr: &TypedExpr,
     global_var_map: &HashMap<String, u32>,
@@ -64,54 +124,25 @@ fn transform_typed_expr(
         Expr::BinaryOperator(bo) => {
             let mut vi: Vec<Instruction> = vec![];
                     
-            if bo.op.is_assign_operator() {
-                panic!();
-            } else if bo.op.is_simple_operator() {
-                vi.append(&mut transform_typed_expr(&bo.lhs, global_var_map, local_var_map, errors));
-                vi.append(&mut transform_typed_expr(&bo.rhs, global_var_map, local_var_map, errors));
-            } else {
-                panic!();
-            }
+            vi.append(&mut transform_typed_expr(&bo.lhs, global_var_map, local_var_map, errors));
+            vi.append(&mut transform_typed_expr(&bo.rhs, global_var_map, local_var_map, errors));
+        
             match bo.op {
-                BinaryOperator::Plus => {
-                    vi.push(Instruction::F64Add);
-                },
-                BinaryOperator::Minus => {
-                    vi.push(Instruction::F64Sub);
-                },
-                BinaryOperator::Multiply => {
-                    vi.push(Instruction::F64Mul);
-                },
-                BinaryOperator::Divide => {
-                    vi.push(Instruction::F64Div);
-                },
-                BinaryOperator::GreaterThan => {
-                    vi.push(Instruction::F64Gt);
-                },
-                BinaryOperator::GreaterThanEqual => {
-                    vi.push(Instruction::F64Ge);
-                },
-                BinaryOperator::LessThan=> {
-                    vi.push(Instruction::F64Lt);
-                },
-                BinaryOperator::LessThanEqual => {
-                    vi.push(Instruction::F64Le);
-                },
+                BinaryOperator::Plus => vi.push(Instruction::F64Add),
+                BinaryOperator::Minus => vi.push(Instruction::F64Sub),
+                BinaryOperator::Multiply => vi.push(Instruction::F64Mul),
+                BinaryOperator::Divide => vi.push(Instruction::F64Div),
+                BinaryOperator::GreaterThan => vi.push(Instruction::F64Gt),
+                BinaryOperator::GreaterThanEqual => vi.push(Instruction::F64Ge),
+                BinaryOperator::LessThan=> vi.push(Instruction::F64Lt),
+                BinaryOperator::LessThanEqual => vi.push(Instruction::F64Le),
 
                 //these are the bit instructions, but our strong typing should mean that this is safe
-                BinaryOperator::LogicalAnd => {
-                    vi.push(Instruction::I32And);
-                },
-                BinaryOperator::LogicalOr => {
-                    vi.push(Instruction::I32Or);
-                },
-
-                BinaryOperator::BitAnd => {
-                    vi.push(Instruction::I32And);
-                },
-                BinaryOperator::BitOr => {
-                    vi.push(Instruction::I32Or);
-                },
+                BinaryOperator::LogicalAnd => vi.push(Instruction::I32And),
+                BinaryOperator::LogicalOr => vi.push(Instruction::I32Or),
+                BinaryOperator::BitAnd => vi.push(Instruction::I32And),
+                BinaryOperator::BitOr => vi.push(Instruction::I32Or),
+                BinaryOperator::BitXor => vi.push(Instruction::I32Xor),
                 _ => {
                     errors.push(Error::NotYetImplemented(String::from("binary operator")))
                 }
@@ -125,8 +156,7 @@ fn transform_typed_expr(
             vi.append(&mut transform_typed_expr(&uo.expr, global_var_map, local_var_map, errors));
             match uo.op {
                 UnaryOperator::LogicalNot => {
-                    vi.push(Instruction::I32Const(-1));
-                    vi.push(Instruction::I32Xor);
+                    vi.push(Instruction::I32Eqz);
                 },
 
                 UnaryOperator::BitNot => {
@@ -159,6 +189,34 @@ fn transform_typed_expr(
                 vec![Instruction::I32Const(0)]
             }
         },
+
+        Expr::Assignment(l_value, op, r_value) => {
+            let mut vi: Vec<Instruction> = vec![];
+            
+            if *op == AssignmentOperator::Assign {
+                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, errors));
+                vi.append(&mut transform_lvalue_tee(l_value, global_var_map, local_var_map, errors));
+            } else {
+                vi.append(&mut transform_lvalue_get(l_value, global_var_map, local_var_map, errors));
+                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, errors));
+            
+                match op {
+                    AssignmentOperator::MinusAssign => vi.push(Instruction::F64Sub),
+                    AssignmentOperator::PlusAssign => vi.push(Instruction::F64Add),
+                    AssignmentOperator::MultiplyAssign => vi.push(Instruction::F64Mul),
+                    AssignmentOperator::DivideAssign => vi.push(Instruction::F64Div),
+                    AssignmentOperator::BitAndAssign => vi.push(Instruction::I32And),
+                    AssignmentOperator::BitOrAssign => vi.push(Instruction::I32Or),
+                    AssignmentOperator::BitXorAssign => vi.push(Instruction::I32Xor),
+                    _ => {
+                        errors.push(Error::NotYetImplemented(String::from("assignment operator")))
+                    }
+                }
+                vi.append(&mut transform_lvalue_tee(l_value, global_var_map, local_var_map, errors));
+            }
+
+            vi
+        }
 
         _ => { errors.push(Error::NotYetImplemented(String::from("expr"))); vec![] },
     }
@@ -235,6 +293,38 @@ fn transform_stmt(stmt: &Stmt,
             vi.push(Instruction::End);
             vi
         },
+
+        Stmt::While(c, b) => {
+            let mut vi: Vec<Instruction> = vec![];
+
+            // a br of 1 will be break
+            vi.push(Instruction::Block(BlockType::NoResult));
+
+            // a br of 0 will be continue
+            vi.push(Instruction::Loop(BlockType::NoResult));
+
+            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, errors);
+            vi.append(&mut this_vi);
+            
+            // if the condition failed, we bail
+            // the lack of a br_if_not is irritating. This should be a single
+            // instruction really
+            vi.push(Instruction::I32Eqz);
+            vi.push(Instruction::BrIf(1));
+
+            //run the body
+            let mut this_vi: Vec<Instruction> = transform_stmts(b, global_var_map, local_var_map, errors);
+            vi.append(&mut this_vi);
+
+            // jump back to the start of the loop
+            vi.push(Instruction::Br(0));
+            
+            vi.push(Instruction::End);
+            vi.push(Instruction::End);
+            
+            vi
+        },
+
         _ => {
             panic!();
         }

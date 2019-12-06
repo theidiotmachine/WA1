@@ -7,6 +7,9 @@ pub mod prelude {
     pub use super::BinaryOperatorApplication;
     pub use super::UnaryOperator;
     pub use super::UnaryOperatorApplication;
+    pub use super::AssignmentOperator;
+    pub use super::TypedLValueExpr;
+    pub use super::LValueExpr;
 }
 
 use lazy_static;
@@ -40,19 +43,7 @@ pub enum BinaryOperator{
     In,
     InstanceOf,
     //the assignment operators. These are considered ops in js, even though they sideeffect
-    Assign,
-    PlusAssign,
-    MinusAssign,
-    ExponentAssign,
-    MultiplyAssign,
-    DivideAssign,
-    ModAssign,
-    LeftShiftAssign,
-    RightShiftAssign,
-    UnsignedRightShiftAssign,
-    BitAndAssign,
-    BitXorAssign,
-    BitOrAssign
+    
 }
 
 lazy_static!{
@@ -95,6 +86,7 @@ static ref NO_IDEA_OP: OpType = OpType::NotImplementedOpType;
 }
 
 impl BinaryOperator{
+    /*
     pub fn is_assign_operator(&self) -> bool {
         match self {
             BinaryOperator::Assign => true,
@@ -141,7 +133,7 @@ impl BinaryOperator{
             BinaryOperator::In => true,
             _ => false
         }
-    }
+    }*/
 
     pub fn get_op_type(&self) -> &OpType {
         match self {
@@ -171,19 +163,6 @@ impl BinaryOperator{
             BinaryOperator::Exponent => &MATHS_BIN_OP,
             BinaryOperator::In => &NO_IDEA_OP,
             BinaryOperator::InstanceOf => &NO_IDEA_OP,
-            BinaryOperator::Assign => &ASSIGN_OP,
-            BinaryOperator::PlusAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::MinusAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::ExponentAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::MultiplyAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::DivideAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::ModAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::LeftShiftAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::RightShiftAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::UnsignedRightShiftAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::BitAndAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::BitXorAssign => &ASSIGN_MODIFY_OP,
-            BinaryOperator::BitOrAssign => &ASSIGN_MODIFY_OP
         }
     }
 }
@@ -223,12 +202,49 @@ impl UnaryOperator{
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum AssignmentOperator{
+    Assign,
+    PlusAssign,
+    MinusAssign,
+    ExponentAssign,
+    MultiplyAssign,
+    DivideAssign,
+    ModAssign,
+    LeftShiftAssign,
+    RightShiftAssign,
+    UnsignedRightShiftAssign,
+    BitAndAssign,
+    BitXorAssign,
+    BitOrAssign
+}
+
+impl AssignmentOperator{
+    pub fn get_op_type(&self) -> &OpType {
+        match self {
+            AssignmentOperator::Assign => &ASSIGN_OP,
+            AssignmentOperator::PlusAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::MinusAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::ExponentAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::MultiplyAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::DivideAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::ModAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::LeftShiftAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::RightShiftAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::UnsignedRightShiftAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::BitAndAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::BitXorAssign => &ASSIGN_MODIFY_OP,
+            AssignmentOperator::BitOrAssign => &ASSIGN_MODIFY_OP
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnaryOperatorApplication {
     pub expr: Box<TypedExpr>,
     pub op: UnaryOperator,
 }
 
-/// Something that returns something
+/// Something that returns something. This is really an RValue.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     /// A binary operator
@@ -251,13 +267,65 @@ pub enum Expr {
     GlobalVariableUse(String),
     LocalVariableUse(String),
     ClosureVariableUse(String),
-    ParameterUse(String),
     //round brackets
     Parens(Box<TypedExpr>),
+    Assignment(TypedLValueExpr, AssignmentOperator, Box<TypedExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedExpr{
     pub expr: Expr,
+    pub r#type: Type,
+    pub is_const: bool,
+}
+
+impl TypedExpr{
+    pub fn as_l_value(&self) -> Option<TypedLValueExpr> {
+        match &self.expr {
+            Expr::GlobalVariableUse(name) => { 
+                if self.is_const {
+                    None
+                } else {
+                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::GlobalVariableAssign(name.clone())})
+                }
+            },
+            Expr::LocalVariableUse(name) => {
+                if self.is_const {
+                    None
+                } else {
+                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::LocalVariableAssign(name.clone())})
+                }
+            },
+            Expr::ClosureVariableUse(name) => {
+                if self.is_const {
+                    None
+                } else {
+                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::ClosureVariableAssign(name.clone())})
+                }
+            },
+            _ => None,
+        }
+    }
+}
+
+/// An l value expression
+#[derive(Debug, Clone, PartialEq)]
+pub enum LValueExpr{
+    //Assign a global variable
+    GlobalVariableAssign(String),
+    //Assign a local variable
+    LocalVariableAssign(String),
+    //Assign a closure variable
+    ClosureVariableAssign(String),
+    //Assign a static named member of some data, so e.g. a.b
+    StaticNamedMemberAssign(Box<LValueExpr>, String),
+    //Assign a static numeric member of some data, so e.g. a[2]
+    StaticU32MemberAssign(Box<LValueExpr>, u32),
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypedLValueExpr{
+    pub expr: LValueExpr,
     pub r#type: Type,
 }

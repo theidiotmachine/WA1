@@ -54,4 +54,6 @@ pub enum Stmt {
     IfThen(TypedExpr, Vec<Stmt>),
     /// if-then-else
     IfThenElse(TypedExpr, Vec<Stmt>, Vec<Stmt>),
+    /// while loop
+    While(TypedExpr, Vec<Stmt>),
 }

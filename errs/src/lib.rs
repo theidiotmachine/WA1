@@ -18,6 +18,8 @@ pub enum Error {
     TypeFailure(Type, Type),
     NoValueReturned,
     TypeFailureReturn(Type, Type),
+    NotAnLValue,
+    ConstFailure,
 }
 
 impl Display for Error {
@@ -37,6 +39,8 @@ impl Display for Error {
             Error::TypeFailure(ref wanted, ref got) => write!(f, "Expecting expression of type {}, found {}", wanted, got),
             Error::NoValueReturned => write!(f, "Must return a value"),
             Error::TypeFailureReturn(ref wanted, ref got) => write!(f, "Expecting return value of type {}, found {}", wanted, got),
+            Error::NotAnLValue => write!(f, "Expression is not a l value"),
+            Error::ConstFailure => write!(f, "Expression is const and may not be assigned to"),
         }
     }
 }

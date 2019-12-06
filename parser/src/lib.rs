@@ -893,7 +893,31 @@ impl<'b> Parser<'b> {
         } else {
             Ok(Stmt::IfThen(cond, then_block))
         }
+    }
+
+    fn parse_while(&mut self,
+        local_vars: &mut Vec<VariableDecl>,
+        local_var_map: &mut  HashMap<String, u32>,
+        globals: &mut Vec<GlobalVariableDecl>,
+        global_var_map: &mut HashMap<String, u32>,
+        closure: &mut Vec<ClosureRef>,
+        func_return_type: &Type,
+        funcs: &mut Vec<Func>,
+        func_map: &mut HashMap<String, u32>,
+        errors: &mut Vec<Error>
+    ) -> Res<Stmt> {
+        assert_punct!(self, Punct::OpenParen);
+        let cond = self.parse_expr(globals, global_var_map, closure);
+        assert_ok!(cond);
+        if cond.r#type != Type::Boolean {
+            errors.push(Error::TypeFailure(Type::Boolean,  cond.r#type.clone()));
+        }
+        assert_punct!(self, Punct::CloseParen);
+
+        let block = self.parse_block(local_vars, local_var_map, globals, global_var_map, closure, func_return_type, funcs, func_map, errors);
+        assert_ok!(block);
         
+        Ok(Stmt::While(cond, block))
     }
 
     fn parse_statement(&mut self, 
@@ -984,10 +1008,24 @@ impl<'b> Parser<'b> {
                     let if_stmt = self.parse_if(local_vars, local_var_map, globals, global_var_map, closure, func_return_type, funcs, func_map, errors);
                     assert_ok!(if_stmt);
                     Ok(if_stmt)
-                }
+                },
+
+                Keyword::While => {
+                    self.skip_next_item();
+                    let while_stmt = self.parse_while(local_vars, local_var_map, globals, global_var_map, closure, func_return_type, funcs, func_map, errors);
+                    assert_ok!(while_stmt);
+                    Ok(while_stmt)
+                },
+                
                 _ => return self.unexpected_token_error(next.span, next.location, "expecting valid statement")
             },
-            _ => return self.unexpected_token_error(next.span, next.location, "expecting valid statement")
+            _ => {
+                // if we don't know what this statement is, parse it as an expr
+                let expr = self.parse_expr(globals, global_var_map, closure);
+                assert_ok!(expr);
+                assert_semicolon!(self);
+                return Ok(Stmt::Expr(expr));
+            }
         }
     }
 
@@ -1022,7 +1060,7 @@ impl<'b> Parser<'b> {
         }
 
         let expr_type = expr.r#type.clone();
-        Ok(TypedExpr{expr: Expr::Parens(Box::new(expr)), r#type: expr_type})
+        Ok(TypedExpr{expr: Expr::Parens(Box::new(expr)), r#type: expr_type, is_const: true})
     }
 
     fn parse_object_literal(&mut self) -> Res<TypedExpr> {
@@ -1062,7 +1100,7 @@ impl<'b> Parser<'b> {
                     assert_ok!(inner);
                     let o_outer_type = types::get_unary_op_type(op.get_op_type(), &inner.r#type);
                     match o_outer_type {
-                        Some(outer_type) => return Ok(TypedExpr{expr: Expr::UnaryOperator(UnaryOperatorApplication{op: op, expr: Box::new(inner)}), r#type: outer_type}),
+                        Some(outer_type) => return Ok(TypedExpr{expr: Expr::UnaryOperator(UnaryOperatorApplication{op: op, expr: Box::new(inner)}), r#type: outer_type, is_const: true}),
                         None => return Err(Error::TypeFailureUnaryOperator),
                     };
                 }
@@ -1088,7 +1126,7 @@ impl<'b> Parser<'b> {
                 match g_idx {
                     Some(idx) => {
                         let g_var = &globals[*idx as usize];
-                        Ok(TypedExpr{expr: Expr::GlobalVariableUse(id.to_string()), r#type: g_var.r#type.clone()})
+                        Ok(TypedExpr{expr: Expr::GlobalVariableUse(id.to_string()), r#type: g_var.r#type.clone(), is_const: g_var.constant})
                     },
                     None => Err(Error::VariableNotRecognised(id.to_string().clone()))
                 }
@@ -1100,9 +1138,9 @@ impl<'b> Parser<'b> {
                         closure.push(ClosureRef{internal_name: cr.internal_name.clone(), r#type: cr.r#type.clone(), constant: cr.constant})
                     }
                     
-                    Ok(TypedExpr{expr: Expr::ClosureVariableUse(cr.internal_name.clone()), r#type: cr.r#type.clone()})
+                    Ok(TypedExpr{expr: Expr::ClosureVariableUse(cr.internal_name.clone()), r#type: cr.r#type.clone(), is_const: cr.constant})
                 },
-                ScopedVar::Local(n) => Ok(TypedExpr{expr: Expr::LocalVariableUse(n.internal_name.clone()), r#type: n.r#type.clone()}),
+                ScopedVar::Local(n) => Ok(TypedExpr{expr: Expr::LocalVariableUse(n.internal_name.clone()), r#type: n.r#type.clone(), is_const: n.constant}),
             }
         }
     }
@@ -1153,7 +1191,7 @@ impl<'b> Parser<'b> {
                     let o_outer_type = types::get_unary_op_type(op.get_op_type(), &inner.r#type);
                     match o_outer_type {
                         Some(outer_type) => 
-                            return Ok(TypedExpr{expr: Expr::UnaryOperator(UnaryOperatorApplication{op: op, expr: Box::new(inner)}), r#type: outer_type}),
+                            return Ok(TypedExpr{expr: Expr::UnaryOperator(UnaryOperatorApplication{op: op, expr: Box::new(inner)}), r#type: outer_type, is_const: true}),
                         None => return Err(Error::TypeFailureUnaryOperator),
                     }
                 }
@@ -1167,35 +1205,35 @@ impl<'b> Parser<'b> {
                 match n.kind() {
                     NumberKind::Hex => {
                         let number = n.parse_f64();
-                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number});
+                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true});
                     },
                     NumberKind::DecI => {
                         let number = n.parse_f64();
-                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number});
+                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true});
                     },
                     NumberKind::Bin => {
                         let number = n.parse_f64();
-                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number});
+                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true});
                     },
                     NumberKind::Oct => {
                         let number = n.parse_f64();
-                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number});
+                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true});
                     },
                     NumberKind::DecF => {
                         let number = n.parse_f64();
-                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number});
+                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true});
                     },
                 }
             },
             
             Token::Boolean(b) => {
                 self.skip_next_item();
-                return Ok(TypedExpr{expr:Expr::BoolLiteral(b.is_true()), r#type: Type::Boolean});
+                return Ok(TypedExpr{expr:Expr::BoolLiteral(b.is_true()), r#type: Type::Boolean, is_const: true});
             },
 
             Token::Null => {
                 self.skip_next_item();
-                return Ok(TypedExpr{expr:Expr::Null, r#type: Type::Number});
+                return Ok(TypedExpr{expr:Expr::Null, r#type: Type::Number, is_const: true});
             },
 
             Token::Template(_) => {
@@ -1205,14 +1243,14 @@ impl<'b> Parser<'b> {
 
             Token::String(sl) => {
                 self.skip_next_item();
-                return Ok(TypedExpr{expr:Expr::StringLiteral(sl.no_quote().to_string()), r#type: Type::String});
+                return Ok(TypedExpr{expr:Expr::StringLiteral(sl.no_quote().to_string()), r#type: Type::String, is_const: true});
             },
 
             Token::Keyword(k) => {
                 self.skip_next_item();
                 match k {
                     Keyword::New => return self.parse_new(),
-                    Keyword::Void => return Ok(TypedExpr{expr:Expr::Void, r#type: Type::FakeVoid}),
+                    Keyword::Void => return Ok(TypedExpr{expr:Expr::Void, r#type: Type::FakeVoid, is_const: true}),
                     _ => self.unexpected_token_error(lookahead_item.span, lookahead_item.location, "unexpected keyword"),
                 }
             },
@@ -1229,53 +1267,62 @@ impl<'b> Parser<'b> {
         }
     }
 
-    fn get_binary_operator_for_token(&self, span: Span, location: SourceLocation, token: &Token<&'b str>) -> Res<BinaryOperator> {
+    fn get_binary_operator_for_token(&self, span: Span, location: SourceLocation, token: &Token<&'b str>) -> Option<BinaryOperator> {
         match token {
             Token::Keyword(ref k) => match k {
-                Keyword::In => Ok(BinaryOperator::In),
-                Keyword::InstanceOf => Ok(BinaryOperator::InstanceOf),
-                _ => self.unexpected_token_error(span, location, "unexpected binary operator"),
+                Keyword::In => Some(BinaryOperator::In),
+                Keyword::InstanceOf => Some(BinaryOperator::InstanceOf),
+                _ => None
             },
             Token::Punct(ref p) => match p {
-                Punct::Ampersand => Ok(BinaryOperator::BitAnd),
-                Punct::Asterisk => Ok(BinaryOperator::Multiply),
-                Punct::Period => Ok(BinaryOperator::Dot),
-                Punct::Comma => Ok(BinaryOperator::Comma),
-                Punct::GreaterThan => Ok(BinaryOperator::GreaterThan),
-                Punct::LessThan => Ok(BinaryOperator::LessThan),
-                Punct::Plus => Ok(BinaryOperator::Plus),
-                Punct::Dash => Ok(BinaryOperator::Minus),
-                Punct::Percent => Ok(BinaryOperator::Mod),
-                Punct::Pipe => Ok(BinaryOperator::BitOr),
-                Punct::Caret => Ok(BinaryOperator::BitXor),
-                Punct::ForwardSlash => Ok(BinaryOperator::Divide),
-                Punct::TripleEqual => Ok(BinaryOperator::StrictEqual),
-                Punct::BangDoubleEqual => Ok(BinaryOperator::StrictNotEqual),
-                Punct::TripleGreaterThan => Ok(BinaryOperator::UnsignedRightShift),
-                Punct::DoubleAmpersand => Ok(BinaryOperator::LogicalAnd),
-                Punct::DoublePipe => Ok(BinaryOperator::LogicalOr),
-                Punct::DoubleEqual => Ok(BinaryOperator::Equal),
-                Punct::BangEqual => Ok(BinaryOperator::NotEqual),
-                Punct::DoubleLessThan  => Ok(BinaryOperator::LeftShift),
-                Punct::DoubleGreaterThan => Ok(BinaryOperator::RightShift),
-                Punct::GreaterThanEqual => Ok(BinaryOperator::GreaterThanEqual),
-                Punct::LessThanEqual => Ok(BinaryOperator::LessThanEqual),
-                Punct::DoubleAsterisk => Ok(BinaryOperator::Exponent),
-                Punct::AmpersandEqual => Ok(BinaryOperator::BitAndAssign),
-                Punct::AsteriskEqual => Ok(BinaryOperator::MultiplyAssign),
-                Punct::CaretEqual => Ok(BinaryOperator::BitXorAssign),
-                Punct::DashEqual => Ok(BinaryOperator::MinusAssign),
-                Punct::DoubleAsteriskEqual => Ok(BinaryOperator::ExponentAssign),
-                Punct::DoubleGreaterThanEqual => Ok(BinaryOperator::RightShiftAssign),
-                Punct::DoubleLessThanEqual => Ok(BinaryOperator::LeftShiftAssign),
-                Punct::ForwardSlashEqual => Ok(BinaryOperator::DivideAssign),
-                Punct::PercentEqual => Ok(BinaryOperator::ModAssign),
-                Punct::PipeEqual => Ok(BinaryOperator::BitOrAssign),
-                Punct::PlusEqual => Ok(BinaryOperator::PlusAssign),
-                Punct::TripleGreaterThanEqual => Ok(BinaryOperator::UnsignedRightShiftAssign),
-                _ => self.unexpected_token_error(span, location, "unexpected binary operator"),
+                Punct::Ampersand => Some(BinaryOperator::BitAnd),
+                Punct::Asterisk => Some(BinaryOperator::Multiply),
+                Punct::Period => Some(BinaryOperator::Dot),
+                Punct::Comma => Some(BinaryOperator::Comma),
+                Punct::GreaterThan => Some(BinaryOperator::GreaterThan),
+                Punct::LessThan => Some(BinaryOperator::LessThan),
+                Punct::Plus => Some(BinaryOperator::Plus),
+                Punct::Dash => Some(BinaryOperator::Minus),
+                Punct::Percent => Some(BinaryOperator::Mod),
+                Punct::Pipe => Some(BinaryOperator::BitOr),
+                Punct::Caret => Some(BinaryOperator::BitXor),
+                Punct::ForwardSlash => Some(BinaryOperator::Divide),
+                Punct::TripleEqual => Some(BinaryOperator::StrictEqual),
+                Punct::BangDoubleEqual => Some(BinaryOperator::StrictNotEqual),
+                Punct::TripleGreaterThan => Some(BinaryOperator::UnsignedRightShift),
+                Punct::DoubleAmpersand => Some(BinaryOperator::LogicalAnd),
+                Punct::DoublePipe => Some(BinaryOperator::LogicalOr),
+                Punct::DoubleEqual => Some(BinaryOperator::Equal),
+                Punct::BangEqual => Some(BinaryOperator::NotEqual),
+                Punct::DoubleLessThan  => Some(BinaryOperator::LeftShift),
+                Punct::DoubleGreaterThan => Some(BinaryOperator::RightShift),
+                Punct::GreaterThanEqual => Some(BinaryOperator::GreaterThanEqual),
+                Punct::LessThanEqual => Some(BinaryOperator::LessThanEqual),
+                Punct::DoubleAsterisk => Some(BinaryOperator::Exponent),
+                _ => None
             },
-            _ => self.unexpected_token_error(span, location, "unexpected binary operator"),
+            _ => None
+        }
+    }
+
+    fn get_assignment_operator_for_token(&self, span: Span, location: SourceLocation, token: &Token<&'b str>) -> Option<AssignmentOperator> {
+        match token {
+            Token::Punct(ref p) => match p {
+                Punct::AmpersandEqual => Some(AssignmentOperator::BitAndAssign),
+                Punct::AsteriskEqual => Some(AssignmentOperator::MultiplyAssign),
+                Punct::CaretEqual => Some(AssignmentOperator::BitXorAssign),
+                Punct::DashEqual => Some(AssignmentOperator::MinusAssign),
+                Punct::DoubleAsteriskEqual => Some(AssignmentOperator::ExponentAssign),
+                Punct::DoubleGreaterThanEqual => Some(AssignmentOperator::RightShiftAssign),
+                Punct::DoubleLessThanEqual => Some(AssignmentOperator::LeftShiftAssign),
+                Punct::ForwardSlashEqual => Some(AssignmentOperator::DivideAssign),
+                Punct::PercentEqual => Some(AssignmentOperator::ModAssign),
+                Punct::PipeEqual => Some(AssignmentOperator::BitOrAssign),
+                Punct::PlusEqual => Some(AssignmentOperator::PlusAssign),
+                Punct::TripleGreaterThanEqual => Some(AssignmentOperator::UnsignedRightShiftAssign),
+                _ => None
+            },
+            _ => None
         }
     }
 
@@ -1357,16 +1404,40 @@ impl<'b> Parser<'b> {
                                 }
                             }                                
                         }
-                        let bin_op = self.get_binary_operator_for_token(op_span, op_location, &op);
-                        assert_ok!(bin_op);
-
-                        let o_outer_type = types::get_binary_op_type(bin_op.get_op_type(), &lhs.r#type, &rhs.r#type);
-                        match o_outer_type {
-                            Some(outer_type) => {
-                                lhs = TypedExpr{expr: Expr::BinaryOperator(BinaryOperatorApplication{op: bin_op, lhs: Box::new(lhs), rhs: Box::new(rhs)}), r#type: outer_type};
+                        let o_bin_op = self.get_binary_operator_for_token(op_span, op_location, &op);
+                        match o_bin_op {
+                            Some(bin_op) => {
+                                let o_outer_type = types::get_binary_op_type(bin_op.get_op_type(), &lhs.r#type, &rhs.r#type);
+                                match o_outer_type {
+                                    Some(outer_type) => {
+                                        lhs = TypedExpr{expr: Expr::BinaryOperator(BinaryOperatorApplication{op: bin_op, lhs: Box::new(lhs), rhs: Box::new(rhs)}), r#type: outer_type, is_const: true};
+                                    },
+                                    None => return Err(Error::TypeFailureBinaryOperator),
+                                };      
                             },
-                            None => return Err(Error::TypeFailureBinaryOperator),
-                        };
+                            None => {
+                                let o_ass_op = self.get_assignment_operator_for_token(op_span, op_location, &op);
+                                match o_ass_op {
+                                    Some(ass_op) => {
+                                        let o_outer_type = types::get_binary_op_type(ass_op.get_op_type(), &lhs.r#type, &rhs.r#type);
+                                        if o_outer_type.is_none() {
+                                            return Err(Error::TypeFailureBinaryOperator);
+                                        }
+                                        let outer_type = o_outer_type.unwrap();
+
+                                        // get as an lvalue. This will check constness
+                                        let o_l_value = lhs.as_l_value();
+                                        if o_l_value.is_none() {
+                                            return Err(Error::NotAnLValue);
+                                        }
+
+                                        let l_value = o_l_value.unwrap();
+                                        lhs = TypedExpr{expr: Expr::Assignment(l_value, ass_op, Box::new(rhs)), r#type: outer_type, is_const: false};
+                                    },
+                                    None => return Err(Error::TypeFailureBinaryOperator),                                    
+                                }    
+                            }
+                        }
                     } else {
                         break;
                     }

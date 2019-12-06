@@ -6,6 +6,7 @@ export function addd(x: number, y: number, z: number): number {
 */
 
 
+/*
 export function negMax(x: number, y: number): number {
     let b = true;
     if(b && x > y)
@@ -16,6 +17,17 @@ export function negMax(x: number, y: number): number {
     // today, wasm requires a return value at the end of all functions, even if they will
     // never get there
     return 0;
+}*/
+
+export function bang(x: number): number {
+    let out = 1;
+
+    while(x > 0) {
+        out *= x;
+        x -= 1;
+    }
+
+    return out;
 }
 
 /*

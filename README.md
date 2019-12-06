@@ -60,15 +60,21 @@ Currently the following features are supported
 1. [ ] typing inference
     1. [x] every expr needs a return type!
     1. [ ] functions are exprs, not statements
+    1. [ ] Infer return types
 1. [ ] control flow
     1. [x] if
     1. [ ] if as an expression 
-    1. [ ] while
+    1. [x] while
     1. [ ] simple for loops
+1. optimise steps
+    1. [ ] remove returns right before end
+    1. [ ] change tee + drop into set
+    1. [ ] remove get + drop
 1. [ ] function calling
     1. [ ] function return type inference
     1. [ ] functions as first class objects (but not closures)
-1. [ ] assignments and consts
+1. [x] assignments and consts
+1. [ ] global variables (currently not init'ed)
 1. [ ] options (?)
 1. [ ] a runtime
     1. a gc...
