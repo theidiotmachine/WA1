@@ -1,7 +1,7 @@
 use ast::prelude::*;
 
 use parity_wasm::builder::module;
-use parity_wasm::elements::{Module, ValueType, Local, Instructions, Instruction};
+use parity_wasm::elements::{Module, ValueType, Local, Instructions, Instruction, BlockType};
 use parity_wasm::builder::{FunctionDefinition, FunctionBuilder};
 
 use std::collections::HashMap;
@@ -14,6 +14,7 @@ fn get_ir_type(r#type: &Type) -> ValueType {
         Type::Number => ValueType::F64,
         //if we end up at runtime generating such an argument, just pass an empty int and be done. It's probably a generic.
         Type::FakeVoid => ValueType::I32, 
+        Type::Boolean => ValueType::I32,
         _ => panic!()
     }
 }
@@ -84,19 +85,82 @@ fn transform_typed_expr(
                 BinaryOperator::Divide => {
                     vi.push(Instruction::F64Div);
                 },
+                BinaryOperator::GreaterThan => {
+                    vi.push(Instruction::F64Gt);
+                },
+                BinaryOperator::GreaterThanEqual => {
+                    vi.push(Instruction::F64Ge);
+                },
+                BinaryOperator::LessThan=> {
+                    vi.push(Instruction::F64Lt);
+                },
+                BinaryOperator::LessThanEqual => {
+                    vi.push(Instruction::F64Le);
+                },
+
+                //these are the bit instructions, but our strong typing should mean that this is safe
+                BinaryOperator::LogicalAnd => {
+                    vi.push(Instruction::I32And);
+                },
+                BinaryOperator::LogicalOr => {
+                    vi.push(Instruction::I32Or);
+                },
+
+                BinaryOperator::BitAnd => {
+                    vi.push(Instruction::I32And);
+                },
+                BinaryOperator::BitOr => {
+                    vi.push(Instruction::I32Or);
+                },
                 _ => {
-                    errors.push(Error::NotYetImplemented(String::from("operator")))
+                    errors.push(Error::NotYetImplemented(String::from("binary operator")))
                 }
             };
 
             vi
         },
 
+        Expr::UnaryOperator(uo) => {
+            let mut vi: Vec<Instruction> = vec![];
+            vi.append(&mut transform_typed_expr(&uo.expr, global_var_map, local_var_map, errors));
+            match uo.op {
+                UnaryOperator::LogicalNot => {
+                    vi.push(Instruction::I32Const(-1));
+                    vi.push(Instruction::I32Xor);
+                },
+
+                UnaryOperator::BitNot => {
+                    vi.push(Instruction::I32Const(-1));
+                    vi.push(Instruction::I32Xor);
+                },
+
+                UnaryOperator::Plus => {},
+
+                UnaryOperator::Minus => {
+                    let v: f64 = -1.0;
+                    vi.push(Instruction::F64Const(v.to_bits()));
+                    vi.push(Instruction::F64Mul);
+                },
+                _ => {
+                    errors.push(Error::NotYetImplemented(String::from("unary operator")))
+                }
+            }
+            vi
+        }
+
         Expr::Parens(p) => {
             transform_typed_expr(&p, global_var_map, local_var_map, errors)
         },
 
-        _ => { errors.push(Error::NotYetImplemented(String::from("operator"))); vec![] },
+        Expr::BoolLiteral(b) => {
+            if *b {
+                vec![Instruction::I32Const(1)]
+            } else {
+                vec![Instruction::I32Const(0)]
+            }
+        },
+
+        _ => { errors.push(Error::NotYetImplemented(String::from("expr"))); vec![] },
     }
 }
 
@@ -141,11 +205,55 @@ fn transform_stmt(stmt: &Stmt,
             this_vi.push(Instruction::Drop);
             this_vi
         },
+        Stmt::IfThen(c, t) => {
+            let mut vi = vec![];
+            
+            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, errors);
+            vi.append(&mut this_vi);
+            
+            vi.push(Instruction::If(BlockType::NoResult));
+            
+            let mut this_vi: Vec<Instruction> = transform_stmts(t, global_var_map, local_var_map, errors);
+            vi.append(&mut this_vi);
+            vi.push(Instruction::End);
+            vi
+        },
+
+        Stmt::IfThenElse(c, t, e) => {
+            let mut vi = vec![];
+            
+            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, errors);
+            vi.append(&mut this_vi);
+            
+            vi.push(Instruction::If(BlockType::NoResult));
+            
+            let mut this_vi: Vec<Instruction> = transform_stmts(t, global_var_map, local_var_map, errors);
+            vi.append(&mut this_vi);
+            vi.push(Instruction::Else);
+            let mut this_vi: Vec<Instruction> = transform_stmts(e, global_var_map, local_var_map, errors);
+            vi.append(&mut this_vi);            
+            vi.push(Instruction::End);
+            vi
+        },
         _ => {
-            //todo: closures 
-            vec![]
+            panic!();
         }
     }
+}
+
+fn transform_stmts(stmts: &Vec<Stmt>, 
+    global_var_map: &HashMap<String, u32>,
+    local_var_map: &HashMap<String, u32>,
+    errors: &mut Vec<Error>
+)-> Vec<Instruction> {
+    let mut vi: Vec<Instruction> = vec![];
+    
+    for stmt in stmts {
+        let mut this_vi = transform_stmt(stmt, global_var_map, local_var_map, errors);
+        vi.append(&mut this_vi);
+    }
+
+    vi
 }
 
 fn transform_func(func: &Func, 
@@ -171,11 +279,7 @@ fn transform_func(func: &Func,
     let fbb = fb.body();
     let fbb = fbb.with_locals(locals);
 
-    let mut vi: Vec<Instruction> = vec![];
-    for stmt in &func.body {
-        let mut this_vi = transform_stmt(stmt, global_var_map, &func.local_var_map, errors);
-        vi.append(&mut this_vi);
-    }
+    let mut vi: Vec<Instruction> = transform_stmts(&func.body, global_var_map, &func.local_var_map, errors);
     
     vi.push(Instruction::End);
     let fbb = fbb.with_instructions(Instructions::new(vi));

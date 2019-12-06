@@ -25,6 +25,15 @@ macro_rules! assert_punct {
     )
 }
 
+macro_rules! assert_semicolon {
+    ($s:ident) => (
+        let next = $s.next_item()?;
+        if !next.token.matches_punct(Punct::SemiColon) {
+            return $s.expected_token_error(&next, &[&";"]);
+        }
+    )
+}
+
 /// Get the next token, returning if it is not ok. Usage: `let next = assert_next!(self);`
 macro_rules! assert_next {
     ($s:ident, $m:expr) => ({let next = $s.next_item(); if next.is_err() { return Err(Error::UnexpectedEoF($m.to_string())); }; next?} )
@@ -489,15 +498,6 @@ impl<'b> Parser<'b> {
         Ok(())
     }
 
-    #[inline]
-    fn expect_semicolon(&mut self) -> Res<()> {
-        let next = self.next_item()?;
-        if !next.token.matches_punct(Punct::SemiColon) {
-            return self.expected_token_error(&next, &[";"]);
-        }
-        Ok(())
-    }
-
     fn parse_type(&mut self) -> Res<Type> {
         let next = assert_next!(self, "expecting type");
         let token = next.token;
@@ -630,12 +630,30 @@ impl<'b> Parser<'b> {
                 break;
             }
 
-            let stmt = self.parse_statement(&mut local_vars, &mut local_var_map, globals, global_var_map, &mut closure, funcs, func_map, errors);
+            let stmt = self.parse_statement(&mut local_vars, &mut local_var_map, globals, global_var_map, &mut closure, &return_type, funcs, func_map, errors);
             assert_ok!(stmt);
             stmts.push(stmt);
         }
 
         self.context.pop_scope();
+
+        // today if you don't have a return value at the end of function, you get errors at run time. So let's check now.
+        if return_type != Type::RealVoid {
+            let o_last = stmts.last();
+            match o_last {
+                Some(last) => {
+                    match last {
+                        Stmt::Return(o_e) => {
+                            if o_e.is_none() {
+                                errors.push(Error::NoValueReturned)
+                            }
+                        },
+                        _ => errors.push(Error::NoValueReturned),
+                    }
+                },
+                _ => errors.push(Error::NoValueReturned)
+            }
+        }
         
         Ok(Func{
             name: id.to_string(), return_type, args: arg_list, export, body: stmts, local_vars, closure, local_var_map, import: false
@@ -737,8 +755,7 @@ impl<'b> Parser<'b> {
         } else {
             Option::None
         };
-        let semi = self.expect_semicolon();
-        assert_ok!(semi);
+        assert_semicolon!(self);
         let name = id.to_string();
         let internal_name = self.context.get_unique_name(&name);
         self.context.add_var(&name, &internal_name, var_type.clone(), constant);
@@ -802,12 +819,90 @@ impl<'b> Parser<'b> {
         }
     }
 
+    fn parse_block(&mut self,
+        local_vars: &mut Vec<VariableDecl>,
+        local_var_map: &mut  HashMap<String, u32>,
+        globals: &mut Vec<GlobalVariableDecl>,
+        global_var_map: &mut HashMap<String, u32>,
+        closure: &mut Vec<ClosureRef>,
+        func_return_type: &Type,
+        funcs: &mut Vec<Func>,
+        func_map: &mut HashMap<String, u32>,
+        errors: &mut Vec<Error>
+    ) -> Res<Vec<Stmt>> {
+        let mut out: Vec<Stmt> = vec![];
+        let next = self.peek_next_item();
+        let token = &next.token;
+        
+        if token.matches_punct(Punct::OpenBrace) {
+            self.skip_next_item();
+                
+            let mut next = self.peek_next_item();
+            let mut token = &next.token;
+            self.context.push_block_scope();
+            
+            while !token.matches_punct(Punct::CloseBrace) {
+                let stmt = self.parse_statement(local_vars, local_var_map, globals, global_var_map, closure, func_return_type, funcs, func_map, errors);    
+                assert_ok!(stmt);
+                out.push(stmt);
+                next = self.peek_next_item();
+                token = &next.token;
+            }
+            self.skip_next_item();
+            
+            self.context.pop_scope();
+        
+        } else {
+            let stmt = self.parse_statement(local_vars, local_var_map, globals, global_var_map, closure, func_return_type, funcs, func_map, errors);
+            assert_ok!(stmt);
+                out.push(stmt);
+        } 
+
+        Ok(out)
+    }
+
+    fn parse_if(&mut self,
+        local_vars: &mut Vec<VariableDecl>,
+        local_var_map: &mut  HashMap<String, u32>,
+        globals: &mut Vec<GlobalVariableDecl>,
+        global_var_map: &mut HashMap<String, u32>,
+        closure: &mut Vec<ClosureRef>,
+        func_return_type: &Type,
+        funcs: &mut Vec<Func>,
+        func_map: &mut HashMap<String, u32>,
+        errors: &mut Vec<Error>
+    ) -> Res<Stmt> {
+        assert_punct!(self, Punct::OpenParen);
+        let cond = self.parse_expr(globals, global_var_map, closure);
+        assert_ok!(cond);
+        if cond.r#type != Type::Boolean {
+            errors.push(Error::TypeFailure(Type::Boolean,  cond.r#type.clone()));
+        }
+        assert_punct!(self, Punct::CloseParen);
+
+        let then_block = self.parse_block(local_vars, local_var_map, globals, global_var_map, closure, func_return_type, funcs, func_map, errors);
+        assert_ok!(then_block);
+            
+        let next = self.peek_next_item();
+        let token = &next.token;
+        if token.matches_keyword(Keyword::Else) {
+            self.skip_next_item();
+            let else_block = self.parse_block(local_vars, local_var_map, globals, global_var_map, closure, func_return_type, funcs, func_map, errors);
+            assert_ok!(else_block);
+            Ok(Stmt::IfThenElse(cond, then_block, else_block))
+        } else {
+            Ok(Stmt::IfThen(cond, then_block))
+        }
+        
+    }
+
     fn parse_statement(&mut self, 
         local_vars: &mut Vec<VariableDecl>,
         local_var_map: &mut  HashMap<String, u32>,
         globals: &mut Vec<GlobalVariableDecl>,
         global_var_map: &mut HashMap<String, u32>,
         closure: &mut Vec<ClosureRef>,
+        func_return_type: &Type,
         funcs: &mut Vec<Func>,
         func_map: &mut HashMap<String, u32>,
         errors: &mut Vec<Error>
@@ -867,15 +962,29 @@ impl<'b> Parser<'b> {
                     let next = self.peek_next_item();
                     let token = &next.token;
                     if token.matches_punct(Punct::SemiColon) {
+                        // check the return type of this expression versus the function return type.
+                        if *func_return_type != Type::RealVoid {
+                            errors.push(Error::TypeFailureReturn(func_return_type.clone(), Type::RealVoid));
+                        }
                         self.skip_next_item();
                         Ok(Stmt::Return(None))
                     } else {
                         let expr = self.parse_expr(globals, global_var_map, closure);
-                        self.expect_semicolon();
+                        assert_semicolon!(self);
                         assert_ok!(expr);
+                        // return type checking
+                        if *func_return_type != expr.r#type {
+                            errors.push(Error::TypeFailureReturn(func_return_type.clone(), expr.r#type.clone()));
+                        }
                         Ok(Stmt::Return(Some(expr)))
                     }
                 },
+                Keyword::If => {
+                    self.skip_next_item();
+                    let if_stmt = self.parse_if(local_vars, local_var_map, globals, global_var_map, closure, func_return_type, funcs, func_map, errors);
+                    assert_ok!(if_stmt);
+                    Ok(if_stmt)
+                }
                 _ => return self.unexpected_token_error(next.span, next.location, "expecting valid statement")
             },
             _ => return self.unexpected_token_error(next.span, next.location, "expecting valid statement")

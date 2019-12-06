@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 ress = { path = "../ress" }
+types = {path = "../types"}

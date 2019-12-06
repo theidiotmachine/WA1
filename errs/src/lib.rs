@@ -1,5 +1,7 @@
 use ress::Position;
 use std::fmt::{Display, Formatter, Result};
+use types::Type;
+
 #[derive(Debug, Clone)]
 pub enum Error {
     UnexpectedToken(Position, String),
@@ -13,6 +15,9 @@ pub enum Error {
     TypeFailureUnaryOperator,
     TypeFailureBinaryOperator,
     TypeFailureVariableCreation,
+    TypeFailure(Type, Type),
+    NoValueReturned,
+    TypeFailureReturn(Type, Type),
 }
 
 impl Display for Error {
@@ -29,6 +34,9 @@ impl Display for Error {
             Error::TypeFailureUnaryOperator => write!(f, "Type failure unary operator"),
             Error::TypeFailureBinaryOperator => write!(f, "Type failure binary operator"),
             Error::TypeFailureVariableCreation => write!(f, "Type failure variable creation"),
+            Error::TypeFailure(ref wanted, ref got) => write!(f, "Expecting expression of type {}, found {}", wanted, got),
+            Error::NoValueReturned => write!(f, "Must return a value"),
+            Error::TypeFailureReturn(ref wanted, ref got) => write!(f, "Expecting return value of type {}, found {}", wanted, got),
         }
     }
 }

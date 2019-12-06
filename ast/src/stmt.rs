@@ -50,4 +50,8 @@ pub enum Stmt {
     Variable(VariableDecl),
     /// return statement
     Return(Option<TypedExpr>),
+    /// if-then
+    IfThen(TypedExpr, Vec<Stmt>),
+    /// if-then-else
+    IfThenElse(TypedExpr, Vec<Stmt>, Vec<Stmt>),
 }

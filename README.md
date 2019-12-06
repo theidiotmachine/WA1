@@ -12,7 +12,7 @@ in the root. At the moment,
 
 > cargo run
 
-will parse `main/src/one.ws` and generate `out.wasm` in the root. This will produce a function `addd` that adds two numbers.
+will parse `main/src/one.ws` and generate `out.wasm` in the root. This will produce a function `addd` that returns the max of two numbers.
 
 ## Running
 
@@ -40,13 +40,29 @@ Serve it with http-server; install that with
 
 and manually call in your browser in the debugger by typing the function name (called `addd` out of the box).
 
+## Features
+
+Currently the following features are supported
+
+### Types
+
+* Number - a double. Some support, but not complete
+* boolean - mostly there
+
+### Language features
+
+* Function creation - all arguments and return value must be typed
+* Local variables - type inference works here. Note that you cannot currently reassign to locals
+* if, else, return.
+
 ## TODO
 
 1. [ ] typing inference
     1. [x] every expr needs a return type!
     1. [ ] functions are exprs, not statements
 1. [ ] control flow
-    1. [ ] if
+    1. [x] if
+    1. [ ] if as an expression 
     1. [ ] while
     1. [ ] simple for loops
 1. [ ] function calling

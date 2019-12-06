@@ -6,11 +6,24 @@ pub mod prelude {
     pub use super::get_binary_op_type;
 }
 
+use std::fmt::Display;
+use std::fmt::Formatter;
+
 // Type of a function.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncType{
     pub out_type: Type,
     pub in_types: Vec<Type>,
+}
+
+impl Display for FuncType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut vec: Vec<String> = vec![];
+        for inner in &self.in_types{
+            vec.push(format!("{}", inner));
+        }
+        write!(f, "({}) => {}", vec.join(","), self.out_type) 
+    }
 }
 
 /// Type of an operator. These are used by the inference engine.
@@ -85,6 +98,38 @@ impl Type{
         match &self {
             Type::Undeclared => true,
             _ => false
+        }
+    }
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::RealVoid => write!(f, "void"),
+            Type::FakeVoid => write!(f, "void"),
+            Type::Unknown => write!(f, "unknown"),
+            Type::Never => write!(f, "never"),
+            Type::Number => write!(f, "number"),
+            Type::String => write!(f, "string"),
+            Type::Array(inner) => write!(f, "Array<{}>", inner),
+            Type::BigInt => write!(f, "bigint"),
+            Type::Boolean => write!(f, "boolean"),
+            Type::Func(func_type) => write!(f, "{}", func_type),
+            Type::Tuple(types) => {
+                let mut vec: Vec<String> = vec![];
+                for inner in types {
+                    vec.push(format!("{}", inner));
+                }
+                write!(f, "[{}]", vec.join(",")) 
+            },
+            Type::Object => write!(f, "object"),
+            Type::Any => write!(f, "any"),
+            Type::Option(inner) => write!(f, "Option<{}>", inner),
+            Type::Some(inner) => write!(f, "Some<{}>", inner),
+            Type::Null => write!(f, "null"),
+            Type::User(name) => write!(f, "{}", name),
+            Type::Undeclared => write!(f, "undeclared"),
+            Type::Variable(name) => write!(f, "{}", name),
         }
     }
 }
