@@ -12,6 +12,7 @@ pub enum Error {
     Other(String),
     NotYetImplemented(String),
     VariableNotRecognised(String),
+    FuncNotRecognised(String),
     TypeFailureUnaryOperator,
     TypeFailureBinaryOperator,
     TypeFailureVariableCreation,
@@ -20,6 +21,9 @@ pub enum Error {
     TypeFailureReturn(Type, Type),
     NotAnLValue,
     ConstFailure,
+    TypeFailureFuncCall,
+    TooManyArgs,
+    NotEnoughArgs,
 }
 
 impl Display for Error {
@@ -33,6 +37,7 @@ impl Display for Error {
             Error::Other(ref msg) => write!(f, "{}", msg),
             Error::NotYetImplemented(ref msg) => write!(f, "Not yet implemented: {}", msg),
             Error::VariableNotRecognised(ref var_name) => write!(f, "Var not recognised: {}", var_name),
+            Error::FuncNotRecognised(ref func_name) => write!(f, "Func not recognised: {}", func_name),
             Error::TypeFailureUnaryOperator => write!(f, "Type failure unary operator"),
             Error::TypeFailureBinaryOperator => write!(f, "Type failure binary operator"),
             Error::TypeFailureVariableCreation => write!(f, "Type failure variable creation"),
@@ -41,6 +46,9 @@ impl Display for Error {
             Error::TypeFailureReturn(ref wanted, ref got) => write!(f, "Expecting return value of type {}, found {}", wanted, got),
             Error::NotAnLValue => write!(f, "Expression is not a l value"),
             Error::ConstFailure => write!(f, "Expression is const and may not be assigned to"),
+            Error::TypeFailureFuncCall => write!(f, "Variable is not a function"),
+            Error::TooManyArgs => write!(f, "Too many args"),
+            Error::NotEnoughArgs => write!(f, "Not enough args"),
         }
     }
 }

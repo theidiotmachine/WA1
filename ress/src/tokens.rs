@@ -117,7 +117,7 @@ pub trait TokenExt {
 
     fn matches_string_content(&self, content: &str) -> bool;
 
-    fn get_binary_operator_data(&self) -> Option<BinaryOperatorData>;
+    fn get_binary_operator_data(&self, allow_comma: bool) -> Option<BinaryOperatorData>;
 
     fn get_unary_operator_data(&self) -> Option<UnaryOperatorData>;
 }
@@ -909,11 +909,11 @@ impl Punct {
         }
     }
 
-    /// at the point where this could be a binary operator, what is it's precedence - and if it's not -1, please
-    fn get_binary_operator_data(self) -> Option<BinaryOperatorData> {
+    /// at the point where this could be a binary operator, what is its precedence and association
+    fn get_binary_operator_data(self, allow_comma: bool) -> Option<BinaryOperatorData> {
         match self {
             Punct::Period => Some(BinaryOperatorData{precedence: 18, association: Association::Left}),
-            Punct::Comma => Some(BinaryOperatorData{precedence: 0, association: Association::Left}),
+            Punct::Comma => if allow_comma { Some(BinaryOperatorData{precedence: 0, association: Association::Left}) } else { None },
             Punct::Colon => None,
             Punct::QuestionMark => None,
             Punct::Tilde => None,
@@ -1165,7 +1165,8 @@ pub enum Keyword {
     String,
     Tuple,
     Undefined,
-    Unknown
+    Unknown,
+    Ptr
 }
 
 impl Keyword {
@@ -1229,6 +1230,7 @@ impl Keyword {
             "Tuple" => Keyword::Tuple,
             "undefined" => Keyword::Undefined,
             "unknown" => Keyword::Unknown,
+            "__ptr" => Keyword::Ptr,
             _ => return None,
         })
     }
@@ -1301,6 +1303,7 @@ impl Keyword {
             Keyword::Tuple => "Tuple",
             Keyword::Undefined => "undefined",
             Keyword::Unknown => "unknown",
+            Keyword::Ptr => "__ptr",
         }
     }
 
@@ -1545,9 +1548,9 @@ impl<'a> TokenExt for Token<&'a str> {
         }
     }
 
-    fn get_binary_operator_data(&self) -> Option<BinaryOperatorData> {
+    fn get_binary_operator_data(&self, allow_comma: bool) -> Option<BinaryOperatorData> {
         match self {
-            Token::Punct(p) => p.get_binary_operator_data(),
+            Token::Punct(p) => p.get_binary_operator_data(allow_comma),
             Token::Keyword(k) => k.get_binary_operator_data(),
             _ => None
         }

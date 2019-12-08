@@ -86,55 +86,6 @@ static ref NO_IDEA_OP: OpType = OpType::NotImplementedOpType;
 }
 
 impl BinaryOperator{
-    /*
-    pub fn is_assign_operator(&self) -> bool {
-        match self {
-            BinaryOperator::Assign => true,
-            BinaryOperator::PlusAssign => true,
-            BinaryOperator::MinusAssign => true,
-            BinaryOperator::ExponentAssign => true,
-            BinaryOperator::MultiplyAssign => true,
-            BinaryOperator::DivideAssign => true,
-            BinaryOperator::ModAssign => true,
-            BinaryOperator::LeftShiftAssign => true,
-            BinaryOperator::RightShiftAssign => true,
-            BinaryOperator::UnsignedRightShiftAssign => true,
-            BinaryOperator::BitAndAssign => true,
-            BinaryOperator::BitXorAssign => true,
-            BinaryOperator::BitOrAssign => true,
-            _ => false
-        }
-    }
-
-    pub fn is_simple_operator(&self) -> bool {
-        match self {
-            BinaryOperator::GreaterThan => true,
-            BinaryOperator::LessThan => true,
-            BinaryOperator::Plus => true,
-            BinaryOperator::Minus => true,
-            BinaryOperator::Multiply => true,
-            BinaryOperator::Mod => true,
-            BinaryOperator::BitOr => true,
-            BinaryOperator::BitAnd => true,
-            BinaryOperator::BitXor => true,
-            BinaryOperator::Divide => true,
-            BinaryOperator::StrictEqual => true,
-            BinaryOperator::StrictNotEqual => true,
-            BinaryOperator::UnsignedRightShift => true,
-            BinaryOperator::LogicalAnd => true,
-            BinaryOperator::LogicalOr => true,
-            BinaryOperator::Equal => true,
-            BinaryOperator::NotEqual => true,
-            BinaryOperator::LeftShift => true,
-            BinaryOperator::RightShift => true,
-            BinaryOperator::GreaterThanEqual => true,
-            BinaryOperator::LessThanEqual => true,
-            BinaryOperator::Exponent => true,
-            BinaryOperator::In => true,
-            _ => false
-        }
-    }*/
-
     pub fn get_op_type(&self) -> &OpType {
         match self {
             BinaryOperator::Dot => &NO_IDEA_OP,
@@ -263,13 +214,20 @@ pub enum Expr {
     Void,
     //string literal
     StringLiteral(String),
-    //variable call
+    //global variable use
     GlobalVariableUse(String),
+    //local variable use
     LocalVariableUse(String),
+    //closure variable use
     ClosureVariableUse(String),
     //round brackets
     Parens(Box<TypedExpr>),
+    // assignmnet expression
     Assignment(TypedLValueExpr, AssignmentOperator, Box<TypedExpr>),
+    // static func call. Arg is func name.
+    StaticFuncCall(String, Vec<TypedExpr>),
+    // dynamic func call.
+    DynamicFuncCall(Box<TypedExpr>, Vec<TypedExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

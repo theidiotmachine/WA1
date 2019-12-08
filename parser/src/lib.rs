@@ -520,12 +520,50 @@ impl<'b> Parser<'b> {
                     //Keyword::Tuple => Ok(Type::Tuple),
                     Keyword::Object => Ok(Type::Object),
                     Keyword::Any => Ok(Type::Any),
+                    Keyword::Ptr => {
+                        assert_punct!(self, Punct::LessThan);
+                        let inner = self.parse_type();
+                        assert_ok!(inner);
+                        assert_punct!(self, Punct::GreaterThan);
+                        match inner {
+                            Type::FloatLiteral(n) => Ok(Type::Ptr(n as u32)),
+                            _ => Err(Error::InvalidTypeName(self.current_position, keyword.as_str().to_owned()))        
+                        }
+                        
+                    },
                     _ => Err(Error::InvalidTypeName(self.current_position, keyword.as_str().to_owned()))
                 }
-            }
+            },
             Token::Ident(ident) => {
                 Ok(Type::User(ident.to_string()))
-            }
+            },
+            Token::Number(n) => {
+                match n.kind() {
+                    NumberKind::Hex => {
+                        let number = n.parse_f64();
+                        return Ok(Type::FloatLiteral(number.unwrap()));
+                    },
+                    NumberKind::DecI => {
+                        let number = n.parse_f64();
+                        return Ok(Type::FloatLiteral(number.unwrap()));
+                    },
+                    NumberKind::Bin => {
+                        let number = n.parse_f64();
+                        return Ok(Type::FloatLiteral(number.unwrap()));
+                    },
+                    NumberKind::Oct => {
+                        let number = n.parse_f64();
+                        return Ok(Type::FloatLiteral(number.unwrap()));
+                    },
+                    NumberKind::DecF => {
+                        let number = n.parse_f64();
+                        return Ok(Type::FloatLiteral(number.unwrap()));
+                    },
+                }
+            },
+
+            Token::String(s) => Ok(Type::StringLiteral(s.to_string())),
+
             _ => Err(Error::InvalidType(self.current_position))
         }
     }
@@ -687,7 +725,7 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::Const => {
                     self.skip_next_item();
-                    let const_decl = self.parse_variable(true, globals, global_var_map, fake_closure);
+                    let const_decl = self.parse_variable(true, globals, global_var_map, fake_closure, funcs, func_map, errors);
                     match const_decl {
                         Ok(c) => {
                             let idx = globals.len();
@@ -699,7 +737,7 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::Let => {
                     self.skip_next_item();
-                    let var_decl = self.parse_variable(false, globals, global_var_map, fake_closure);
+                    let var_decl = self.parse_variable(false, globals, global_var_map, fake_closure, funcs, func_map, errors);
                     match var_decl {
                         Ok(c) => {
                             let idx = globals.len();
@@ -720,6 +758,9 @@ impl<'b> Parser<'b> {
         globals: &mut Vec<GlobalVariableDecl>,
         global_var_map: &mut HashMap<String, u32>,
         closure: &mut Vec<ClosureRef>,
+        funcs: &mut Vec<Func>,
+        func_map: &mut HashMap<String, u32>,
+        errors: &mut Vec<Error>,
     ) -> Res<VariableDecl> {
         let next = assert_next!(self, "Expecting variable name");
         let id = assert_ident!(next, "Expecting variable name to be an identifier");
@@ -742,7 +783,7 @@ impl<'b> Parser<'b> {
         let token = &next.token;
         let init = if token.matches_punct(Punct::Equal) {
             self.skip_next_item();
-            let init = self.parse_expr(globals, global_var_map, closure);
+            let init = self.parse_expr(false, globals, global_var_map, closure, funcs, func_map, errors);
             assert_ok!(init);
 
             if var_type.is_undeclared() {
@@ -791,7 +832,7 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::Const => {
                     self.skip_next_item();
-                    let const_decl = self.parse_variable(true, globals, global_var_map, fake_closure);
+                    let const_decl = self.parse_variable(true, globals, global_var_map, fake_closure, funcs, func_map, errors);
                     match const_decl {
                         Ok(c) => {
                             let idx = globals.len();
@@ -803,7 +844,7 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::Let => {
                     self.skip_next_item();
-                    let var_decl = self.parse_variable(false, globals, global_var_map, fake_closure);
+                    let var_decl = self.parse_variable(false, globals, global_var_map, fake_closure, funcs, func_map, errors);
                     match var_decl {
                         Ok(c) => {
                             let idx = globals.len();
@@ -873,7 +914,7 @@ impl<'b> Parser<'b> {
         errors: &mut Vec<Error>
     ) -> Res<Stmt> {
         assert_punct!(self, Punct::OpenParen);
-        let cond = self.parse_expr(globals, global_var_map, closure);
+        let cond = self.parse_expr(true, globals, global_var_map, closure, funcs, func_map, errors);
         assert_ok!(cond);
         if cond.r#type != Type::Boolean {
             errors.push(Error::TypeFailure(Type::Boolean,  cond.r#type.clone()));
@@ -907,7 +948,7 @@ impl<'b> Parser<'b> {
         errors: &mut Vec<Error>
     ) -> Res<Stmt> {
         assert_punct!(self, Punct::OpenParen);
-        let cond = self.parse_expr(globals, global_var_map, closure);
+        let cond = self.parse_expr(true, globals, global_var_map, closure, funcs, func_map, errors);
         assert_ok!(cond);
         if cond.r#type != Type::Boolean {
             errors.push(Error::TypeFailure(Type::Boolean,  cond.r#type.clone()));
@@ -964,7 +1005,7 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::Const => {
                     self.skip_next_item();
-                    let const_decl = self.parse_variable(true, globals, global_var_map, closure);
+                    let const_decl = self.parse_variable(true, globals, global_var_map, closure, funcs, func_map, errors);
                     assert_ok!(const_decl);
                     let idx = local_vars.len();
                     local_vars.push(const_decl.clone());
@@ -973,7 +1014,7 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::Let => {
                     self.skip_next_item();
-                    let var_decl = self.parse_variable(false, globals, global_var_map, closure);
+                    let var_decl = self.parse_variable(false, globals, global_var_map, closure, funcs, func_map, errors);
                     assert_ok!(var_decl);
                     let idx = local_vars.len();
                     local_vars.push(var_decl.clone());
@@ -993,7 +1034,7 @@ impl<'b> Parser<'b> {
                         self.skip_next_item();
                         Ok(Stmt::Return(None))
                     } else {
-                        let expr = self.parse_expr(globals, global_var_map, closure);
+                        let expr = self.parse_expr(true, globals, global_var_map, closure, funcs, func_map, errors);
                         assert_semicolon!(self);
                         assert_ok!(expr);
                         // return type checking
@@ -1021,7 +1062,7 @@ impl<'b> Parser<'b> {
             },
             _ => {
                 // if we don't know what this statement is, parse it as an expr
-                let expr = self.parse_expr(globals, global_var_map, closure);
+                let expr = self.parse_expr(true, globals, global_var_map, closure, funcs, func_map, errors);
                 assert_ok!(expr);
                 assert_semicolon!(self);
                 return Ok(Stmt::Expr(expr));
@@ -1033,8 +1074,70 @@ impl<'b> Parser<'b> {
         return Err(Error::NotYetImplemented("new".to_string()));
     }
 
-    fn parse_function_call(&mut self, id: String) -> Res<TypedExpr> {
-        return Err(Error::NotYetImplemented("function call".to_string()));
+    fn parse_function_args(&mut self,
+        arg_types: &Vec<Type>,
+        globals: &mut Vec<GlobalVariableDecl>,
+        global_var_map: &mut HashMap<String, u32>,
+        closure: &mut Vec<ClosureRef>,
+        funcs: &mut Vec<Func>,
+        func_map: &mut HashMap<String, u32>,
+        errors: &mut Vec<Error>,
+    ) -> Res<Vec<TypedExpr>> {
+
+        let mut out: Vec<TypedExpr> = vec![];
+        self.skip_next_item();
+
+        let lookahead_item = self.peek_next_item();
+        let lookahead = lookahead_item.token;
+        match lookahead {
+            Token::Punct(p) => match p {
+                Punct::CloseParen => { 
+                    self.skip_next_item();
+                    if arg_types.len() != 0 {
+                        errors.push(Error::NotEnoughArgs);        
+                    }
+                    return Ok(out);
+                },
+                _ => {}
+            },
+            _ => {}
+        }
+
+        loop{
+            let expr = self.parse_expr(false, globals, global_var_map, closure, funcs, func_map, errors);
+            assert_ok!(expr);
+            
+            if out.len() == arg_types.len() {
+                errors.push(Error::TooManyArgs);
+            } else {
+                let arg_type = &arg_types[out.len()];
+                if *arg_type != expr.r#type {
+                    errors.push(Error::TypeFailure(arg_type.clone(), expr.r#type.clone()));
+                }
+            }
+            
+            out.push(expr);
+
+            let lookahead_item = self.peek_next_item();
+            let lookahead = lookahead_item.token;
+         
+            match lookahead {
+                Token::Punct(p) => match p {
+                    Punct::CloseParen => { 
+                        self.skip_next_item();
+                        if arg_types.len() != out.len() {
+                            errors.push(Error::NotEnoughArgs);        
+                        }
+                        return Ok(out);
+                    },
+                    Punct::Comma => {
+                        self.skip_next_item();
+                    },
+                    _ => return self.unexpected_token_error(lookahead_item.span, lookahead_item.location, "need expr or comma")
+                },
+                _ => return self.unexpected_token_error(lookahead_item.span, lookahead_item.location, "need expr or comma")
+            }
+        }
     }
 
     fn parse_component(&mut self, id: String) -> Res<TypedExpr> {
@@ -1045,11 +1148,14 @@ impl<'b> Parser<'b> {
         globals: &mut Vec<GlobalVariableDecl>,
         global_var_map: &mut HashMap<String, u32>,
         closure: &mut Vec<ClosureRef>,
+        funcs: &mut Vec<Func>,
+        func_map: &mut HashMap<String, u32>,
+        errors: &mut Vec<Error>,
     ) -> Res<TypedExpr> {
         // either a bracket or an arrow function declaration
 
         assert_punct!(self, Punct::OpenParen);
-        let expr = self.parse_expr(globals, global_var_map, closure);
+        let expr = self.parse_expr(true, globals, global_var_map, closure, funcs, func_map, errors);
         assert_ok!(expr);
         assert_punct!(self, Punct::CloseParen);
 
@@ -1082,55 +1188,54 @@ impl<'b> Parser<'b> {
         globals: &mut Vec<GlobalVariableDecl>,
         global_var_map: &mut HashMap<String, u32>,
         closure: &mut Vec<ClosureRef>,
+        funcs: &mut Vec<Func>,
+        func_map: &mut HashMap<String, u32>,
+        errors: &mut Vec<Error>,
     ) -> Res<TypedExpr> {
         let next = assert_next!(self, "expecting argument declaration");
         let id = assert_ident!(next, "Expecting variable name to be an identifier");
-        
-        let lookahead_item = self.peek_next_item();
-        let lookahead = lookahead_item.token;
-
-        let o_uod = lookahead.get_unary_operator_data();
-        match o_uod {
-            Some(uod) => {
-                if uod.fix == Fix::Postfix || uod.fix == Fix::Both {
-                    let op = self.get_postfix_unary_operator_for_token(lookahead_item.span, lookahead_item.location, &lookahead);
-                    assert_ok!(op);
-                    self.skip_next_item();
-                    let inner = self.parse_expr(globals, global_var_map, closure);
-                    assert_ok!(inner);
-                    let o_outer_type = types::get_unary_op_type(op.get_op_type(), &inner.r#type);
-                    match o_outer_type {
-                        Some(outer_type) => return Ok(TypedExpr{expr: Expr::UnaryOperator(UnaryOperatorApplication{op: op, expr: Box::new(inner)}), r#type: outer_type, is_const: true}),
-                        None => return Err(Error::TypeFailureUnaryOperator),
-                    };
-                }
-            },
-            _ => {},
-        };
-
-        // just peak to if this is a part of a linger expression
-        match lookahead {
-            Token::Punct(p) => match p {
-                Punct::OpenParen => return self.parse_function_call(id.to_string()),
-                Punct::Period => return self.parse_component(id.to_string()),
-                //todo - alsi do '['
-                _ => {}
-            },
-            _ => {}
-        }
 
         let o_sv = self.context.get_scoped_var(&id.to_string());
-        match o_sv {
+        let mut expr = match o_sv {
             None => {
                 let g_idx = global_var_map.get(&id.to_string());
                 match g_idx {
                     Some(idx) => {
                         let g_var = &globals[*idx as usize];
-                        Ok(TypedExpr{expr: Expr::GlobalVariableUse(id.to_string()), r#type: g_var.r#type.clone(), is_const: g_var.constant})
+                        TypedExpr{expr: Expr::GlobalVariableUse(id.to_string()), r#type: g_var.r#type.clone(), is_const: g_var.constant}
                     },
-                    None => Err(Error::VariableNotRecognised(id.to_string().clone()))
-                }
+                    None => { 
+                        // peek to see if this is a function call. If it is, we resolve it later
+                        let lookahead_item = self.peek_next_item();
+                        let lookahead = lookahead_item.token;
+
+                        match lookahead {
+                            Token::Punct(p) => match p {
+                                Punct::OpenParen => {
+                                    // the hash map returns a reference to the innards; the borrow checker freaks out
+                                    // unless I deref as soon as possible
+                                    let o_func_id = match func_map.get(&id.to_string()) {
+                                        Some(idx) => Some(*idx),
+                                        None => None,
+                                    };
+                                    match o_func_id{
+                                        Some(func_id) => {
+                                            let arg_types = funcs[func_id as usize].get_arg_types();
+                                            let args = self.parse_function_args(&arg_types, globals, global_var_map, closure, funcs, func_map, errors);
+                                            assert_ok!(args);
+                                            let func_return_type = funcs[func_id as usize].return_type.clone();
+                                            TypedExpr{expr: Expr::StaticFuncCall(id.to_string().clone(), args), r#type: func_return_type, is_const: true}
+                                        },
+                                        None => return Err(Error::VariableNotRecognised(id.to_string().clone()))
+                                    }
+                                },
+                                _ => return Err(Error::VariableNotRecognised(id.to_string().clone()))
                             },
+                            _ => return Err(Error::VariableNotRecognised(id.to_string().clone()))
+                        }
+                    }
+                }
+            },
             Some(sv) => match sv {
                 ScopedVar::ClosureRef(cr) => {
                     let is_new = !closure.iter().any(|x| x.internal_name.eq(&cr.internal_name));
@@ -1138,22 +1243,84 @@ impl<'b> Parser<'b> {
                         closure.push(ClosureRef{internal_name: cr.internal_name.clone(), r#type: cr.r#type.clone(), constant: cr.constant})
                     }
                     
-                    Ok(TypedExpr{expr: Expr::ClosureVariableUse(cr.internal_name.clone()), r#type: cr.r#type.clone(), is_const: cr.constant})
+                    TypedExpr{expr: Expr::ClosureVariableUse(cr.internal_name.clone()), r#type: cr.r#type.clone(), is_const: cr.constant}
                 },
-                ScopedVar::Local(n) => Ok(TypedExpr{expr: Expr::LocalVariableUse(n.internal_name.clone()), r#type: n.r#type.clone(), is_const: n.constant}),
+                ScopedVar::Local(n) => TypedExpr{expr: Expr::LocalVariableUse(n.internal_name.clone()), r#type: n.r#type.clone(), is_const: n.constant},
+            }
+        };
+
+        //now we either have a function call or a variable, let's see if it breaks down further
+        loop {
+            let lookahead_item = self.peek_next_item();
+            let lookahead = lookahead_item.token;
+         
+            //first peek for postfix operators
+            let o_uod = lookahead.get_unary_operator_data();
+            match o_uod {
+                Some(uod) => {
+                    if uod.fix == Fix::Postfix || uod.fix == Fix::Both {
+                        let op = self.get_postfix_unary_operator_for_token(lookahead_item.span, lookahead_item.location, &lookahead);
+                        assert_ok!(op);
+                        self.skip_next_item();
+                        let o_outer_type = types::get_unary_op_type(op.get_op_type(), &expr.r#type);
+                        match o_outer_type {
+                            Some(outer_type) => { 
+                                expr = TypedExpr{expr: Expr::UnaryOperator(UnaryOperatorApplication{op: op, expr: Box::new(expr.clone())}), r#type: outer_type, is_const: true}; continue 
+                            },
+                            None => return Err(Error::TypeFailureUnaryOperator),
+                        };
+                    }
+                },
+                _ => {},
+            };
+
+            //now, other things it could be
+            match lookahead {
+                Token::Punct(p) => match p {
+                    Punct::OpenParen => { 
+                        match &expr.r#type {
+                            Type::Func(func_type) => {
+                                let args = self.parse_function_args(&func_type.in_types, globals, global_var_map, closure, funcs, func_map, errors);
+                                assert_ok!(args);
+                                expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: func_type.out_type.clone(), is_const: true};
+                                continue;
+                            },
+                            _ => return Err(Error::TypeFailureFuncCall),
+                        }
+                        
+                    },
+                    Punct::Period => { 
+                        let new_expr = self.parse_component(id.to_string());
+                        assert_ok!(new_expr);
+                        expr = new_expr;
+                        continue;
+                    },
+
+                    Punct::OpenBracket => {
+                        return Err(Error::NotYetImplemented(String::from("dynamic member")));
+                    }
+                    _ => { break; }
+                },
+                _ => { break;}
             }
         }
+
+        Ok(expr)
     }
 
     /// From wikipedia
     fn parse_expr(&mut self,
+        allow_comma: bool,
         globals: &mut Vec<GlobalVariableDecl>,
         global_var_map: &mut HashMap<String, u32>,
         closure: &mut Vec<ClosureRef>,
+        funcs: &mut Vec<Func>,
+        func_map: &mut HashMap<String, u32>,
+        errors: &mut Vec<Error>,
     ) -> Res<TypedExpr> {
-        let expr = self.parse_primary(globals, global_var_map, closure);
+        let expr = self.parse_primary(globals, global_var_map, closure, funcs, func_map, errors);
         assert_ok!(expr);
-        self.parse_expr_1(expr, 0, globals, global_var_map, closure)
+        self.parse_expr_1(expr, 0, allow_comma, globals, global_var_map, closure, funcs, func_map, errors)
     }
 
     fn get_prefix_unary_operator_for_token(&self, span: Span, location: SourceLocation, token: &Token<&'b str>) -> Res<UnaryOperator> {
@@ -1176,6 +1343,9 @@ impl<'b> Parser<'b> {
         globals: &mut Vec<GlobalVariableDecl>,
         global_var_map: &mut HashMap<String, u32>,
         closure: &mut Vec<ClosureRef>,
+        funcs: &mut Vec<Func>,
+        func_map: &mut HashMap<String, u32>,
+        errors: &mut Vec<Error>,
     ) -> Res<TypedExpr> {
         let lookahead_item = self.peek_next_item();
         let lookahead = lookahead_item.token;
@@ -1186,7 +1356,7 @@ impl<'b> Parser<'b> {
                     let op = self.get_prefix_unary_operator_for_token(lookahead_item.span, lookahead_item.location, &lookahead);
                     assert_ok!(op);
                     self.skip_next_item();
-                    let inner = self.parse_expr(globals, global_var_map, closure);
+                    let inner = self.parse_expr(false, globals, global_var_map, closure, funcs, func_map, errors);
                     assert_ok!(inner);
                     let o_outer_type = types::get_unary_op_type(op.get_op_type(), &inner.r#type);
                     match o_outer_type {
@@ -1255,10 +1425,10 @@ impl<'b> Parser<'b> {
                 }
             },
 
-            Token::Ident(_) => self.parse_ident_expr(globals, global_var_map, closure),
+            Token::Ident(_) => self.parse_ident_expr(globals, global_var_map, closure, funcs, func_map, errors),
 
             Token::Punct(p) => match p {
-                Punct::OpenParen => self.parse_paren_expr(globals, global_var_map, closure),
+                Punct::OpenParen => self.parse_paren_expr(globals, global_var_map, closure, funcs, func_map, errors),
                 Punct::OpenBrace => self.parse_object_literal(),
                 _ => self.unexpected_token_error(lookahead_item.span, lookahead_item.location, "unexpected punctuation"),
             },
@@ -1346,9 +1516,13 @@ impl<'b> Parser<'b> {
     fn parse_expr_1(&mut self, 
         init_lhs: TypedExpr, 
         min_precedence: i32, 
+        allow_comma: bool,
         globals: &mut Vec<GlobalVariableDecl>,
         global_var_map: &mut HashMap<String, u32>,
         closure: &mut Vec<ClosureRef>,
+        funcs: &mut Vec<Func>,
+        func_map: &mut HashMap<String, u32>,
+        errors: &mut Vec<Error>,
     ) -> Res<TypedExpr> {
         // lookahead := peek next token
         let mut lhs = init_lhs;
@@ -1359,7 +1533,7 @@ impl<'b> Parser<'b> {
         
         // while lookahead is a binary operator whose precedence is >= min_precedence
         loop {
-            let o_lookahead_data = lookahead.get_binary_operator_data();
+            let o_lookahead_data = lookahead.get_binary_operator_data(allow_comma);
             match o_lookahead_data {
                 None => break,
                 Some(lookahead_data) => {
@@ -1372,7 +1546,7 @@ impl<'b> Parser<'b> {
                         // advance to next token
                         self.skip_next_item();
                         // rhs := parse_primary ()
-                        let r_rhs = self.parse_primary(globals, global_var_map, closure);
+                        let r_rhs = self.parse_primary(globals, global_var_map, closure, funcs, func_map, errors);
                         if r_rhs.is_err() { return Err(r_rhs.unwrap_err()) }; 
                         let mut rhs = r_rhs?;
                         // lookahead := peek next token
@@ -1384,13 +1558,13 @@ impl<'b> Parser<'b> {
                         // than op's, or a right-associative operator
                         // whose precedence is equal to op's
                         loop {
-                            let o_lookahead_data = lookahead.get_binary_operator_data();
+                            let o_lookahead_data = lookahead.get_binary_operator_data(allow_comma);
                             match o_lookahead_data {
                                 None => break,
                                 Some(lookahead_data) => {
                                     if lookahead_data.precedence > op_precedence || (lookahead_data.association == Association::Right && lookahead_data.precedence == op_precedence) {
                                         //rhs := parse_expression_1 (rhs, lookahead's precedence)
-                                        let new_rhs = self.parse_expr_1(rhs, lookahead_data.precedence, globals, global_var_map, closure);
+                                        let new_rhs = self.parse_expr_1(rhs, lookahead_data.precedence, allow_comma, globals, global_var_map, closure, funcs, func_map, errors);
                                         if new_rhs.is_err() { return Err(new_rhs.unwrap_err()) }; 
                                         rhs = new_rhs?;
                                         //lookahead := peek next token

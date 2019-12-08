@@ -18,7 +18,7 @@ export function negMax(x: number, y: number): number {
     // never get there
     return 0;
 }*/
-
+/*
 export function bang(x: number): number {
     let out = 1;
 
@@ -28,6 +28,15 @@ export function bang(x: number): number {
     }
 
     return out;
+}*/
+
+
+function mul(x: number, y: number): number {
+    return x * y;
+}
+
+export function fourTimes(x: number): number{
+    return mul(x, 2) * 2;
 }
 
 /*

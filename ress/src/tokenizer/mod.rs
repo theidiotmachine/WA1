@@ -107,6 +107,7 @@ impl<'a> Tokenizer<'a> {
             4 if ident == b"else" => Some(RawToken::Keyword(Keyword::Else)),
             4 if ident == b"true" => Some(RawToken::Boolean(true)),
             4 if ident == b"null" => Some(RawToken::Null),
+            5 if ident == b"__ptr" => Some(RawToken::Keyword(Keyword::Ptr)),
             5 if ident == b"Array" => Some(RawToken::Keyword(Keyword::Array)),
             5 if ident == b"Tuple" => Some(RawToken::Keyword(Keyword::Tuple)),
             5 if ident == b"async" => Some(RawToken::Keyword(Keyword::Async)),

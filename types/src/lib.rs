@@ -91,6 +91,18 @@ pub enum Type {
     Undeclared,
     ///Unresolved type var
     Variable(String),
+
+    ///numeric literal - 'number'
+    FloatLiteral(f64),
+
+    //numeric literal - big int
+    //BigIntLiteral(i64),
+
+    /// string lireral
+    StringLiteral(String),
+
+    ///ptr - internal type. Param is one of 8, 16, 32 or 64
+    Ptr(u32),
 }
 
 impl Type{
@@ -98,6 +110,13 @@ impl Type{
         match &self {
             Type::Undeclared => true,
             _ => false
+        }
+    }
+
+    pub fn get_func_type(&self) -> Option<&FuncType> {
+        match &self {
+            Type::Func(func_type) => Some(func_type),
+            _ => None
         }
     }
 }
@@ -130,6 +149,9 @@ impl Display for Type {
             Type::User(name) => write!(f, "{}", name),
             Type::Undeclared => write!(f, "undeclared"),
             Type::Variable(name) => write!(f, "{}", name),
+            Type::Ptr(p) => write!(f, "__ptr<{}>", p),
+            Type::FloatLiteral(n) => write!(f, "{}", n),
+            Type::StringLiteral(n) => write!(f, "\"{}\"", n),
         }
     }
 }

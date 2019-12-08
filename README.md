@@ -71,9 +71,12 @@ Currently the following features are supported
     1. [ ] change tee + drop into set
     1. [ ] remove get + drop
 1. [ ] function calling
+    1. [x] simple static function call
     1. [ ] function return type inference
     1. [ ] functions as first class objects (but not closures)
 1. [x] assignments and consts
+1. bugs
+    1. [ ] fairly sure prefix unary operators are wrong - may need to start at a precedence
 1. [ ] global variables (currently not init'ed)
 1. [ ] options (?)
 1. [ ] a runtime

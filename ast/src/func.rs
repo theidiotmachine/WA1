@@ -25,6 +25,16 @@ pub struct Func {
     pub local_var_map: HashMap<String, u32>,
 }
 
+impl Func {
+    pub fn get_arg_types(&self) -> Vec<Type> {
+        let mut out: Vec<Type> = vec![];
+        for arg in &self.args {
+            out.push(arg.r#type.clone());
+        }
+        out
+    }
+}
+
 /// Function declaration. This in reality means a closure creation plus reference to function name
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncDecl {

@@ -90,6 +90,7 @@ fn transform_typed_expr(
     typed_expr: &TypedExpr,
     global_var_map: &HashMap<String, u32>,
     local_var_map: &HashMap<String, u32>,
+    func_map: &HashMap<String, u32>,
     errors: &mut Vec<Error>
 ) -> Vec<Instruction> {
     match &typed_expr.expr {
@@ -124,8 +125,8 @@ fn transform_typed_expr(
         Expr::BinaryOperator(bo) => {
             let mut vi: Vec<Instruction> = vec![];
                     
-            vi.append(&mut transform_typed_expr(&bo.lhs, global_var_map, local_var_map, errors));
-            vi.append(&mut transform_typed_expr(&bo.rhs, global_var_map, local_var_map, errors));
+            vi.append(&mut transform_typed_expr(&bo.lhs, global_var_map, local_var_map, func_map, errors));
+            vi.append(&mut transform_typed_expr(&bo.rhs, global_var_map, local_var_map, func_map, errors));
         
             match bo.op {
                 BinaryOperator::Plus => vi.push(Instruction::F64Add),
@@ -153,7 +154,7 @@ fn transform_typed_expr(
 
         Expr::UnaryOperator(uo) => {
             let mut vi: Vec<Instruction> = vec![];
-            vi.append(&mut transform_typed_expr(&uo.expr, global_var_map, local_var_map, errors));
+            vi.append(&mut transform_typed_expr(&uo.expr, global_var_map, local_var_map, func_map, errors));
             match uo.op {
                 UnaryOperator::LogicalNot => {
                     vi.push(Instruction::I32Eqz);
@@ -179,7 +180,7 @@ fn transform_typed_expr(
         }
 
         Expr::Parens(p) => {
-            transform_typed_expr(&p, global_var_map, local_var_map, errors)
+            transform_typed_expr(&p, global_var_map, local_var_map, func_map, errors)
         },
 
         Expr::BoolLiteral(b) => {
@@ -194,11 +195,11 @@ fn transform_typed_expr(
             let mut vi: Vec<Instruction> = vec![];
             
             if *op == AssignmentOperator::Assign {
-                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, errors));
+                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, errors));
                 vi.append(&mut transform_lvalue_tee(l_value, global_var_map, local_var_map, errors));
             } else {
                 vi.append(&mut transform_lvalue_get(l_value, global_var_map, local_var_map, errors));
-                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, errors));
+                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, errors));
             
                 match op {
                     AssignmentOperator::MinusAssign => vi.push(Instruction::F64Sub),
@@ -216,7 +217,24 @@ fn transform_typed_expr(
             }
 
             vi
-        }
+        },
+
+        Expr::StaticFuncCall(name, args) => {
+            let mut vi: Vec<Instruction> = vec![];
+            
+            for arg in args {
+                vi.append(&mut transform_typed_expr(&arg, global_var_map, local_var_map, func_map, errors));
+            }
+
+            let o_func_id = func_map.get(name);
+            if o_func_id.is_some() {
+                vi.push(Instruction::Call(*o_func_id.unwrap()));
+            } else {
+                errors.push(Error::FuncNotRecognised(name.clone()));
+            }
+
+            vi
+        },
 
         _ => { errors.push(Error::NotYetImplemented(String::from("expr"))); vec![] },
     }
@@ -225,6 +243,7 @@ fn transform_typed_expr(
 fn transform_stmt(stmt: &Stmt,
     global_var_map: &HashMap<String, u32>,
     local_var_map: &HashMap<String, u32>,
+    func_map: &HashMap<String, u32>,
     errors: &mut Vec<Error>
 ) -> Vec<Instruction> {
     match stmt {
@@ -232,7 +251,7 @@ fn transform_stmt(stmt: &Stmt,
             match o_expr {
                 None => vec![Instruction::Return],
                 Some(expr) => {
-                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, errors);
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, errors);
                     this_vi.push(Instruction::Return);
                     this_vi
                 }
@@ -243,7 +262,7 @@ fn transform_stmt(stmt: &Stmt,
             let mut vi = vec![];
             match &v.init {
                 Some(expr) => {
-                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, errors);
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, errors);
                     vi.append(& mut this_vi);
                     //then set the variable
                     let o_idx = local_var_map.get(&v.internal_name);
@@ -258,7 +277,7 @@ fn transform_stmt(stmt: &Stmt,
         },
         Stmt::Expr(e) => {
             // an expr returns something, so run it
-            let mut this_vi = transform_typed_expr(&e, global_var_map, local_var_map, errors);
+            let mut this_vi = transform_typed_expr(&e, global_var_map, local_var_map, func_map, errors);
             // now pop what it returned
             this_vi.push(Instruction::Drop);
             this_vi
@@ -266,12 +285,12 @@ fn transform_stmt(stmt: &Stmt,
         Stmt::IfThen(c, t) => {
             let mut vi = vec![];
             
-            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, errors);
+            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, func_map, errors);
             vi.append(&mut this_vi);
             
             vi.push(Instruction::If(BlockType::NoResult));
             
-            let mut this_vi: Vec<Instruction> = transform_stmts(t, global_var_map, local_var_map, errors);
+            let mut this_vi: Vec<Instruction> = transform_stmts(t, global_var_map, local_var_map, func_map, errors);
             vi.append(&mut this_vi);
             vi.push(Instruction::End);
             vi
@@ -280,15 +299,15 @@ fn transform_stmt(stmt: &Stmt,
         Stmt::IfThenElse(c, t, e) => {
             let mut vi = vec![];
             
-            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, errors);
+            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, func_map, errors);
             vi.append(&mut this_vi);
             
             vi.push(Instruction::If(BlockType::NoResult));
             
-            let mut this_vi: Vec<Instruction> = transform_stmts(t, global_var_map, local_var_map, errors);
+            let mut this_vi: Vec<Instruction> = transform_stmts(t, global_var_map, local_var_map, func_map, errors);
             vi.append(&mut this_vi);
             vi.push(Instruction::Else);
-            let mut this_vi: Vec<Instruction> = transform_stmts(e, global_var_map, local_var_map, errors);
+            let mut this_vi: Vec<Instruction> = transform_stmts(e, global_var_map, local_var_map, func_map, errors);
             vi.append(&mut this_vi);            
             vi.push(Instruction::End);
             vi
@@ -303,7 +322,7 @@ fn transform_stmt(stmt: &Stmt,
             // a br of 0 will be continue
             vi.push(Instruction::Loop(BlockType::NoResult));
 
-            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, errors);
+            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, func_map, errors);
             vi.append(&mut this_vi);
             
             // if the condition failed, we bail
@@ -313,7 +332,7 @@ fn transform_stmt(stmt: &Stmt,
             vi.push(Instruction::BrIf(1));
 
             //run the body
-            let mut this_vi: Vec<Instruction> = transform_stmts(b, global_var_map, local_var_map, errors);
+            let mut this_vi: Vec<Instruction> = transform_stmts(b, global_var_map, local_var_map, func_map, errors);
             vi.append(&mut this_vi);
 
             // jump back to the start of the loop
@@ -334,12 +353,13 @@ fn transform_stmt(stmt: &Stmt,
 fn transform_stmts(stmts: &Vec<Stmt>, 
     global_var_map: &HashMap<String, u32>,
     local_var_map: &HashMap<String, u32>,
+    func_map: &HashMap<String, u32>,
     errors: &mut Vec<Error>
 )-> Vec<Instruction> {
     let mut vi: Vec<Instruction> = vec![];
     
     for stmt in stmts {
-        let mut this_vi = transform_stmt(stmt, global_var_map, local_var_map, errors);
+        let mut this_vi = transform_stmt(stmt, global_var_map, local_var_map, func_map, errors);
         vi.append(&mut this_vi);
     }
 
@@ -348,6 +368,7 @@ fn transform_stmts(stmts: &Vec<Stmt>,
 
 fn transform_func(func: &Func, 
     global_var_map: &HashMap<String, u32>,
+    func_map: &HashMap<String, u32>,
     errors: &mut Vec<Error>
 ) -> FunctionDefinition{
     let fb = FunctionBuilder::new();
@@ -369,7 +390,7 @@ fn transform_func(func: &Func,
     let fbb = fb.body();
     let fbb = fbb.with_locals(locals);
 
-    let mut vi: Vec<Instruction> = transform_stmts(&func.body, global_var_map, &func.local_var_map, errors);
+    let mut vi: Vec<Instruction> = transform_stmts(&func.body, global_var_map, &func.local_var_map, func_map, errors);
     
     vi.push(Instruction::End);
     let fbb = fbb.with_instructions(Instructions::new(vi));
@@ -383,7 +404,7 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
     let mut m = module();
     for func in &program.funcs {
         if !func.import {
-            m.push_function(transform_func(func, &program.global_var_map, errors));
+            m.push_function(transform_func(func, &program.global_var_map, &program.func_map, errors));
         }
         if func.export {
             m = m.export().field(&func.name).internal().func(*(program.func_map.get(&func.name).unwrap())).build();
