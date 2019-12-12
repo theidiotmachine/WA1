@@ -24,6 +24,8 @@ pub enum Error {
     TypeFailureFuncCall,
     TooManyArgs,
     NotEnoughArgs,
+    DuplicateTypeName(String),
+    NotInLoop(String),
 }
 
 impl Display for Error {
@@ -49,6 +51,8 @@ impl Display for Error {
             Error::TypeFailureFuncCall => write!(f, "Variable is not a function"),
             Error::TooManyArgs => write!(f, "Too many args"),
             Error::NotEnoughArgs => write!(f, "Not enough args"),
+            Error::DuplicateTypeName(name) => write!(f, "Duplicate type name: {}", name),
+            Error::NotInLoop(what) => write!(f, "Used loop keyword outside a loop: {}", what),
         }
     }
 }

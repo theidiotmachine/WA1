@@ -257,7 +257,7 @@ fn transform_stmt(stmt: &Stmt,
                 }
             }
         },
-        Stmt::Variable(v) => {
+        Stmt::VariableDecl(v) => {
             //first,  run the init expression
             let mut vi = vec![];
             match &v.init {
@@ -344,6 +344,18 @@ fn transform_stmt(stmt: &Stmt,
             vi
         },
 
+        Stmt::Break => {
+            vec![
+                Instruction::Br(1)
+            ]
+        },
+
+        Stmt::Continue => {
+            vec![
+                Instruction::Br(0)
+            ]
+        },
+
         _ => {
             panic!();
         }
@@ -367,6 +379,7 @@ fn transform_stmts(stmts: &Vec<Stmt>,
 }
 
 fn transform_func(func: &Func, 
+    start_function: &String,
     global_var_map: &HashMap<String, u32>,
     func_map: &HashMap<String, u32>,
     errors: &mut Vec<Error>
@@ -397,6 +410,12 @@ fn transform_func(func: &Func,
 
     let fb = fbb.build();
 
+    let fb = if start_function.eq(&func.name) {
+        fb.main()
+    } else {
+        fb
+    };
+
     fb.build()
 }
 
@@ -404,7 +423,7 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
     let mut m = module();
     for func in &program.funcs {
         if !func.import {
-            m.push_function(transform_func(func, &program.global_var_map, &program.func_map, errors));
+            m.push_function(transform_func(func, &program.start, &program.global_var_map, &program.func_map, errors));
         }
         if func.export {
             m = m.export().field(&func.name).internal().func(*(program.func_map.get(&func.name).unwrap())).build();

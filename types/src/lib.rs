@@ -2,8 +2,12 @@ pub mod prelude {
     pub use super::Type;
     pub use super::OpType;
     pub use super::FuncType;
+    pub use super::ClassType;
+    pub use super::ClassMember;
+    pub use super::Privacy;
     pub use super::get_unary_op_type;
     pub use super::get_binary_op_type;
+    pub use super::AbsTypeDecl;
 }
 
 use std::fmt::Display;
@@ -44,6 +48,51 @@ pub enum OpType{
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Privacy{
+    Public, Private, Protected
+}
+
+/// Data memeber of a class.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassMember{
+    pub name: String,
+    pub r#type: Type,
+    pub privacy: Privacy,
+}
+
+/// User-defined class type. Only contains members at the moment.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassType{
+    pub members: Vec<ClassMember>,
+}
+
+/// This is part of the type system rewrite. I am not sure it's correct yet.
+/// This is the body of a type function that consumes type args and returns a type.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AbsTypeBody{
+    VariableUse(String),
+    Array(Box<AbsTypeBody>),
+    Func(Vec<AbsTypeBody>, Box<AbsTypeBody>),
+    UserType,
+    Number,
+    String,
+    Boolean,
+    Any,
+    Unknown, //???
+    RealVoid,
+    FakeVoid,
+    Never,
+}
+
+/// This is part of the type system rewrite. I am not sure it's correct yet.
+/// This is a type function that conumes type args and returns a type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AbsTypeDecl{
+    pub args: Vec<String>,
+    pub out: AbsTypeBody,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     /// unit type that actually manifests as nothing
     RealVoid,
@@ -66,7 +115,7 @@ pub enum Type {
     ///boolean
     Boolean,
     ///Func
-    Func(Box<FuncType>),
+    Func{func_type: Box<FuncType>, type_args: Vec<Type>},
 
     ///Tuple
     Tuple(Vec<Type>),
@@ -85,12 +134,12 @@ pub enum Type {
     Null,
 
     /// user type
-    User(String),
+    UserClass{name: String, type_args: Vec<Type>},
 
     /// not yet known - will be filled in by the typer
     Undeclared,
     ///Unresolved type var
-    Variable(String),
+    VariableUsage(String),
 
     ///numeric literal - 'number'
     FloatLiteral(f64),
@@ -115,7 +164,7 @@ impl Type{
 
     pub fn get_func_type(&self) -> Option<&FuncType> {
         match &self {
-            Type::Func(func_type) => Some(func_type),
+            Type::Func{func_type, type_args: _} => Some(func_type),
             _ => None
         }
     }
@@ -133,7 +182,7 @@ impl Display for Type {
             Type::Array(inner) => write!(f, "Array<{}>", inner),
             Type::BigInt => write!(f, "bigint"),
             Type::Boolean => write!(f, "boolean"),
-            Type::Func(func_type) => write!(f, "{}", func_type),
+            Type::Func{func_type, type_args: _} => write!(f, "{}", func_type),
             Type::Tuple(types) => {
                 let mut vec: Vec<String> = vec![];
                 for inner in types {
@@ -146,9 +195,9 @@ impl Display for Type {
             Type::Option(inner) => write!(f, "Option<{}>", inner),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
             Type::Null => write!(f, "null"),
-            Type::User(name) => write!(f, "{}", name),
+            Type::UserClass{name, type_args: _} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "undeclared"),
-            Type::Variable(name) => write!(f, "{}", name),
+            Type::VariableUsage(name) => write!(f, "{}", name),
             Type::Ptr(p) => write!(f, "__ptr<{}>", p),
             Type::FloatLiteral(n) => write!(f, "{}", n),
             Type::StringLiteral(n) => write!(f, "\"{}\"", n),

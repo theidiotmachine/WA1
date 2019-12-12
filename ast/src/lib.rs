@@ -3,7 +3,6 @@ pub mod expr;
 pub mod func;
 
 use stmt::GlobalVariableDecl;
-use stmt::Stmt;
 use func::Func;
 use std::collections::HashMap;
 
@@ -24,8 +23,8 @@ pub struct Program {
     pub globals: Vec<GlobalVariableDecl>,
     ///all the functions
     pub funcs: Vec<Func>,
-    //any other initializing statements
-    pub init: Vec<Stmt>,
+    //start function
+    pub start: String,
     /// name to index map
     pub global_var_map: HashMap<String, u32>,
     pub func_map: HashMap<String, u32>,

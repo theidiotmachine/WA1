@@ -47,7 +47,9 @@ pub enum Stmt {
     /// this is wrong - in JS this is an expression
     FuncDecl(FuncDecl),
     /// variable declaration
-    Variable(VariableDecl),
+    VariableDecl(VariableDecl),
+    /// global variable declaration. Only appears in the __start function.
+    GlobalVariableDecl(GlobalVariableDecl),
     /// return statement
     Return(Option<TypedExpr>),
     /// if-then
@@ -56,4 +58,11 @@ pub enum Stmt {
     IfThenElse(TypedExpr, Vec<Stmt>, Vec<Stmt>),
     /// while loop
     While(TypedExpr, Vec<Stmt>),
+    // class decl
+    ClassDecl(String),
+    /// break
+    Break,
+    /// continue
+    Continue,
+    
 }

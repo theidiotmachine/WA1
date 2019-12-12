@@ -8,15 +8,28 @@ To build, first you need Rust. Install cargo. Then, run
 
 > cargo build
 
-in the root. At the moment, 
+in the root. To run, you need to pass the compiler some arguments.
 
-> cargo run
+> cargo run -- -- wa1/src/one.wa1 -o=out.wasm
 
-will parse `main/src/one.ws` and generate `out.wasm` in the root. This will produce a function `addd` that returns the max of two numbers.
+will parse `wa1/src/one.ws` and generate `out.wasm` in the root.
 
 ## Running
 
-To run, you will need some way of running wasm. The easiest is to use a webpage that looks like this
+To run, you will need some way of running wasm. 
+
+### Runner
+
+We ship a runner built on [wasmtime](https://github.com/bytecodealliance/wasmtime) for easy testing.
+To run, call
+
+```
+cargo run --bin test-runner -- out.wasm -f 'fourTimes(8);'
+```
+
+### Webpage
+
+One way is to use a webpage that looks something like this
 
 ```html
 <html>
@@ -27,7 +40,7 @@ To run, you will need some way of running wasm. The easiest is to use a webpage 
     ).then(bytes =>
       WebAssembly.instantiate(bytes, {imports: {}})
     ).then(results => {
-      window.addd = results.instance.exports.addd;
+      window.addd = results.instance.exports.addd; //or whatever is exported from the file
     });
   </script>
 </body>
@@ -40,20 +53,48 @@ Serve it with http-server; install that with
 
 and manually call in your browser in the debugger by typing the function name (called `addd` out of the box).
 
+# The language
+
+The syntax of the language is inspired by TypeScript, but it is not completely faithful to it. There is not very much right now.
+
+A function is written like this.
+
+```
+function mul(x: number, y: number): number {
+    return x * y;
+}
+```
+
+The export keyword can be used to export the function from webassembly.
+
+```
+export function bang(x: number): number {
+    let out = 1;
+
+    while(x > 0) {
+        out *= x;
+        x -= 1;
+    }
+
+    return out;
+}
+```
+
 ## Features
 
-Currently the following features are supported
+Currently the following features are supported.
 
 ### Types
 
 * Number - a double. Some support, but not complete
 * boolean - mostly there
 
-### Language features
+### Control
 
-* Function creation - all arguments and return value must be typed
-* Local variables - type inference works here. Note that you cannot currently reassign to locals
-* if, else, return.
+* Function creation - all arguments and return value must be typed.
+* Function calling.
+* Local variables - type inference works here.
+* if, else, while, continue, break, return.
 
 ## TODO
 

@@ -1,6 +1,7 @@
 [workspace]
 members = [
-    "main",
+    "wa1",
+    "test-runner",
     "ress",
     "parser",
     "ast",

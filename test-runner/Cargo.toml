@@ -1,11 +1,10 @@
 [package]
-name = "main"
+name = "test-runner"
 version = "0.1.0"
 authors = ["theidiotmachine <dinsdt@googlemail.com>"]
 edition = "2018"
 
 [dependencies]
+clap = "~2.33.0"
+wasmtime = "0.8.0"
 ress = { path = "../ress" }
-ast = { path = "../ast" }
-parser = { path = "../parser" }
-writer = { path = "../writer" }
