@@ -13,7 +13,7 @@ cargo build
 in the root. To run, you need to pass the compiler some arguments.
 
 ```
-cargo run -- -- wa1/src/one.wa1 -o=out.wasm
+cargo run -- wa1/src/one.wa1 -o=out.wasm
 ```
 
 will parse `wa1/src/one.ws` and generate `out.wasm` in the root.
