@@ -6,11 +6,15 @@ This is the WebAssembly1 project. It needs a fancy name. At some point it will g
 
 To build, first you need Rust. Install cargo. Then, run
 
-> cargo build
+```
+cargo build
+```
 
 in the root. To run, you need to pass the compiler some arguments.
 
-> cargo run -- -- wa1/src/one.wa1 -o=out.wasm
+```
+cargo run -- -- wa1/src/one.wa1 -o=out.wasm
+```
 
 will parse `wa1/src/one.ws` and generate `out.wasm` in the root.
 
@@ -49,7 +53,9 @@ One way is to use a webpage that looks something like this
 
 Serve it with http-server; install that with 
 
-> npm install -g http-server
+```
+npm install -g http-server
+```
 
 and manually call in your browser in the debugger by typing the function name (called `addd` out of the box).
 
