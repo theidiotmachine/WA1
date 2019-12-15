@@ -12,9 +12,12 @@ pub use types::Type;
 fn get_ir_type(r#type: &Type) -> ValueType {
     match r#type {
         Type::Number => ValueType::F64,
+        Type::Int => ValueType::I32,
+        Type::BigInt => ValueType::I64,
         //if we end up at runtime generating such an argument, just pass an empty int and be done. It's probably a generic.
         Type::FakeVoid => ValueType::I32, 
         Type::Boolean => ValueType::I32,
+        Type::Ptr(_) => ValueType::I32,
         _ => panic!()
     }
 }
@@ -117,37 +120,175 @@ fn transform_typed_expr(
                 }
             }
         },
-        /*
+        
         Expr::IntLiteral(v) => {
+            vec![Instruction::I32Const(*v)]
+        },
+        
+        Expr::BigIntLiteral(v) => {
             vec![Instruction::I64Const(*v)]
         },
-        */
+
         Expr::BinaryOperator(bo) => {
             let mut vi: Vec<Instruction> = vec![];
                     
             vi.append(&mut transform_typed_expr(&bo.lhs, global_var_map, local_var_map, func_map, errors));
             vi.append(&mut transform_typed_expr(&bo.rhs, global_var_map, local_var_map, func_map, errors));
-        
-            match bo.op {
-                BinaryOperator::Plus => vi.push(Instruction::F64Add),
-                BinaryOperator::Minus => vi.push(Instruction::F64Sub),
-                BinaryOperator::Multiply => vi.push(Instruction::F64Mul),
-                BinaryOperator::Divide => vi.push(Instruction::F64Div),
-                BinaryOperator::GreaterThan => vi.push(Instruction::F64Gt),
-                BinaryOperator::GreaterThanEqual => vi.push(Instruction::F64Ge),
-                BinaryOperator::LessThan=> vi.push(Instruction::F64Lt),
-                BinaryOperator::LessThanEqual => vi.push(Instruction::F64Le),
 
-                //these are the bit instructions, but our strong typing should mean that this is safe
-                BinaryOperator::LogicalAnd => vi.push(Instruction::I32And),
-                BinaryOperator::LogicalOr => vi.push(Instruction::I32Or),
-                BinaryOperator::BitAnd => vi.push(Instruction::I32And),
-                BinaryOperator::BitOr => vi.push(Instruction::I32Or),
-                BinaryOperator::BitXor => vi.push(Instruction::I32Xor),
+            match bo.lhs.r#type {
+                Type::Number => {
+                    // number * ? => ?
+                    match typed_expr.r#type {
+                        Type::Number => {
+                            // number * ? => number
+                            match bo.op {
+                                BinaryOperator::Plus => vi.push(Instruction::F64Add),
+                                BinaryOperator::Minus => vi.push(Instruction::F64Sub),
+                                BinaryOperator::Multiply => vi.push(Instruction::F64Mul),
+                                BinaryOperator::Divide => vi.push(Instruction::F64Div),
+                                _ => {
+                                    errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                }
+                            }
+                        },
+                        Type::Boolean => {
+                            // number * ? => boolean
+                            match bo.op {
+                                BinaryOperator::GreaterThan => vi.push(Instruction::F64Gt),
+                                BinaryOperator::GreaterThanEqual => vi.push(Instruction::F64Ge),
+                                BinaryOperator::LessThan=> vi.push(Instruction::F64Lt),
+                                BinaryOperator::LessThanEqual => vi.push(Instruction::F64Le),
+                                _ => {
+                                    errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                }
+                            }
+                        },        
+                        _ => {
+                            errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                        }
+                    }
+                },
+
+                Type::Int => {
+                    // int * ? => ?
+                    match typed_expr.r#type {
+                        Type::Int => {
+                            // int * ? => int
+                            match bo.op {
+                                BinaryOperator::Plus => vi.push(Instruction::I32Add),
+                                BinaryOperator::Minus => vi.push(Instruction::I32Sub),
+                                BinaryOperator::Multiply => vi.push(Instruction::I32Mul),
+                                BinaryOperator::Divide => vi.push(Instruction::I32DivS),
+                                BinaryOperator::BitAnd => vi.push(Instruction::I32And),
+                                BinaryOperator::BitOr => vi.push(Instruction::I32Or),
+                                BinaryOperator::BitXor => vi.push(Instruction::I32Xor),
+
+                                _ => {
+                                    errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                }
+                            }
+                        },
+                        Type::Boolean => {
+                            // int * ? => boolean
+                            match bo.op {
+                                BinaryOperator::GreaterThan => vi.push(Instruction::I32GtS),
+                                BinaryOperator::GreaterThanEqual => vi.push(Instruction::I32GeS),
+                                BinaryOperator::LessThan=> vi.push(Instruction::I32LtS),
+                                BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeS),
+                                _ => {
+                                    errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                }
+                            }
+                        },
+                        _ => {
+                            errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                        }
+                    }
+                },
+
+                Type::BigInt => {
+                    // bigint * ? => ?
+                    match typed_expr.r#type {
+                        Type::BigInt => {
+                            // bigint * ? => bigint
+                            match bo.op {
+                                BinaryOperator::Plus => vi.push(Instruction::I64Add),
+                                BinaryOperator::Minus => vi.push(Instruction::I64Sub),
+                                BinaryOperator::Multiply => vi.push(Instruction::I64Mul),
+                                BinaryOperator::Divide => vi.push(Instruction::I64DivS),
+                                BinaryOperator::BitAnd => vi.push(Instruction::I64And),
+                                BinaryOperator::BitOr => vi.push(Instruction::I64Or),
+                                BinaryOperator::BitXor => vi.push(Instruction::I64Xor),
+
+                                _ => {
+                                    errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                }
+                            }
+                        },
+                        Type::Boolean => {
+                            // bigint * ? => boolean
+                            match bo.op {
+                                BinaryOperator::GreaterThan => vi.push(Instruction::I64GtS),
+                                BinaryOperator::GreaterThanEqual => vi.push(Instruction::I64GeS),
+                                BinaryOperator::LessThan=> vi.push(Instruction::I64LtS),
+                                BinaryOperator::LessThanEqual => vi.push(Instruction::I64LeS),
+                                _ => {
+                                    errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                }
+                            }
+                        },
+                        _ => {
+                            errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                        }
+                    }
+                },
+
+                Type::Ptr(_) => {
+                    match typed_expr.r#type {
+                        Type::Ptr(_) => {
+                            match bo.op {
+                                BinaryOperator::Plus => vi.push(Instruction::I32Add),
+                                BinaryOperator::Minus => vi.push(Instruction::I32Sub),
+                                BinaryOperator::Multiply => vi.push(Instruction::I32Mul),
+                                BinaryOperator::Divide => vi.push(Instruction::I32DivU),
+                                _ => {
+                                    errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                }
+                            }
+                        },
+                        Type::Boolean => {
+                            match bo.op {
+                                BinaryOperator::GreaterThan => vi.push(Instruction::I32GtS),
+                                BinaryOperator::GreaterThanEqual => vi.push(Instruction::I32GeS),
+                                BinaryOperator::LessThan=> vi.push(Instruction::I32LtS),
+                                BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeS),
+                                _ => {
+                                    errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                }
+                            }
+                        },
+                        _ => {
+                            errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                        }
+                    }
+                },
+
+                Type::Boolean => {
+                    // boolean * ? => ?
+                    match bo.op {
+                        //these are the bit instructions, but our strong typing should mean that this is safe
+                        BinaryOperator::LogicalAnd => vi.push(Instruction::I32And),
+                        BinaryOperator::LogicalOr => vi.push(Instruction::I32Or),
+                        _ => {
+                            errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                        }
+                    }
+                },
+
                 _ => {
                     errors.push(Error::NotYetImplemented(String::from("binary operator")))
                 }
-            };
+            }
 
             vi
         },
@@ -233,6 +374,20 @@ fn transform_typed_expr(
                 errors.push(Error::FuncNotRecognised(name.clone()));
             }
 
+            vi
+        },
+
+        Expr::IntToNumber(p) => {
+            let mut vi: Vec<Instruction> = vec![];
+            vi.append(&mut transform_typed_expr(&p, global_var_map, local_var_map, func_map, errors));
+            vi.push(Instruction::F64ConvertSI32);
+            vi
+        },
+
+        Expr::IntToBigInt(p) => {
+            let mut vi: Vec<Instruction> = vec![];
+            vi.append(&mut transform_typed_expr(&p, global_var_map, local_var_map, func_map, errors));
+            vi.push(Instruction::I64ExtendSI32);
             vi
         },
 

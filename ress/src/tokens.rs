@@ -357,6 +357,10 @@ pub trait NumberExt {
     fn has_exponent(&self) -> bool;
     fn parse_u64(&self) -> Result<u64, <u64 as FromStr>::Err>;
     fn parse_f64(&self) -> Result<f64, <f64 as FromStr>::Err>;
+    fn parse_i64(&self) -> Result<i64, <i64 as FromStr>::Err>;
+    fn parse_i32(&self) -> Result<i32, <i32 as FromStr>::Err>;
+    
+    fn str_len(&self) -> usize;
 }
 
 impl<'a> NumberExt for Number<&'a str> {
@@ -407,6 +411,18 @@ impl<'a> NumberExt for Number<&'a str> {
     fn parse_f64(&self) -> Result<f64, <f64 as FromStr>::Err> {
         self.0.parse()
     }
+
+    fn parse_i64(&self) -> Result<i64, <i64 as FromStr>::Err> {
+        self.0.parse()
+    }
+
+    fn parse_i32(&self) -> Result<i32, <i32 as FromStr>::Err> {
+        self.0.parse()
+    }
+
+    fn str_len(&self) -> usize {
+        self.0.len()
+    }
 }
 impl NumberExt for Number<String> {
     fn kind(&self) -> NumberKind {
@@ -455,6 +471,18 @@ impl NumberExt for Number<String> {
 
     fn parse_f64(&self) -> Result<f64, <f64 as FromStr>::Err> {
         self.0.parse()
+    }
+
+    fn parse_i64(&self) -> Result<i64, <i64 as FromStr>::Err> {
+        self.0.parse()
+    }
+
+    fn parse_i32(&self) -> Result<i32, <i32 as FromStr>::Err> {
+        self.0.parse()
+    }
+
+    fn str_len(&self) -> usize {
+        self.0.len()
     }
 }
 

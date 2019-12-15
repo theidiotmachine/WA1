@@ -117,6 +117,7 @@ Currently the following features are supported.
     1. [ ] remove returns right before end
     1. [ ] change tee + drop into set
     1. [ ] remove get + drop
+    1. [ ] remove casts straight after consts, and just have the appropriately typed const inline
 1. [ ] function calling
     1. [x] simple static function call
     1. [ ] function return type inference
@@ -145,8 +146,7 @@ Currently the following features are supported.
     1. [ ] map/foreach are macros
     1. [ ] more complex for loops (in, of)
 1. [ ] numbers
-    1. option 1 - everything is an f64 except for indexes which are i32 and the compiler figures it out
-    1. option 2 - everything is a fixed width 64 bit number excecpt for other things
+    [x] there is an i32 type, an i64 type and an 164 type; the compiler auto promotes i32 to the other two types
     1. colors are special and magic
 1. imports, exports
   1. imports need to be rolled into the function index map

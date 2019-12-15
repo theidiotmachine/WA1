@@ -7,7 +7,11 @@ pub mod prelude {
     pub use super::Privacy;
     pub use super::get_unary_op_type;
     pub use super::get_binary_op_type;
+    pub use super::try_up_cast_binary_op_lhs;
+    pub use super::try_up_cast_binary_op_rhs;
     pub use super::AbsTypeDecl;
+    pub use super::PtrAlign;
+    pub use super::BinaryOpUpCast;
 }
 
 use std::fmt::Display;
@@ -93,6 +97,23 @@ pub struct AbsTypeDecl{
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum PtrAlign{
+    Align8, Align16, Align32, Align64
+}
+
+impl PtrAlign{
+    pub fn from_i32(i: i32) -> Option<PtrAlign> {
+        match i {
+            8 => Some(PtrAlign::Align8),
+            16 => Some(PtrAlign::Align16),
+            32 => Some(PtrAlign::Align32),
+            64 => Some(PtrAlign::Align64),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     /// unit type that actually manifests as nothing
     RealVoid,
@@ -104,7 +125,7 @@ pub enum Type {
     /// bottom type
     Never,
 
-    ///number
+    ///f64 number
     Number,
     ///string
     String,
@@ -112,6 +133,8 @@ pub enum Type {
     Array(Box<Type>),
     ///64 bit int
     BigInt,
+    ///32 bit int 
+    Int,
     ///boolean
     Boolean,
     ///Func
@@ -143,15 +166,17 @@ pub enum Type {
 
     ///numeric literal - 'number'
     FloatLiteral(f64),
-
     //numeric literal - big int
-    //BigIntLiteral(i64),
+    BigIntLiteral(i64),
+    //numeric literal - int
+    IntLiteral(i32),
+
 
     /// string lireral
     StringLiteral(String),
 
-    ///ptr - internal type. Param is one of 8, 16, 32 or 64
-    Ptr(u32),
+    ///ptr - internal type. Param is alignment
+    Ptr(PtrAlign),
 }
 
 impl Type{
@@ -181,6 +206,7 @@ impl Display for Type {
             Type::String => write!(f, "string"),
             Type::Array(inner) => write!(f, "Array<{}>", inner),
             Type::BigInt => write!(f, "bigint"),
+            Type::Int => write!(f, "int"),
             Type::Boolean => write!(f, "boolean"),
             Type::Func{func_type, type_args: _} => write!(f, "{}", func_type),
             Type::Tuple(types) => {
@@ -198,8 +224,10 @@ impl Display for Type {
             Type::UserClass{name, type_args: _} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "undeclared"),
             Type::VariableUsage(name) => write!(f, "{}", name),
-            Type::Ptr(p) => write!(f, "__ptr<{}>", p),
+            Type::Ptr(p) => write!(f, "__ptr<{:#?}>", p),
             Type::FloatLiteral(n) => write!(f, "{}", n),
+            Type::IntLiteral(n) => write!(f, "{}", n),
+            Type::BigIntLiteral(n) => write!(f, "{}", n),
             Type::StringLiteral(n) => write!(f, "\"{}\"", n),
         }
     }
@@ -221,6 +249,7 @@ pub fn get_unary_op_type(op_type: &OpType, operand_type: &Type) -> Option<Type> 
         _ => None
     }
 }
+
 
 /// Given a binary operator type, and the types of the operands, find the type
 /// of the resulting intermediate value.
@@ -263,5 +292,62 @@ pub fn get_binary_op_type(op_type: &OpType, lhs_type: &Type, rhs_type: &Type) ->
         },
 
         OpType::NotImplementedOpType => None,
+    }
+}
+
+pub enum BinaryOpUpCast{
+    UpCast{new_type: Type, out_type: Type},
+    None
+}
+
+pub fn try_up_cast_binary_op_lhs(op_type: &OpType, lhs_type: &Type, rhs_type: &Type) -> BinaryOpUpCast {
+    if *lhs_type == Type::Int {
+        if *rhs_type == Type::Number {
+            let hmm = get_binary_op_type(op_type, &Type::Number, rhs_type);
+            match hmm {
+                Some(t) => {
+                    BinaryOpUpCast::UpCast{new_type: Type::Number, out_type: Type::Number}
+                },
+                _ => BinaryOpUpCast::None
+            }   
+        } else if *rhs_type == Type::BigInt {
+            let hmm = get_binary_op_type(op_type, &Type::Number, rhs_type);
+            match hmm {
+                Some(t) => {
+                    BinaryOpUpCast::UpCast{new_type: Type::BigInt, out_type: Type::BigInt}
+                },
+                _ => BinaryOpUpCast::None
+            }
+        } else {
+            BinaryOpUpCast::None
+        }
+    } else {
+        BinaryOpUpCast::None
+    }
+}
+
+pub fn try_up_cast_binary_op_rhs(op_type: &OpType, lhs_type: &Type, rhs_type: &Type) -> BinaryOpUpCast {
+    if *rhs_type == Type::Int {
+        if *lhs_type == Type::Number {
+            let hmm = get_binary_op_type(op_type, lhs_type, &Type::Number);
+            match hmm {
+                Some(t) => {
+                    BinaryOpUpCast::UpCast{new_type: Type::Number, out_type: Type::Number}
+                },
+                _ => BinaryOpUpCast::None
+            }   
+        } else if *lhs_type == Type::BigInt {
+            let hmm = get_binary_op_type(op_type, lhs_type, &Type::BigInt);
+            match hmm {
+                Some(t) => {
+                    BinaryOpUpCast::UpCast{new_type: Type::BigInt, out_type: Type::BigInt}
+                },
+                _ => BinaryOpUpCast::None
+            }
+        } else {
+            BinaryOpUpCast::None
+        }
+    } else {
+        BinaryOpUpCast::None
     }
 }

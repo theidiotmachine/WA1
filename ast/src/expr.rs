@@ -42,28 +42,49 @@ pub enum BinaryOperator{
     Exponent,
     In,
     InstanceOf,
-    //the assignment operators. These are considered ops in js, even though they sideeffect
-    
 }
 
 lazy_static!{
 static ref COMPARISON_OP: OpType = OpType::SimpleOpType(vec![
+    FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Boolean},
     FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::Boolean}
+    FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::Boolean},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8), Type::Ptr(PtrAlign::Align8)], out_type: Type::Boolean},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16), Type::Ptr(PtrAlign::Align16)], out_type: Type::Boolean},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32), Type::Ptr(PtrAlign::Align32)], out_type: Type::Boolean},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align64), Type::Ptr(PtrAlign::Align64)], out_type: Type::Boolean},
 ]);
 
 static ref MATHS_BIN_OP: OpType = OpType::SimpleOpType(vec![
+    FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Number},
     FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Number},
-    FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt}
+    FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8), Type::Ptr(PtrAlign::Align8)], out_type: Type::Ptr(PtrAlign::Align8)},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16), Type::Ptr(PtrAlign::Align16)], out_type: Type::Ptr(PtrAlign::Align16)},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32), Type::Ptr(PtrAlign::Align32)], out_type: Type::Ptr(PtrAlign::Align32)},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align64), Type::Ptr(PtrAlign::Align64)], out_type: Type::Ptr(PtrAlign::Align64)},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8), Type::Int], out_type: Type::Ptr(PtrAlign::Align8)},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16), Type::Int], out_type: Type::Ptr(PtrAlign::Align16)},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32), Type::Int], out_type: Type::Ptr(PtrAlign::Align32)},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align64), Type::Int], out_type: Type::Ptr(PtrAlign::Align64)},
+    FuncType{in_types: vec![Type::Int, Type::Ptr(PtrAlign::Align8)], out_type: Type::Ptr(PtrAlign::Align8)},
+    FuncType{in_types: vec![Type::Int, Type::Ptr(PtrAlign::Align16)], out_type: Type::Ptr(PtrAlign::Align16)},
+    FuncType{in_types: vec![Type::Int, Type::Ptr(PtrAlign::Align32)], out_type: Type::Ptr(PtrAlign::Align32)},
+    FuncType{in_types: vec![Type::Int, Type::Ptr(PtrAlign::Align64)], out_type: Type::Ptr(PtrAlign::Align64)},
 ]);
 
 static ref MATHS_UN_OP: OpType = OpType::SimpleOpType(vec![
+    FuncType{in_types: vec![Type::Int], out_type: Type::Int},
     FuncType{in_types: vec![Type::Number], out_type: Type::Number},
-    FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt}
+    FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8)], out_type: Type::Ptr(PtrAlign::Align8)},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16)], out_type: Type::Ptr(PtrAlign::Align16)},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32)], out_type: Type::Ptr(PtrAlign::Align32)},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align64)], out_type: Type::Ptr(PtrAlign::Align64)},
 ]);
 
 static ref BIT_BIN_OP: OpType = OpType::SimpleOpType(vec![
-    FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Number},
+    FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
     FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt}
 ]);
 
@@ -75,6 +96,11 @@ static ref BOOL_BIN_OP: OpType = OpType::SimpleOpType(vec![
 
 static ref BOOL_UN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Boolean], out_type: Type::Boolean},
+]);
+
+static ref BIT_UN_OP: OpType = OpType::SimpleOpType(vec![
+    FuncType{in_types: vec![Type::Int], out_type: Type::Int},
+    FuncType{in_types: vec![Type::Number], out_type: Type::Number},
 ]);
 
 static ref ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType;
@@ -141,7 +167,7 @@ impl UnaryOperator{
     pub fn get_op_type(&self) -> &OpType {
         match self {
             UnaryOperator::LogicalNot => &BOOL_UN_OP,
-            UnaryOperator::BitNot => &MATHS_UN_OP,
+            UnaryOperator::BitNot => &BIT_UN_OP,
             UnaryOperator::PostfixIncrement => &MATHS_UN_OP,
             UnaryOperator::PostfixDecrement=> &MATHS_UN_OP,
             UnaryOperator::Minus => &MATHS_UN_OP,
@@ -204,30 +230,36 @@ pub enum Expr {
     UnaryOperator(UnaryOperatorApplication),
     /// float literal
     FloatLiteral(f64),
+    /// big int literal
+    BigIntLiteral(i64),
     /// int literal
-    //IntLiteral(i64),
+    IntLiteral(i32),
     ///true or false
     BoolLiteral(bool),
-    //null
+    ///null
     Null,
-    //void. Unlike TS we use void as the unit type, so you can instantiate it.
+    ///void. Unlike TS we use void as the unit type, so you can instantiate it.
     Void,
-    //string literal
+    ///string literal
     StringLiteral(String),
-    //global variable use
+    ///global variable use
     GlobalVariableUse(String),
-    //local variable use
+    ///local variable use
     LocalVariableUse(String),
-    //closure variable use
+    ///closure variable use
     ClosureVariableUse(String),
-    //round brackets
+    ///round brackets
     Parens(Box<TypedExpr>),
-    // assignmnet expression
+    /// assignmnet expression
     Assignment(TypedLValueExpr, AssignmentOperator, Box<TypedExpr>),
-    // static func call. Arg is func name.
+    /// static func call. Arg is func name.
     StaticFuncCall(String, Vec<TypedExpr>),
-    // dynamic func call.
+    /// dynamic func call.
     DynamicFuncCall(Box<TypedExpr>, Vec<TypedExpr>),
+    /// Implicit i32 -> f64 cast
+    IntToNumber(Box<TypedExpr>),
+    /// Implicit i32 -> i64 cast
+    IntToBigInt(Box<TypedExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

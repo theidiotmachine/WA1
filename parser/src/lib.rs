@@ -51,9 +51,30 @@ macro_rules! assert_ident {
     )
 }
 
-/// The current configuration options.
-/// This will most likely increase over time
-struct Config {
+fn cast_int_to_number(expr: TypedExpr) -> TypedExpr {
+    TypedExpr{expr: Expr::IntToNumber(Box::new(expr)), r#type: Type::Number, is_const: true}
+}
+
+fn cast_int_to_bigint(expr: TypedExpr) -> TypedExpr {
+    TypedExpr{expr: Expr::IntToBigInt(Box::new(expr)), r#type: Type::BigInt, is_const: true}
+}
+
+fn try_cast(want: &Type, got: TypedExpr) -> Option<TypedExpr> {
+    match want {
+        Type::Number => {
+            match got.r#type {
+                Type::Int => Some(cast_int_to_number(got)),
+                _ => None,
+            }
+        },
+        Type::BigInt => {
+            match got.r#type {
+                Type::Int => Some(cast_int_to_bigint(got)),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -255,8 +276,6 @@ pub struct Parser<'a>
 {
     /// The current parsing context
     context: Context<>,
-    /// The configuration provided by the user
-    config: Config,
     /// The internal scanner (see the
     /// `ress` crate for more details)
     scanner: Scanner<'a>,
@@ -289,16 +308,14 @@ impl<'a> Parser<'a> {
     /// javascript
     pub fn new(text: &'a str) -> Res<Self> {
         let s = Scanner::new(text);
-        let config = Config {};
         let context = Context::default();
-        Self::_new(s, config, context)
+        Self::_new(s, context)
     }
 }
 
 impl<'b> Parser<'b> {
     fn _new(
         scanner: Scanner<'b>,
-        config: Config,
         context: Context<>,
     ) -> Res<Self> {
         let look_ahead = Item {
@@ -310,7 +327,6 @@ impl<'b> Parser<'b> {
             scanner,
             look_ahead,
             found_eof: false,
-            config,
             context,
             current_position: Position { line: 1, column: 0 },
             look_ahead_position: Position { line: 1, column: 0 },
@@ -555,7 +571,13 @@ impl<'b> Parser<'b> {
                         assert_ok!(inner);
                         assert_punct!(self, Punct::GreaterThan);
                         match inner {
-                            Type::FloatLiteral(n) => Ok(Type::Ptr(n as u32)),
+                            Type::IntLiteral(n) => { 
+                                let o_pa = PtrAlign::from_i32(n);
+                                match o_pa {
+                                    Some(pa) => Ok(Type::Ptr(pa)),
+                                    None => Err(Error::InvalidTypeName(self.current_position, keyword.as_str().to_owned()))
+                                }
+                            },
                             _ => Err(Error::InvalidTypeName(self.current_position, keyword.as_str().to_owned()))        
                         }
                         
@@ -567,7 +589,7 @@ impl<'b> Parser<'b> {
                 let o_type = parser_context.type_map.get(&ident.to_string());
                 let next = self.peek_next_item();
                 let token = &next.token;
-                let mut type_args = vec![];
+                let type_args = vec![];
                 if token.matches_punct(Punct::LessThan) {
                     Err(Error::NotYetImplemented(String::from("type args")))
                 } else {
@@ -940,7 +962,7 @@ impl<'b> Parser<'b> {
                         }
                     },
                     Err(e) => {
-                        parser_context.errors.push(Error::NotYetImplemented(String::from("no trailing semis I guess")))
+                        parser_context.errors.push(e)
                     }
                 }
             }
@@ -1171,10 +1193,18 @@ impl<'b> Parser<'b> {
                         assert_semicolon!(self);
                         assert_ok!(expr);
                         // return type checking
+                        let expr_type = expr.r#type.clone();
                         if *func_return_type != expr.r#type {
-                            parser_context.errors.push(Error::TypeFailureReturn(func_return_type.clone(), expr.r#type.clone()));
+                            let o_cast = try_cast(func_return_type, expr);
+                            match o_cast {
+                                None => { 
+                                    Err(Error::TypeFailureReturn(func_return_type.clone(), expr_type))
+                                },
+                                Some(new_expr) => Ok(Stmt::Return(Some(new_expr)))
+                            }
+                        } else {
+                            Ok(Stmt::Return(Some(expr)))
                         }
-                        Ok(Stmt::Return(Some(expr)))
                     }
                 },
                 Keyword::If => {
@@ -1266,11 +1296,16 @@ impl<'b> Parser<'b> {
             } else {
                 let arg_type = &arg_types[out.len()];
                 if *arg_type != expr.r#type {
-                    parser_context.errors.push(Error::TypeFailure(arg_type.clone(), expr.r#type.clone()));
+                    let expr_type = expr.r#type.clone();
+                    let o_cast = try_cast(arg_type, expr);
+                    match o_cast {
+                        None => parser_context.errors.push(Error::TypeFailure(arg_type.clone(), expr_type)),
+                        Some(new_expr) => out.push(new_expr)
+                    }
+                } else {
+                    out.push(expr);
                 }
             }
-            
-            out.push(expr);
 
             let lookahead_item = self.peek_next_item();
             let lookahead = lookahead_item.token;
@@ -1512,20 +1547,40 @@ impl<'b> Parser<'b> {
                 self.skip_next_item();
                 match n.kind() {
                     NumberKind::Hex => {
-                        let number = n.parse_f64();
-                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true});
+                        if n.str_len() > 10 {
+                            let number = n.parse_i64();
+                            return Ok(TypedExpr{expr: Expr::BigIntLiteral(number.unwrap()), r#type: Type::BigInt, is_const: true});
+                        } else {
+                            let number = n.parse_i32();
+                            return Ok(TypedExpr{expr: Expr::IntLiteral(number.unwrap()), r#type: Type::Int, is_const: true});
+                        }
                     },
                     NumberKind::DecI => {
-                        let number = n.parse_f64();
-                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true});
+                        let number_i64 = n.parse_i64().unwrap();
+                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
+                            return Ok(TypedExpr{expr: Expr::BigIntLiteral(number_i64), r#type: Type::BigInt, is_const: true});
+                        } else {
+                            let number_i32 = n.parse_i32().unwrap();
+                            return Ok(TypedExpr{expr: Expr::IntLiteral(number_i32), r#type: Type::Int, is_const: true});
+                        }
                     },
                     NumberKind::Bin => {
-                        let number = n.parse_f64();
-                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true});
+                        if n.str_len() > 34 {
+                            let number = n.parse_i64();
+                            return Ok(TypedExpr{expr: Expr::BigIntLiteral(number.unwrap()), r#type: Type::BigInt, is_const: true});
+                        } else {
+                            let number = n.parse_i32();
+                            return Ok(TypedExpr{expr: Expr::IntLiteral(number.unwrap()), r#type: Type::Int, is_const: true});
+                        }
                     },
                     NumberKind::Oct => {
-                        let number = n.parse_f64();
-                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true});
+                        if n.str_len() > 18 {
+                            let number = n.parse_i64();
+                            return Ok(TypedExpr{expr: Expr::BigIntLiteral(number.unwrap()), r#type: Type::BigInt, is_const: true});
+                        } else {
+                            let number = n.parse_i32();
+                            return Ok(TypedExpr{expr: Expr::IntLiteral(number.unwrap()), r#type: Type::Int, is_const: true});
+                        }
                     },
                     NumberKind::DecF => {
                         let number = n.parse_f64();
@@ -1541,7 +1596,7 @@ impl<'b> Parser<'b> {
 
             Token::Null => {
                 self.skip_next_item();
-                return Ok(TypedExpr{expr:Expr::Null, r#type: Type::Number, is_const: true});
+                return Ok(TypedExpr{expr:Expr::Null, r#type: Type::Null, is_const: true});
             },
 
             Token::Template(_) => {
@@ -1575,7 +1630,7 @@ impl<'b> Parser<'b> {
         }
     }
 
-    fn get_binary_operator_for_token(&self, span: Span, location: SourceLocation, token: &Token<&'b str>) -> Option<BinaryOperator> {
+    fn get_binary_operator_for_token(&self, token: &Token<&'b str>) -> Option<BinaryOperator> {
         match token {
             Token::Keyword(ref k) => match k {
                 Keyword::In => Some(BinaryOperator::In),
@@ -1613,7 +1668,7 @@ impl<'b> Parser<'b> {
         }
     }
 
-    fn get_assignment_operator_for_token(&self, span: Span, location: SourceLocation, token: &Token<&'b str>) -> Option<AssignmentOperator> {
+    fn get_assignment_operator_for_token(&self, token: &Token<&'b str>) -> Option<AssignmentOperator> {
         match token {
             Token::Punct(ref p) => match p {
                 Punct::AmpersandEqual => Some(AssignmentOperator::BitAndAssign),
@@ -1631,6 +1686,133 @@ impl<'b> Parser<'b> {
                 _ => None
             },
             _ => None
+        }
+    }
+
+
+    /// parse a binary operator.
+    fn parse_binary_op(&mut self,
+        op: &Token<&str>,
+        lhs: TypedExpr,
+        rhs: TypedExpr,
+        parser_context: &mut ParserContext,
+    ) -> TypedExpr {
+        //first see if it's a simple binary operator
+        let o_bin_op = self.get_binary_operator_for_token(&op);
+        match o_bin_op {
+            Some(bin_op) => {
+                //type check the binary operator
+                let hmm_outer_type = types::get_binary_op_type(bin_op.get_op_type(), &lhs.r#type, &rhs.r#type);
+                match hmm_outer_type {
+                    Some(outer_type) => {
+                        TypedExpr{expr: Expr::BinaryOperator(BinaryOperatorApplication{op: bin_op, lhs: Box::new(lhs), rhs: Box::new(rhs)}), r#type: outer_type, is_const: true}
+                    },
+                    None => {
+                        //we can cast both the lhs and rhs in a binary op. Try the lhs first.
+                        let boc = try_up_cast_binary_op_lhs(bin_op.get_op_type(), &lhs.r#type, &rhs.r#type);
+                        match boc {
+                            BinaryOpUpCast::None => {
+                                //that didn't work so try rhs
+                                let boc = try_up_cast_binary_op_rhs(bin_op.get_op_type(), &lhs.r#type, &rhs.r#type);
+                                match boc {
+                                    BinaryOpUpCast::None => {
+                                        parser_context.errors.push(Error::TypeFailureBinaryOperator);
+                                        lhs
+                                    },
+                                    BinaryOpUpCast::UpCast{new_type, out_type} => {
+                                        match new_type {
+                                            Type::Number => {
+                                                TypedExpr{expr: Expr::BinaryOperator(
+                                                    BinaryOperatorApplication{op: bin_op, lhs: Box::new(lhs), rhs: Box::new(cast_int_to_number(rhs))}), 
+                                                    r#type: out_type, is_const: true}
+                                            },
+                                            Type::BigInt => {
+                                                TypedExpr{expr: Expr::BinaryOperator(
+                                                    BinaryOperatorApplication{op: bin_op, lhs: Box::new(lhs), rhs: Box::new(cast_int_to_bigint(rhs))}), 
+                                                    r#type: out_type, is_const: true}
+                                            },
+                                            _ => {
+                                                parser_context.errors.push(Error::TypeFailureBinaryOperator);
+                                                lhs
+                                            },
+                                        }           
+                                    }
+                                }
+                            },
+                            BinaryOpUpCast::UpCast{new_type, out_type} => {
+                                match new_type {
+                                    Type::Number => {
+                                        TypedExpr{expr: Expr::BinaryOperator(
+                                            BinaryOperatorApplication{op: bin_op, lhs: Box::new(cast_int_to_number(lhs)), rhs: Box::new(rhs)}), 
+                                            r#type: out_type, is_const: true}
+                                    },
+                                    Type::BigInt => {
+                                        TypedExpr{expr: Expr::BinaryOperator(
+                                            BinaryOperatorApplication{op: bin_op, lhs: Box::new(cast_int_to_bigint(lhs)), rhs: Box::new(rhs)}), 
+                                            r#type: out_type, is_const: true}
+                                    },
+                                    _ => {
+                                        parser_context.errors.push(Error::TypeFailureBinaryOperator);
+                                        lhs
+                                    },
+                                }           
+                            }
+                        }
+                    },
+                }  
+            },
+            //it's not a regular binary op; so let's see if it's an assignment operator
+            None => {
+                let o_ass_op = self.get_assignment_operator_for_token(&op);
+                // get as an lvalue. This will check constness
+                let o_l_value = lhs.as_l_value();
+                if o_l_value.is_none() {
+                    parser_context.errors.push(Error::NotAnLValue);
+                    lhs
+                } else {
+                    let l_value = o_l_value.unwrap();
+
+                    match o_ass_op {
+                        Some(ass_op) => {
+                            //type check the sides
+                            let o_outer_type = types::get_binary_op_type(ass_op.get_op_type(), &lhs.r#type, &rhs.r#type);
+                            match o_outer_type {
+                                Some(outer_type) => {
+                                    TypedExpr{expr: Expr::Assignment(l_value, ass_op, Box::new(rhs)), r#type: outer_type, is_const: false}
+                                },
+                                None => {
+                                    //assigmnet operators can cast the rhs to make them work
+                                    let boc = try_up_cast_binary_op_rhs(ass_op.get_op_type(), &lhs.r#type, &rhs.r#type);
+                                    match boc {
+                                        BinaryOpUpCast::None => {
+                                            parser_context.errors.push(Error::TypeFailureBinaryOperator);
+                                            lhs
+                                        },
+                                        BinaryOpUpCast::UpCast{new_type, out_type} => {
+                                            match new_type {
+                                                Type::Number => {
+                                                    TypedExpr{expr: Expr::Assignment(l_value, ass_op, Box::new(cast_int_to_number(rhs))), r#type: out_type, is_const: false}
+                                                },
+                                                Type::BigInt => {
+                                                    TypedExpr{expr: Expr::Assignment(l_value, ass_op, Box::new(cast_int_to_bigint(rhs))), r#type: out_type, is_const: false}
+                                                },
+                                                _ => {
+                                                    parser_context.errors.push(Error::TypeFailureBinaryOperator);
+                                                    lhs
+                                                },
+                                            }           
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        _ => {
+                            parser_context.errors.push(Error::TypeFailureBinaryOperator);
+                            lhs
+                        },
+                    }    
+                }
+            }
         }
     }
 
@@ -1662,8 +1844,6 @@ impl<'b> Parser<'b> {
         let mut lhs = init_lhs;
         let lookahead_item = self.peek_next_item();
         let mut lookahead = lookahead_item.token;
-        let mut lookahead_span = lookahead_item.span;
-        let mut lookahead_location = lookahead_item.location;
         
         // while lookahead is a binary operator whose precedence is >= min_precedence
         loop {
@@ -1673,8 +1853,6 @@ impl<'b> Parser<'b> {
                 Some(lookahead_data) => {
                     if lookahead_data.precedence >= min_precedence {
                         // op := lookahead
-                        let op_span = lookahead_span;
-                        let op_location = lookahead_location;
                         let op = lookahead;
                         let op_precedence = lookahead_data.precedence;
                         // advance to next token
@@ -1686,8 +1864,6 @@ impl<'b> Parser<'b> {
                         // lookahead := peek next token
                         let lookahead_item = self.peek_next_item();
                         lookahead = lookahead_item.token;
-                        lookahead_span = lookahead_item.span;
-                        lookahead_location = lookahead_item.location;
                         // while lookahead is a binary operator whose precedence is greater
                         // than op's, or a right-associative operator
                         // whose precedence is equal to op's
@@ -1704,48 +1880,13 @@ impl<'b> Parser<'b> {
                                         //lookahead := peek next token
                                         let lookahead_item = self.peek_next_item();
                                         lookahead = lookahead_item.token;
-                                        lookahead_span = lookahead_item.span;
-                                        lookahead_location = lookahead_item.location;
                                     } else {
                                         break;
                                     }
                                 }
                             }                                
                         }
-                        let o_bin_op = self.get_binary_operator_for_token(op_span, op_location, &op);
-                        match o_bin_op {
-                            Some(bin_op) => {
-                                let o_outer_type = types::get_binary_op_type(bin_op.get_op_type(), &lhs.r#type, &rhs.r#type);
-                                match o_outer_type {
-                                    Some(outer_type) => {
-                                        lhs = TypedExpr{expr: Expr::BinaryOperator(BinaryOperatorApplication{op: bin_op, lhs: Box::new(lhs), rhs: Box::new(rhs)}), r#type: outer_type, is_const: true};
-                                    },
-                                    None => return Err(Error::TypeFailureBinaryOperator),
-                                };      
-                            },
-                            None => {
-                                let o_ass_op = self.get_assignment_operator_for_token(op_span, op_location, &op);
-                                match o_ass_op {
-                                    Some(ass_op) => {
-                                        let o_outer_type = types::get_binary_op_type(ass_op.get_op_type(), &lhs.r#type, &rhs.r#type);
-                                        if o_outer_type.is_none() {
-                                            return Err(Error::TypeFailureBinaryOperator);
-                                        }
-                                        let outer_type = o_outer_type.unwrap();
-
-                                        // get as an lvalue. This will check constness
-                                        let o_l_value = lhs.as_l_value();
-                                        if o_l_value.is_none() {
-                                            return Err(Error::NotAnLValue);
-                                        }
-
-                                        let l_value = o_l_value.unwrap();
-                                        lhs = TypedExpr{expr: Expr::Assignment(l_value, ass_op, Box::new(rhs)), r#type: outer_type, is_const: false};
-                                    },
-                                    None => return Err(Error::TypeFailureBinaryOperator),                                    
-                                }    
-                            }
-                        }
+                        lhs = self.parse_binary_op(&op, lhs, rhs, parser_context);
                     } else {
                         break;
                     }
