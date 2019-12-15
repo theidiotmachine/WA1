@@ -306,7 +306,7 @@ pub fn try_up_cast_binary_op_lhs(op_type: &OpType, lhs_type: &Type, rhs_type: &T
             let hmm = get_binary_op_type(op_type, &Type::Number, rhs_type);
             match hmm {
                 Some(t) => {
-                    BinaryOpUpCast::UpCast{new_type: Type::Number, out_type: Type::Number}
+                    BinaryOpUpCast::UpCast{new_type: Type::Number, out_type: t}
                 },
                 _ => BinaryOpUpCast::None
             }   
@@ -314,7 +314,7 @@ pub fn try_up_cast_binary_op_lhs(op_type: &OpType, lhs_type: &Type, rhs_type: &T
             let hmm = get_binary_op_type(op_type, &Type::Number, rhs_type);
             match hmm {
                 Some(t) => {
-                    BinaryOpUpCast::UpCast{new_type: Type::BigInt, out_type: Type::BigInt}
+                    BinaryOpUpCast::UpCast{new_type: Type::BigInt, out_type: t}
                 },
                 _ => BinaryOpUpCast::None
             }
@@ -332,7 +332,7 @@ pub fn try_up_cast_binary_op_rhs(op_type: &OpType, lhs_type: &Type, rhs_type: &T
             let hmm = get_binary_op_type(op_type, lhs_type, &Type::Number);
             match hmm {
                 Some(t) => {
-                    BinaryOpUpCast::UpCast{new_type: Type::Number, out_type: Type::Number}
+                    BinaryOpUpCast::UpCast{new_type: Type::Number, out_type: t}
                 },
                 _ => BinaryOpUpCast::None
             }   
@@ -340,7 +340,7 @@ pub fn try_up_cast_binary_op_rhs(op_type: &OpType, lhs_type: &Type, rhs_type: &T
             let hmm = get_binary_op_type(op_type, lhs_type, &Type::BigInt);
             match hmm {
                 Some(t) => {
-                    BinaryOpUpCast::UpCast{new_type: Type::BigInt, out_type: Type::BigInt}
+                    BinaryOpUpCast::UpCast{new_type: Type::BigInt, out_type: t}
                 },
                 _ => BinaryOpUpCast::None
             }

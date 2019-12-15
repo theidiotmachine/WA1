@@ -873,14 +873,23 @@ impl<'b> Parser<'b> {
 
             if var_type.is_undeclared() {
                 var_type = init.r#type.clone();
+                Some(init)
             } else if var_type != init.r#type {
-                return Err(Error::TypeFailureVariableCreation);
+                let o_cast_expr = try_cast(&var_type, init);
+                match o_cast_expr {
+                    Some(cast_expr) => Some(cast_expr),
+                    None => { 
+                        parser_context.errors.push(Error::TypeFailureVariableCreation);
+                        None
+                    }
+                }
+            } else {
+                Some(init)
             }
-
-            Some(init)
         } else {
             Option::None
         };
+
         assert_semicolon!(self);
         let name = id.to_string();
         let internal_name = self.context.get_unique_name(&name);
