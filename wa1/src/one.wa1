@@ -17,10 +17,11 @@ export function negMax(x: number, y: number): number {
     // today, wasm requires a return value at the end of all functions, even if they will
     // never get there
     return 0;
-}*/
-/*
+}
+*/
+
 export function bang(x: number): number {
-    let out = 1;
+    let out: number = 1.0;
 
     while(x > 0) {
         out *= x;
@@ -28,7 +29,7 @@ export function bang(x: number): number {
     }
 
     return out;
-}*/
+}
 
 
 function mul(x: number, y: number): number {
