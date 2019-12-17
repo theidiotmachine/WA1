@@ -1195,7 +1195,8 @@ pub enum Keyword {
     Undefined,
     Unknown,
     Int,
-    Ptr
+    Ptr,
+    Struct
 }
 
 impl Keyword {
@@ -1261,6 +1262,7 @@ impl Keyword {
             "undefined" => Keyword::Undefined,
             "unknown" => Keyword::Unknown,
             "__ptr" => Keyword::Ptr,
+            "__struct" => Keyword::Struct,
             _ => return None,
         })
     }
@@ -1335,6 +1337,7 @@ impl Keyword {
             Keyword::Undefined => "undefined",
             Keyword::Unknown => "unknown",
             Keyword::Ptr => "__ptr",
+            Keyword::Struct => "__struct",
         }
     }
 

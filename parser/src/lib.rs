@@ -255,10 +255,10 @@ impl<> Default for Context<> {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum UserType{
     Class(ClassType),
+    Struct(StructType)
 }
 
 #[derive(Debug)]
@@ -625,6 +625,9 @@ impl<'b> Parser<'b> {
                             match user_type {
                                 UserType::Class(ct) => {
                                     Ok(Type::UserClass{name: ident.to_string(), type_args})
+                                },
+                                UserType::Struct(st) => {
+                                    Ok(Type::UserStruct{name: ident.to_string()})
                                 }
                             }
                         }
@@ -951,6 +954,8 @@ impl<'b> Parser<'b> {
         })
     }
 
+    
+
     /// The root of the module is parsed and will run in its 'start' function.
     /// This parses that. The init_body param is that function body. 
     /// Because we put restrictions on this function - it can't have locals or a closure - 
@@ -1004,6 +1009,10 @@ impl<'b> Parser<'b> {
                         Err(e) => parser_context.errors.push(e)
                     };
                 },
+                Keyword::Struct => {
+                    self.skip_next_item();
+                    let struct_decl = self.parse_struct_decl(parser_context);
+                }
                 _ => { parser_context.errors.push(self.unexpected_token_error_raw(next.span, next.location, "expecting valid statement")); self.skip_next_item(); }
             },
             _ => {
@@ -1168,7 +1177,10 @@ impl<'b> Parser<'b> {
                     }
                 },
                 Token::Ident(ref i) => {
+                    self.skip_next_item();
+                    assert_punct!(self, Punct::Colon);
                     let member_type = self.parse_type(parser_context);
+                    assert_semicolon!(self);
                     assert_ok!(member_type);
                     members.push(ClassMember{name: i.to_string(), r#type: member_type.clone(), privacy: Privacy::Public});
                 },
@@ -1183,6 +1195,59 @@ impl<'b> Parser<'b> {
         parser_context.type_map.insert(id.to_string(), UserType::Class(ClassType{members: members}));
 
         Ok(TypedExpr{expr: Expr::ClassDecl(id.to_string()), is_const: true, r#type: Type::RealVoid})
+    }
+
+    fn parse_struct_decl(&mut self,    
+        parser_context: &mut ParserContext,
+    ) -> Res<TypedExpr> {
+        let next = assert_next!(self, "Expecting struct name");
+        let id = assert_ident!(next, "Expecting struct name to be an identifier");
+
+        if parser_context.type_map.contains_key(&id.to_string()) {
+            parser_context.errors.push(Error::DuplicateTypeName(id.to_string()))
+        }
+
+        self.context.push_empty_func_type_scope();
+
+        let mut members: Vec<StructMember> = vec![];
+
+        assert_punct!(self, Punct::OpenBrace);
+
+        loop {
+            let lookahead_item = self.peek_next_item();
+            let lookahead = lookahead_item.token;
+         
+            match lookahead {
+                Token::Punct(ref p) => {
+                    match p {
+                        Punct::CloseBrace => {
+                            self.skip_next_item();
+                            break;
+                        },
+                        _ => {
+                            return self.unexpected_token_error(lookahead_item.span, lookahead_item.location, "expecting '}'")
+                        }
+                    }
+                },
+                Token::Ident(ref i) => {
+                    self.skip_next_item();
+                    assert_punct!(self, Punct::Colon);
+                    let member_type = self.parse_type(parser_context);
+                    assert_semicolon!(self);
+                    assert_ok!(member_type);
+                    members.push(StructMember{name: i.to_string(), r#type: member_type.clone()});
+                },
+                _ => {
+                    return self.unexpected_token_error(lookahead_item.span, lookahead_item.location, "expecting '}' or member")
+                }
+            }
+        }
+
+        self.context.pop_type_scope();
+
+        parser_context.type_map.insert(id.to_string(), UserType::Struct(StructType{members: members}));
+
+        Ok(TypedExpr{expr: Expr::StructDecl(id.to_string()), is_const: true, r#type: Type::RealVoid})
     }
 
     /// a statement is something you can't assign to (like break or a variable declaration) or a true expr.

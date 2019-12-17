@@ -142,6 +142,7 @@ impl<'a> Tokenizer<'a> {
             7 if ident == b"package" => Some(RawToken::Keyword(Keyword::Package)),
             7 if ident == b"private" => Some(RawToken::Keyword(Keyword::Private)),
             7 if ident == b"unknown" => Some(RawToken::Keyword(Keyword::Unknown)),
+            8 if ident == b"__struct" => Some(RawToken::Keyword(Keyword::Struct)),
             8 if ident == b"continue" => Some(RawToken::Keyword(Keyword::Continue)),
             8 if ident == b"debugger" => Some(RawToken::Keyword(Keyword::Debugger)),
             8 if ident == b"function" => Some(RawToken::Keyword(Keyword::Function)),

@@ -314,6 +314,8 @@ pub enum Expr {
     While(Box<TypedExpr>, Box<TypedExpr>),
     // class decl
     ClassDecl(String),
+    // class decl
+    StructDecl(String),
     /// break
     Break,
     /// continue

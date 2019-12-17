@@ -12,6 +12,8 @@ pub mod prelude {
     pub use super::AbsTypeDecl;
     pub use super::PtrAlign;
     pub use super::BinaryOpUpCast;
+    pub use super::StructType;
+    pub use super::StructMember;
 }
 
 use std::fmt::Display;
@@ -68,6 +70,19 @@ pub struct ClassMember{
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassType{
     pub members: Vec<ClassMember>,
+}
+
+/// Data member of a struct.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructMember{
+    pub name: String,
+    pub r#type: Type,
+}
+
+/// user-defined struct. 
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructType{
+    pub members: Vec<StructMember>
 }
 
 /// This is part of the type system rewrite. I am not sure it's correct yet.
@@ -158,6 +173,8 @@ pub enum Type {
 
     /// user type
     UserClass{name: String, type_args: Vec<Type>},
+    /// user struct type
+    UserStruct{name: String},
 
     /// not yet known - will be filled in by the typer
     Undeclared,
@@ -222,6 +239,7 @@ impl Display for Type {
             Type::Some(inner) => write!(f, "Some<{}>", inner),
             Type::Null => write!(f, "null"),
             Type::UserClass{name, type_args: _} => write!(f, "{}", name),
+            Type::UserStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "undeclared"),
             Type::VariableUsage(name) => write!(f, "{}", name),
             Type::Ptr(p) => write!(f, "__ptr<{:#?}>", p),

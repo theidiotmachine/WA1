@@ -33,7 +33,7 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
-            Error::UnexpectedToken(ref pos, ref msg) => write!(f, "Unexpected Token at {}{}: {}", pos.line, pos.column, msg),
+            Error::UnexpectedToken(ref pos, ref msg) => write!(f, "Unexpected Token at {}, {}: {}", pos.line, pos.column, msg),
             Error::UnexpectedEoF(ref msg) => write!(f, "Unexpectedly found the end of the file: {}", msg),
             Error::ParseAfterEoF => write!(f, "Parser attempted to get the next token after finding the end of the file"),
             Error::InvalidTypeName(ref pos, ref msg) => write!(f, "Invalid type name, {}: {}", pos, msg),
