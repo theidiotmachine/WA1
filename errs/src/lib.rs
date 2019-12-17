@@ -26,6 +26,8 @@ pub enum Error {
     NotEnoughArgs,
     DuplicateTypeName(String),
     NotInLoop(String),
+    TypeFailureIf(Type, Type),
+    WhileMayNotReturn,
 }
 
 impl Display for Error {
@@ -53,6 +55,8 @@ impl Display for Error {
             Error::NotEnoughArgs => write!(f, "Not enough args"),
             Error::DuplicateTypeName(name) => write!(f, "Duplicate type name: {}", name),
             Error::NotInLoop(what) => write!(f, "Used loop keyword outside a loop: {}", what),
+            Error::TypeFailureIf(then_type, else_type) => write!(f, "Branches of if staement to not match: {}, {}", then_type, else_type),
+            Error::WhileMayNotReturn => write!(f, "while loops may not have a return value"),
         }
     }
 }

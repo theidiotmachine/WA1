@@ -1,4 +1,5 @@
 use types::*;
+use crate::func::FuncDecl;
 
 pub mod prelude {
     pub use super::Expr;
@@ -10,6 +11,9 @@ pub mod prelude {
     pub use super::AssignmentOperator;
     pub use super::TypedLValueExpr;
     pub use super::LValueExpr;
+    pub use super::GlobalVariableDecl;
+    pub use super::ClosureRef;
+    pub use super::VariableDecl;
 }
 
 use lazy_static;
@@ -221,6 +225,35 @@ pub struct UnaryOperatorApplication {
     pub op: UnaryOperator,
 }
 
+/// Variable decl
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariableDecl {
+    pub internal_name: String,
+    pub orig_name: String,
+    pub r#type: Type,
+    pub constant: bool,
+    pub init: Option<TypedExpr>,
+    pub closure_source: bool,
+    pub arg: bool,
+}
+
+/// Variable decl
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlobalVariableDecl {
+    pub name: String,
+    pub r#type: Type,
+    pub constant: bool,
+    pub init: Option<TypedExpr>,
+    pub export: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClosureRef {
+    pub internal_name: String,
+    pub r#type: Type,
+    pub constant: bool,
+}
+
 /// Something that returns something. This is really an RValue.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -260,6 +293,31 @@ pub enum Expr {
     IntToNumber(Box<TypedExpr>),
     /// Implicit i32 -> i64 cast
     IntToBigInt(Box<TypedExpr>),
+
+    Block(Vec<TypedExpr>),
+
+    /// if-then-else
+    IfThenElse(Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>),
+
+    /// a function declaration. This might compile to a closure creation, a function pointer, or a no op 
+    /// this is wrong - in JS this is an expression
+    FuncDecl(FuncDecl),
+    /// variable declaration
+    VariableDecl(Box<VariableDecl>),
+    /// global variable declaration. Only appears in the __start function.
+    GlobalVariableDecl(Box<GlobalVariableDecl>),
+    /// return statement
+    Return(Box<Option<TypedExpr>>),
+    /// if-then
+    IfThen(Box<TypedExpr>, Box<TypedExpr>),
+    /// while loop
+    While(Box<TypedExpr>, Box<TypedExpr>),
+    // class decl
+    ClassDecl(String),
+    /// break
+    Break,
+    /// continue
+    Continue,
 }
 
 #[derive(Debug, Clone, PartialEq)]

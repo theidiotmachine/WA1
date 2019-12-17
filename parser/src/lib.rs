@@ -271,6 +271,38 @@ struct ParserContext {
     pub type_map: HashMap<String, UserType>
 }
 
+impl ParserContext {
+    fn new() -> ParserContext {
+        ParserContext{
+            globals: vec![],
+            funcs: vec![],
+            errors: vec![],
+            global_var_map: HashMap::new(),
+            func_map: HashMap::new(),
+            type_map: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ParserFuncContext{
+    pub local_vars: Vec<VariableDecl>,
+    pub local_var_map: HashMap<String, u32>,
+    pub closure: Vec<ClosureRef>,
+    pub func_return_type: Type,
+}
+
+impl ParserFuncContext{
+    fn new() -> ParserFuncContext{
+        ParserFuncContext{
+            local_vars: vec![],
+            local_var_map: HashMap::new(),
+            closure: vec![],
+            func_return_type: Type::Undeclared,
+        }
+    }
+}
+
 /// This is the primary interface that you would interact with.
 pub struct Parser<'a>
 {
@@ -343,13 +375,13 @@ impl<'b> Parser<'b> {
     ) {
         let mut init_body = vec![];
         
-        let mut fake_closure: Vec<ClosureRef> = vec![];
-        
+        let mut fake_parser_func_context = ParserFuncContext::new();
+
         loop {
             if self.look_ahead.token.is_eof() {
                 break;
             } else {
-                self.parse_global_statement(&mut init_body, &mut fake_closure, parser_context);
+                self.parse_global_statement(&mut init_body, &mut fake_parser_func_context, parser_context);
             }
         }
 
@@ -362,21 +394,14 @@ impl<'b> Parser<'b> {
         parser_context.func_map.insert(String::from("__start"), idx as u32);
         parser_context.funcs.push(start_function);
 
-        if !fake_closure.is_empty() {
+        if !fake_parser_func_context.closure.is_empty() {
             parser_context.errors.push(Error::Other(String::from("found closure reference when not expecting it")));
         }
     }
 
     ///parse!
     pub fn parse(&mut self) -> Result<Program, Vec<Error>> {
-        let mut parser_context = ParserContext{
-            globals: vec![],
-            funcs: vec![],
-            errors: vec![],
-            global_var_map: HashMap::new(),
-            func_map: HashMap::new(),
-            type_map: HashMap::new(),
-        };
+        let mut parser_context = ParserContext::new();
         self.parse_internal(&mut parser_context);
         if parser_context.errors.is_empty() {
             Ok(Program {start: String::from("__start"), globals: parser_context.globals, funcs: parser_context.funcs, global_var_map: parser_context.global_var_map, func_map: parser_context.func_map})
@@ -669,8 +694,6 @@ impl<'b> Parser<'b> {
         }
     }
 
-    
-
     fn parse_function_decl_args(&mut self,
         parser_context: &mut ParserContext,
     ) -> Res<Vec<FuncArg>> {
@@ -692,15 +715,15 @@ impl<'b> Parser<'b> {
     }
 
     /// register params in the local scope
-    fn register_params(&mut self, arg_list: &Vec<FuncArg>, local_vars: &mut Vec<VariableDecl>, local_var_map: &mut HashMap<String, u32>) {
+    fn register_params(&mut self, arg_list: &Vec<FuncArg>, parser_func_context: &mut ParserFuncContext) {
         for arg in arg_list {
             let internal_name = self.context.get_unique_name(&arg.name);
             self.context.add_var(&arg.name, &internal_name, arg.r#type.clone(), false);
             //todo: constant params
             //todo: default params
-            let idx = local_vars.len();
-            local_var_map.insert(internal_name.clone(), idx as u32);
-            local_vars.push(VariableDecl{internal_name: internal_name, orig_name: arg.name.clone(), r#type: arg.r#type.clone(), constant: false, init: None, closure_source: false, arg: true});
+            let idx = parser_func_context.local_vars.len();
+            parser_func_context.local_var_map.insert(internal_name.clone(), idx as u32);
+            parser_func_context.local_vars.push(VariableDecl{internal_name: internal_name, orig_name: arg.name.clone(), r#type: arg.r#type.clone(), constant: false, init: None, closure_source: false, arg: true});
         }
     }
 
@@ -708,9 +731,7 @@ impl<'b> Parser<'b> {
         export: bool,
         parser_context: &mut ParserContext,
     ) -> Res<Func>{
-        let mut local_vars: Vec<VariableDecl> = vec![];
-        let mut closure: Vec<ClosureRef> = vec![];
-        let mut local_var_map: HashMap<String, u32> = HashMap::new();
+        let mut parser_func_context = ParserFuncContext::new();
         
         self.expect_keyword(Keyword::Function)?;
         let next = assert_next!(self, "Expecting function name");
@@ -732,18 +753,20 @@ impl<'b> Parser<'b> {
         let arg_list = self.parse_function_decl_args(parser_context);
         assert_ok!(arg_list);
 
-        self.register_params(&arg_list, &mut local_vars, &mut local_var_map);
+        self.register_params(&arg_list, &mut parser_func_context);
 
         assert_punct!(self, Punct::Colon);
         let return_type = self.parse_type(parser_context);
         assert_ok!(return_type);
+        parser_func_context.func_return_type = return_type;
+
         // for the moment, all functions need to have squigglies
         assert_punct!(self, Punct::OpenBrace);
 
         let old_in_iteration = self.context.in_iteration;
         self.context.in_iteration = false;
         
-        let mut stmts:  Vec<Stmt> = Vec::new();
+        let mut exprs:  Vec<TypedExpr> = Vec::new();
         loop {
             let next = self.peek_next_item();
             let token = &next.token;
@@ -753,9 +776,9 @@ impl<'b> Parser<'b> {
                 break;
             }
 
-            let stmt = self.parse_statement(&mut local_vars, &mut local_var_map, &mut closure, &return_type, parser_context);
-            assert_ok!(stmt);
-            stmts.push(stmt);
+            let expr = self.parse_statement(&mut parser_func_context, parser_context);
+            assert_ok!(expr);
+            exprs.push(expr);
         }
 
         self.context.pop_scope();
@@ -764,17 +787,21 @@ impl<'b> Parser<'b> {
         self.context.pop_type_scope();
 
         // today if you don't have a return value at the end of function, you get errors at run time. So let's check now.
-        if return_type != Type::RealVoid {
-            let o_last = stmts.last();
+        if parser_func_context.func_return_type != Type::RealVoid {
+            let o_last = exprs.last();
             match o_last {
                 Some(last) => {
-                    match last {
-                        Stmt::Return(o_e) => {
+                    match &last.expr {
+                        Expr::Return(o_e) => {
                             if o_e.is_none() {
                                 parser_context.errors.push(Error::NoValueReturned)
                             }
                         },
-                        _ => parser_context.errors.push(Error::NoValueReturned),
+                        _ => {
+                            if last.r#type == Type::RealVoid {
+                                parser_context.errors.push(Error::NoValueReturned);
+                            }
+                        },
                     }
                 },
                 _ => parser_context.errors.push(Error::NoValueReturned)
@@ -782,14 +809,18 @@ impl<'b> Parser<'b> {
         }
         
         Ok(Func{
-            name: id.to_string(), return_type, args: arg_list, export, body: stmts, local_vars, closure, local_var_map, import: false
+            name: id.to_string(), return_type: parser_func_context.func_return_type, args: arg_list, export, body: exprs, 
+            local_vars: parser_func_context.local_vars, closure: parser_func_context.closure, 
+            local_var_map: parser_func_context.local_var_map, import: false
         })
     }
 
-    #[inline]
+    /// This is for parsing an export declaration. We require these to be in module root, 
+    /// and therefore we also pick up the baggage about 'fake' function contexts and init_body
+    /// It's not brilliant, this code. It has a lot of baggage that could be removed
     fn parse_export_decl(&mut self, 
-        init_body: &mut Vec<Stmt>,
-        fake_closure: &mut Vec<ClosureRef>,
+        init_body: &mut Vec<TypedExpr>,
+        fake_parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) {
         self.skip_next_item();
@@ -810,28 +841,28 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::Const => {
                     self.skip_next_item();
-                    let const_decl = self.parse_variable_decl(true, fake_closure, parser_context);
+                    let const_decl = self.parse_variable_decl(true, fake_parser_func_context, parser_context);
                     match const_decl {
                         Ok(c) => {
                             let idx = parser_context.globals.len();
                             let decl = GlobalVariableDecl{name: c.orig_name.clone(), r#type: c.r#type, constant: c.constant, init: c.init, export: true};
                             parser_context.globals.push(decl.clone());
                             parser_context.global_var_map.insert(c.orig_name, idx as u32);
-                            init_body.push(Stmt::GlobalVariableDecl(decl));
+                            init_body.push(TypedExpr{expr: Expr::GlobalVariableDecl(Box::new(decl)), is_const: true, r#type: Type::RealVoid});
                         },
                         Err(e) => parser_context.errors.push(e)
                     };
                 },
                 Keyword::Let => {
                     self.skip_next_item();
-                    let var_decl = self.parse_variable_decl(false, fake_closure, parser_context);
+                    let var_decl = self.parse_variable_decl(false, fake_parser_func_context, parser_context);
                     match var_decl {
                         Ok(c) => {
                             let idx = parser_context.globals.len();
                             let decl = GlobalVariableDecl{name: c.orig_name.clone(), r#type: c.r#type, constant: c.constant, init: c.init, export: true};
                             parser_context.globals.push(decl.clone());
                             parser_context.global_var_map.insert(c.orig_name, idx as u32);
-                            init_body.push(Stmt::GlobalVariableDecl(decl));
+                            init_body.push(TypedExpr{expr: Expr::GlobalVariableDecl(Box::new(decl)), is_const: true, r#type: Type::RealVoid});
                         },
                         Err(e) => parser_context.errors.push(e)
                     };
@@ -844,7 +875,7 @@ impl<'b> Parser<'b> {
 
     fn parse_variable_decl(&mut self, 
         constant: bool, 
-        closure: &mut Vec<ClosureRef>,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<VariableDecl> {
         let next = assert_next!(self, "Expecting variable name");
@@ -868,7 +899,7 @@ impl<'b> Parser<'b> {
         let token = &next.token;
         let init = if token.matches_punct(Punct::Equal) {
             self.skip_next_item();
-            let init = self.parse_expr(false, closure, parser_context);
+            let init = self.parse_expr(false, parser_func_context, parser_context);
             assert_ok!(init);
 
             if var_type.is_undeclared() {
@@ -899,16 +930,20 @@ impl<'b> Parser<'b> {
         })
     }
 
+    /// The root of the module is parsed and will run in its 'start' function.
+    /// This parses that. The init_body param is that function body. 
+    /// Because we put restrictions on this function - it can't have locals or a closure - 
+    /// we fake that and will blow up if it violates that. 
     fn parse_global_statement(&mut self, 
-        init_body: &mut Vec<Stmt>,
-        fake_closure: &mut Vec<ClosureRef>,
+        init_body: &mut Vec<TypedExpr>,
+        fake_parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) {
         let next = self.peek_next_item();
         let token = &next.token;
         match &token {
             Token::Keyword(ref k) => match k {
-                Keyword::Export => self.parse_export_decl(init_body, fake_closure, parser_context),
+                Keyword::Export => self.parse_export_decl(init_body, fake_parser_func_context, parser_context),
                 Keyword::Function => {
                     let func = self.parse_named_function_decl(false, parser_context);
                     match func {
@@ -922,28 +957,28 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::Const => {
                     self.skip_next_item();
-                    let const_decl = self.parse_variable_decl(true, fake_closure, parser_context);
+                    let const_decl = self.parse_variable_decl(true, fake_parser_func_context, parser_context);
                     match const_decl {
                         Ok(c) => {
                             let idx = parser_context.globals.len();
                             let decl = GlobalVariableDecl{name: c.orig_name.clone(), r#type: c.r#type, constant: c.constant, init: c.init, export: false};
                             parser_context.globals.push(decl.clone());
                             parser_context.global_var_map.insert(c.orig_name, idx as u32);
-                            init_body.push(Stmt::GlobalVariableDecl(decl));
+                            init_body.push(TypedExpr{expr: Expr::GlobalVariableDecl(Box::new(decl)), is_const: true, r#type: Type::RealVoid});
                         },
                         Err(e) => parser_context.errors.push(e)
                     };
                 },
                 Keyword::Let => {
                     self.skip_next_item();
-                    let var_decl = self.parse_variable_decl(false, fake_closure, parser_context);
+                    let var_decl = self.parse_variable_decl(false, fake_parser_func_context, parser_context);
                     match var_decl {
                         Ok(c) => {
                             let idx = parser_context.globals.len();
                             let decl = GlobalVariableDecl{name: c.orig_name.clone(), r#type: c.r#type, constant: c.constant, init: c.init, export: false};
                             parser_context.globals.push(decl.clone());
                             parser_context.global_var_map.insert(c.orig_name, idx as u32);
-                            init_body.push(Stmt::GlobalVariableDecl(decl));
+                            init_body.push(TypedExpr{expr: Expr::GlobalVariableDecl(Box::new(decl)), is_const: true, r#type: Type::RealVoid});
                         },
                         Err(e) => parser_context.errors.push(e)
                     };
@@ -952,7 +987,7 @@ impl<'b> Parser<'b> {
             },
             _ => {
                 // if we don't know what this statement is, parse it as an expr
-                let expr = self.parse_expr(true, fake_closure, parser_context);
+                let expr = self.parse_expr(true, fake_parser_func_context, parser_context);
 
                 // ugh this is like a hundred million lines to check the semi-colon
                 let next = self.next_item();
@@ -966,7 +1001,7 @@ impl<'b> Parser<'b> {
                         match expr {
                             Err(e) => parser_context.errors.push(e),
                             Ok(s) => {
-                                init_body.push(Stmt::Expr(s));
+                                init_body.push(s);
                             }
                         }
                     },
@@ -979,13 +1014,10 @@ impl<'b> Parser<'b> {
     }
 
     fn parse_block(&mut self,
-        local_vars: &mut Vec<VariableDecl>,
-        local_var_map: &mut  HashMap<String, u32>,
-        closure: &mut Vec<ClosureRef>,
-        func_return_type: &Type,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<Vec<Stmt>> {
-        let mut out: Vec<Stmt> = vec![];
+    ) -> Res<TypedExpr> {
+        let mut out: Vec<TypedExpr> = vec![];
         let next = self.peek_next_item();
         let token = &next.token;
         
@@ -997,7 +1029,7 @@ impl<'b> Parser<'b> {
             self.context.push_block_scope();
             
             while !token.matches_punct(Punct::CloseBrace) {
-                let stmt = self.parse_statement(local_vars, local_var_map, closure, func_return_type, parser_context);    
+                let stmt = self.parse_statement(parser_func_context, parser_context);    
                 assert_ok!(stmt);
                 out.push(stmt);
                 next = self.peek_next_item();
@@ -1008,53 +1040,52 @@ impl<'b> Parser<'b> {
             self.context.pop_scope();
         
         } else {
-            let stmt = self.parse_statement(local_vars, local_var_map, closure, func_return_type, parser_context);
+            let stmt = self.parse_statement(parser_func_context, parser_context);
             assert_ok!(stmt);
                 out.push(stmt);
         } 
 
-        Ok(out)
+        let out_type = out.last().map_or(Type::RealVoid, |x| x.r#type.clone());
+        Ok(TypedExpr{expr: Expr::Block(out), is_const: true, r#type: out_type})
     }
 
     fn parse_if(&mut self,
-        local_vars: &mut Vec<VariableDecl>,
-        local_var_map: &mut  HashMap<String, u32>,
-        closure: &mut Vec<ClosureRef>,
-        func_return_type: &Type,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<Stmt> {
+    ) -> Res<TypedExpr> {
         assert_punct!(self, Punct::OpenParen);
-        let cond = self.parse_expr(true, closure, parser_context);
+        let cond = self.parse_expr(true, parser_func_context, parser_context);
         assert_ok!(cond);
         if cond.r#type != Type::Boolean {
             parser_context.errors.push(Error::TypeFailure(Type::Boolean,  cond.r#type.clone()));
         }
         assert_punct!(self, Punct::CloseParen);
 
-        let then_block = self.parse_block(local_vars, local_var_map, closure, func_return_type, parser_context);
+        let then_block = self.parse_block(parser_func_context, parser_context);
         assert_ok!(then_block);
             
         let next = self.peek_next_item();
         let token = &next.token;
         if token.matches_keyword(Keyword::Else) {
             self.skip_next_item();
-            let else_block = self.parse_block(local_vars, local_var_map, closure, func_return_type, parser_context);
+            let else_block = self.parse_block(parser_func_context, parser_context);
             assert_ok!(else_block);
-            Ok(Stmt::IfThenElse(cond, then_block, else_block))
+            let then_block_type = then_block.r#type.clone();
+            if then_block.r#type != else_block.r#type {
+                parser_context.errors.push(Error::TypeFailureIf(then_block.r#type.clone(), else_block.r#type.clone()));
+            } 
+            Ok(TypedExpr{expr: Expr::IfThenElse(Box::new(cond), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: then_block_type})
         } else {
-            Ok(Stmt::IfThen(cond, then_block))
+            Ok(TypedExpr{expr: Expr::IfThen(Box::new(cond), Box::new(then_block)), is_const: true, r#type: Type::RealVoid})
         }
     }
 
     fn parse_while(&mut self,
-        local_vars: &mut Vec<VariableDecl>,
-        local_var_map: &mut  HashMap<String, u32>,
-        closure: &mut Vec<ClosureRef>,
-        func_return_type: &Type,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<Stmt> {
+    ) -> Res<TypedExpr> {
         assert_punct!(self, Punct::OpenParen);
-        let cond = self.parse_expr(true, closure, parser_context);
+        let cond = self.parse_expr(true, parser_func_context, parser_context);
         assert_ok!(cond);
         if cond.r#type != Type::Boolean {
             parser_context.errors.push(Error::TypeFailure(Type::Boolean,  cond.r#type.clone()));
@@ -1063,16 +1094,20 @@ impl<'b> Parser<'b> {
 
         let old_in_iteration = self.context.in_iteration;
         self.context.in_iteration = true;
-        let block = self.parse_block(local_vars, local_var_map, closure, func_return_type, parser_context);
+        let block = self.parse_block(parser_func_context, parser_context);
         self.context.in_iteration = old_in_iteration;
         assert_ok!(block);
+        let block_return_type = block.r#type.clone();
+        //if block_return_type != Type::RealVoid {
+            //parser_context.errors.push(Error::WhileMayNotReturn);
+        //}
         
-        Ok(Stmt::While(cond, block))
+        Ok(TypedExpr{expr: Expr::While(Box::new(cond), Box::new(block)), is_const: true, r#type: Type::RealVoid})
     }
 
     fn parse_class_decl(&mut self,
         parser_context: &mut ParserContext,
-    ) -> Res<Stmt> {
+    ) -> Res<TypedExpr> {
         let next = assert_next!(self, "Expecting class name");
         let id = assert_ident!(next, "Expecting class name to be an identifier");
 
@@ -1126,65 +1161,36 @@ impl<'b> Parser<'b> {
 
         parser_context.type_map.insert(id.to_string(), UserType::Class(ClassType{members: members}));
 
-        Ok(Stmt::ClassDecl(id.to_string()))
+        Ok(TypedExpr{expr: Expr::ClassDecl(id.to_string()), is_const: true, r#type: Type::RealVoid})
     }
 
+    /// a statement is something you can't assign to (like break or a variable declaration) or a true expr.
     fn parse_statement(&mut self, 
-        local_vars: &mut Vec<VariableDecl>,
-        local_var_map: &mut  HashMap<String, u32>,
-        closure: &mut Vec<ClosureRef>,
-        func_return_type: &Type,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<Stmt> {
+    ) -> Res<TypedExpr> {
         let next = self.peek_next_item();
         let token = &next.token;
         match &token {
             Token::Keyword(ref k) => match k {
-                Keyword::Function => { 
-                    let func = self.parse_named_function_decl(false, parser_context);
-                    match func {
-                        Ok(f) => {
-                            let name = f.name.clone();
-                            let f_closure = f.closure.clone();
-                            // now we have a closure of an inner function, we need to capture it. So look at every element
-                            for cr in &f_closure {
-                                // is it in our local vars?
-                                let o_local_var = local_vars.iter_mut().find(|lv| lv.internal_name == cr.internal_name);
-                                if o_local_var.is_some() {
-                                    // yes it is, so mark that local variable as a closure source
-                                    o_local_var.unwrap().closure_source = true;
-                                } else {
-                                    //not a local variable, so it's in the closure of this function, so make sure it's captured
-                                    closure.push(cr.clone())
-                                }
-                            }
-                            let idx = parser_context.funcs.len();
-                            parser_context.func_map.insert(f.name.clone(), idx as u32);
-                            parser_context.funcs.push(f); 
-                            return Ok(Stmt::FuncDecl(FuncDecl{name: name, closure: f_closure})); 
-                        },
-                        Err(e) => { parser_context.errors.push(e.clone()); return Err(e); } 
-                    };
-                    
-                },
                 Keyword::Const => {
                     self.skip_next_item();
-                    let const_decl = self.parse_variable_decl(true, closure, parser_context);
+                    let const_decl = self.parse_variable_decl(true, parser_func_context, parser_context);
                     assert_ok!(const_decl);
-                    let idx = local_vars.len();
-                    local_vars.push(const_decl.clone());
-                    local_var_map.insert(const_decl.internal_name.clone(), idx as u32);
-                    Ok(Stmt::VariableDecl(const_decl))
+                    let idx = parser_func_context.local_vars.len();
+                    parser_func_context.local_vars.push(const_decl.clone());
+                    parser_func_context.local_var_map.insert(const_decl.internal_name.clone(), idx as u32);
+                    Ok(TypedExpr{expr: Expr::VariableDecl(Box::new(const_decl)), is_const: true, r#type: Type::RealVoid})
                 },
                 Keyword::Let => {
                     self.skip_next_item();
-                    let var_decl = self.parse_variable_decl(false, closure, parser_context);
+                    let var_decl = self.parse_variable_decl(false, parser_func_context, parser_context);
                     assert_ok!(var_decl);
-                    let idx = local_vars.len();
-                    local_vars.push(var_decl.clone());
-                    local_var_map.insert(var_decl.internal_name.clone().clone(), idx as u32);
+                    let idx = parser_func_context.local_vars.len();
+                    parser_func_context.local_vars.push(var_decl.clone());
+                    parser_func_context.local_var_map.insert(var_decl.internal_name.clone().clone(), idx as u32);
                     
-                    Ok(Stmt::VariableDecl(var_decl))
+                    Ok(TypedExpr{expr: Expr::VariableDecl(Box::new(var_decl)), is_const: true, r#type: Type::RealVoid})
                 },
                 Keyword::Return => {
                     self.skip_next_item();
@@ -1192,55 +1198,40 @@ impl<'b> Parser<'b> {
                     let token = &next.token;
                     if token.matches_punct(Punct::SemiColon) {
                         // check the return type of this expression versus the function return type.
-                        if *func_return_type != Type::RealVoid {
-                            parser_context.errors.push(Error::TypeFailureReturn(func_return_type.clone(), Type::RealVoid));
+                        if parser_func_context.func_return_type != Type::RealVoid {
+                            parser_context.errors.push(Error::TypeFailureReturn(parser_func_context.func_return_type.clone(), Type::RealVoid));
                         }
                         self.skip_next_item();
-                        Ok(Stmt::Return(None))
+                        Ok(TypedExpr{expr: Expr::Return(Box::new(None)), is_const: true, r#type: Type::Never})
                     } else {
-                        let expr = self.parse_expr(true, closure, parser_context);
+                        let expr = self.parse_expr(true, parser_func_context, parser_context);
                         assert_semicolon!(self);
                         assert_ok!(expr);
                         // return type checking
                         let expr_type = expr.r#type.clone();
-                        if *func_return_type != expr.r#type {
-                            let o_cast = try_cast(func_return_type, expr);
+                        if parser_func_context.func_return_type != expr.r#type {
+                            let o_cast = try_cast(&parser_func_context.func_return_type, expr);
                             match o_cast {
                                 None => { 
-                                    Err(Error::TypeFailureReturn(func_return_type.clone(), expr_type))
+                                    Err(Error::TypeFailureReturn(parser_func_context.func_return_type.clone(), expr_type))
                                 },
-                                Some(new_expr) => Ok(Stmt::Return(Some(new_expr)))
+                                Some(new_expr) => Ok(TypedExpr{expr: Expr::Return(Box::new(Some(new_expr))), is_const: true, r#type: Type::Never})
                             }
                         } else {
-                            Ok(Stmt::Return(Some(expr)))
+                            Ok(TypedExpr{expr: Expr::Return(Box::new(Some(expr))), is_const: true, r#type: Type::Never})
                         }
                     }
                 },
-                Keyword::If => {
-                    self.skip_next_item();
-                    let if_stmt = self.parse_if(local_vars, local_var_map, closure, func_return_type, parser_context);
-                    assert_ok!(if_stmt);
-                    Ok(if_stmt)
-                },
-
-                Keyword::While => {
-                    self.skip_next_item();
-                    let while_stmt = self.parse_while(local_vars, local_var_map, closure, func_return_type, parser_context);
-                    assert_ok!(while_stmt);
-                    Ok(while_stmt)
-                },
-
+                
                 Keyword::Class => {
                     self.skip_next_item();
-                    let class_decl = self.parse_class_decl(parser_context);
-                    assert_ok!(class_decl);
-                    Ok(class_decl)
+                    self.parse_class_decl(parser_context)
                 },
 
                 Keyword::Break => {
                     self.skip_next_item();
                     if self .context.in_iteration {
-                        Ok(Stmt::Break)
+                        Ok(TypedExpr{expr: Expr::Break, is_const: true, r#type: Type::Never})
                     } else {
                         Err(Error::NotInLoop(String::from("break")))
                     }
@@ -1249,20 +1240,29 @@ impl<'b> Parser<'b> {
                 Keyword::Continue => {
                     self.skip_next_item();
                     if self .context.in_iteration {
-                        Ok(Stmt::Continue)
+                        Ok(TypedExpr{expr: Expr::Continue, is_const: true, r#type: Type::Never})
                     } else {
                         Err(Error::NotInLoop(String::from("continue")))
                     }
                 },
+
+                Keyword::While => {
+                    self.skip_next_item();
+                    self.parse_while(parser_func_context, parser_context)
+                },
                 
-                _ => return self.unexpected_token_error(next.span, next.location, "expecting valid statement")
+                _ => {
+                    // if we don't know what this statement is, parse it as an expr
+                    let expr = self.parse_expr(true, parser_func_context, parser_context);
+                    expr
+                }
             },
+
             _ => {
                 // if we don't know what this statement is, parse it as an expr
-                let expr = self.parse_expr(true, closure, parser_context);
-                assert_ok!(expr);
+                let expr = self.parse_expr(true, parser_func_context, parser_context);
                 assert_semicolon!(self);
-                return Ok(Stmt::Expr(expr));
+                expr
             }
         }
     }
@@ -1273,7 +1273,7 @@ impl<'b> Parser<'b> {
 
     fn parse_function_call_args(&mut self,
         arg_types: &Vec<Type>,
-        closure: &mut Vec<ClosureRef>,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<Vec<TypedExpr>> {
 
@@ -1297,7 +1297,7 @@ impl<'b> Parser<'b> {
         }
 
         loop{
-            let expr = self.parse_expr(false, closure, parser_context);
+            let expr = self.parse_expr(false, parser_func_context, parser_context);
             assert_ok!(expr);
             
             if out.len() == arg_types.len() {
@@ -1343,13 +1343,13 @@ impl<'b> Parser<'b> {
     }
 
     fn parse_paren_expr(&mut self, 
-        closure: &mut Vec<ClosureRef>,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         // either a bracket or an arrow function declaration
 
         assert_punct!(self, Punct::OpenParen);
-        let expr = self.parse_expr(true, closure, parser_context);
+        let expr = self.parse_expr(true, parser_func_context, parser_context);
         assert_ok!(expr);
         assert_punct!(self, Punct::CloseParen);
 
@@ -1379,7 +1379,7 @@ impl<'b> Parser<'b> {
     }
 
     fn parse_ident_expr(&mut self,
-        closure: &mut Vec<ClosureRef>,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let next = assert_next!(self, "expecting argument declaration");
@@ -1411,7 +1411,7 @@ impl<'b> Parser<'b> {
                                     match o_func_id{
                                         Some(func_id) => {
                                             let arg_types = parser_context.funcs[func_id as usize].get_arg_types();
-                                            let args = self.parse_function_call_args(&arg_types, closure, parser_context);
+                                            let args = self.parse_function_call_args(&arg_types, parser_func_context, parser_context);
                                             assert_ok!(args);
                                             let func_return_type = parser_context.funcs[func_id as usize].return_type.clone();
                                             TypedExpr{expr: Expr::StaticFuncCall(id.to_string().clone(), args), r#type: func_return_type, is_const: true}
@@ -1428,9 +1428,9 @@ impl<'b> Parser<'b> {
             },
             Some(sv) => match sv {
                 ScopedVar::ClosureRef{internal_name, r#type, constant} => {
-                    let is_new = !closure.iter().any(|x| x.internal_name.eq(internal_name));
+                    let is_new = !parser_func_context.closure.iter().any(|x| x.internal_name.eq(internal_name));
                     if is_new {
-                        closure.push(ClosureRef{internal_name: internal_name.clone(), r#type: r#type.clone(), constant: *constant})
+                        parser_func_context.closure.push(ClosureRef{internal_name: internal_name.clone(), r#type: r#type.clone(), constant: *constant})
                     }
                     
                     TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant}
@@ -1470,7 +1470,7 @@ impl<'b> Parser<'b> {
                     Punct::OpenParen => { 
                         match &expr.r#type {
                             Type::Func{func_type, type_args: _} => {
-                                let args = self.parse_function_call_args(&func_type.in_types, closure, parser_context);
+                                let args = self.parse_function_call_args(&func_type.in_types, parser_func_context, parser_context);
                                 assert_ok!(args);
                                 expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: func_type.out_type.clone(), is_const: true};
                                 continue;
@@ -1501,12 +1501,12 @@ impl<'b> Parser<'b> {
     /// From wikipedia
     fn parse_expr(&mut self,
         allow_comma: bool,
-        closure: &mut Vec<ClosureRef>,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
-        let expr = self.parse_primary(closure, parser_context);
+        let expr = self.parse_primary(parser_func_context, parser_context);
         assert_ok!(expr);
-        self.parse_expr_1(expr, 0, allow_comma, closure, parser_context)
+        self.parse_expr_1(expr, 0, allow_comma, parser_func_context, parser_context)
     }
 
     fn get_prefix_unary_operator_for_token(&self, span: Span, location: SourceLocation, token: &Token<&'b str>) -> Res<UnaryOperator> {
@@ -1526,7 +1526,7 @@ impl<'b> Parser<'b> {
 
     /// Parse a simple atomic expression.
     fn parse_primary(&mut self,
-        closure: &mut Vec<ClosureRef>,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let lookahead_item = self.peek_next_item();
@@ -1538,7 +1538,7 @@ impl<'b> Parser<'b> {
                     let op = self.get_prefix_unary_operator_for_token(lookahead_item.span, lookahead_item.location, &lookahead);
                     assert_ok!(op);
                     self.skip_next_item();
-                    let inner = self.parse_expr(false, closure, parser_context);
+                    let inner = self.parse_expr(false, parser_func_context, parser_context);
                     assert_ok!(inner);
                     let o_outer_type = types::get_unary_op_type(op.get_op_type(), &inner.r#type);
                     match o_outer_type {
@@ -1623,14 +1623,45 @@ impl<'b> Parser<'b> {
                 match k {
                     Keyword::New => return self.parse_new(),
                     Keyword::Void => return Ok(TypedExpr{expr:Expr::Void, r#type: Type::FakeVoid, is_const: true}),
+                    Keyword::If => {
+                        self.parse_if(parser_func_context, parser_context)
+                    },
+                    Keyword::Function => { 
+                        let o_func = self.parse_named_function_decl(false, parser_context);
+                        match o_func {
+                            Ok(func) => {
+                                let name = func.name.clone();
+                                let func_closure = func.closure.clone();
+                                // now we have a closure of an inner function, we need to capture it. So look at every element
+                                for cr in &func_closure {
+                                    // is it in our local vars?
+                                    let o_local_var = parser_func_context.local_vars.iter_mut().find(|lv| lv.internal_name == cr.internal_name);
+                                    if o_local_var.is_some() {
+                                        // yes it is, so mark that local variable as a closure source
+                                        o_local_var.unwrap().closure_source = true;
+                                    } else {
+                                        //not a local variable, so it's in the closure of this function, so make sure it's captured
+                                        parser_func_context.closure.push(cr.clone())
+                                    }
+                                }
+                                let idx = parser_context.funcs.len();
+                                parser_context.func_map.insert(func.name.clone(), idx as u32);
+                                let func_type = func.get_func_type();
+                                parser_context.funcs.push(func); 
+                                Ok(TypedExpr{expr: Expr::FuncDecl(FuncDecl{name: name, closure: func_closure}), is_const: true, r#type: Type::Func{func_type: Box::new(func_type), type_args: vec![]}})
+                            },
+                            Err(e) => { parser_context.errors.push(e.clone()); Err(e) } 
+                        }
+                    },
+                    
                     _ => self.unexpected_token_error(lookahead_item.span, lookahead_item.location, "unexpected keyword"),
                 }
             },
 
-            Token::Ident(_) => self.parse_ident_expr(closure, parser_context),
+            Token::Ident(_) => self.parse_ident_expr(parser_func_context, parser_context),
 
             Token::Punct(p) => match p {
-                Punct::OpenParen => self.parse_paren_expr(closure, parser_context),
+                Punct::OpenParen => self.parse_paren_expr(parser_func_context, parser_context),
                 Punct::OpenBrace => self.parse_object_literal(),
                 _ => self.unexpected_token_error(lookahead_item.span, lookahead_item.location, "unexpected punctuation"),
             },
@@ -1846,7 +1877,7 @@ impl<'b> Parser<'b> {
         init_lhs: TypedExpr, 
         min_precedence: i32, 
         allow_comma: bool,
-        closure: &mut Vec<ClosureRef>,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         // lookahead := peek next token
@@ -1867,7 +1898,7 @@ impl<'b> Parser<'b> {
                         // advance to next token
                         self.skip_next_item();
                         // rhs := parse_primary ()
-                        let r_rhs = self.parse_primary(closure, parser_context);
+                        let r_rhs = self.parse_primary(parser_func_context, parser_context);
                         if r_rhs.is_err() { return Err(r_rhs.unwrap_err()) }; 
                         let mut rhs = r_rhs?;
                         // lookahead := peek next token
@@ -1883,7 +1914,7 @@ impl<'b> Parser<'b> {
                                 Some(lookahead_data) => {
                                     if lookahead_data.precedence > op_precedence || (lookahead_data.association == Association::Right && lookahead_data.precedence == op_precedence) {
                                         //rhs := parse_expression_1 (rhs, lookahead's precedence)
-                                        let new_rhs = self.parse_expr_1(rhs, lookahead_data.precedence, allow_comma, closure, parser_context);
+                                        let new_rhs = self.parse_expr_1(rhs, lookahead_data.precedence, allow_comma, parser_func_context, parser_context);
                                         if new_rhs.is_err() { return Err(new_rhs.unwrap_err()) }; 
                                         rhs = new_rhs?;
                                         //lookahead := peek next token

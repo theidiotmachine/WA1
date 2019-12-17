@@ -61,28 +61,53 @@ and manually call in your browser in the debugger by typing the function name (c
 
 # The language
 
-The syntax of the language is inspired by TypeScript, but it is not completely faithful to it. There is not very much right now.
+WA1 is a strongly-typed expression-based language, with its roots in TypeScript syntax. Here we use 'expression-based' to mean that, generally,
+the last value of a block is its return value, and you can compose expressions freely.
 
-A function is written like this.
+Because we are not monsters, classic control flow also works, so you can still use `return` if you want.
+
+So, a simple function is written like this. Use the export keyword to make it visible outside web assembly.
 
 ```
-function mul(x: number, y: number): number {
-    return x * y;
+export function mul(x: number, y: number): number {
+    x * y;
 }
 ```
 
-The export keyword can be used to export the function from webassembly.
+But this is also fine
+```
+function mul3(x: number, y: number, z: number): number {
+    return x * y * z;
+}
+```
+
+`if` is an expression too!
+
+```
+export function negMax(x: number, y: number): number {
+    if(x > y)
+        -x;
+    else {
+        -y;
+    }
+}
+```
+
+But it doesn't need to be.
 
 ```
 export function bang(x: number): number {
-    let out = 1;
+    if(x <= 0)
+        return 0;
+
+    let out: number = 1.0;
 
     while(x > 0) {
         out *= x;
         x -= 1;
     }
 
-    return out;
+    out;
 }
 ```
 
@@ -94,7 +119,10 @@ Currently the following features are supported.
 
 * number - a 64 bit float.
 * bigint - a 64 bit int.
-* int - a 32 bit int. Will be autocasted to number and bigint if needed.
+* int - a 32 bit int. Will be autocasted to number and bigint if needed. This means that an expression like this will actually be an int.
+```
+let a = 0;
+```
 * boolean
 
 ### Control
@@ -106,14 +134,15 @@ Currently the following features are supported.
 
 ## TODO
 
-1. [ ] typing inference
+1. [ ] typing 
     1. [x] every expr needs a return type!
     1. [ ] functions decls are exprs, not statements
     1. [ ] Infer return types
-1. [ ] expression based language
-    1. [ ] blocks return a value
-    1. [ ] no need for a return statement (but still supported - what is this, scala?)
-    1. [ ] if as an expression 
+    1. [ ] Handle `never` properly
+1. [x] expression based language
+    1. [x] blocks return a value
+    1. [x] no need for a return statement (but still supported - what is this, scala?)
+    1. [x] if as an expression 
 1. [ ] control flow
     1. [x] if
     1. [x] while

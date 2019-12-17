@@ -2,7 +2,6 @@ extern crate clap;
 use clap::{Arg, App};
 use std::fs;
 use wasmtime::*;
-use std::collections::HashMap;
 use ress::prelude::*;
 
 fn main() {

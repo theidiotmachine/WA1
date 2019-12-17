@@ -1,13 +1,11 @@
-pub mod stmt;
 pub mod expr;
 pub mod func;
 
-use stmt::GlobalVariableDecl;
+use expr::GlobalVariableDecl;
 use func::Func;
 use std::collections::HashMap;
 
 pub mod prelude {
-    pub use super::stmt::prelude::*;
     pub use super::func::prelude::*;
     pub use super::expr::prelude::*;
     pub use super::Program;

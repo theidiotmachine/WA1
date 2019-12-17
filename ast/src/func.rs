@@ -1,8 +1,9 @@
 use types::Type;
-use crate::stmt::Stmt;
-use crate::stmt::VariableDecl;
-use crate::stmt::ClosureRef;
+use crate::expr::VariableDecl;
+use crate::expr::ClosureRef;
 use std::collections::HashMap;
+use crate::expr::TypedExpr;
+use types::FuncType;
 
 pub mod prelude {
     pub use super::Func;
@@ -19,7 +20,7 @@ pub struct Func {
     pub export: bool,
     pub import: bool,
     /// if import is true, this will be an empty vec
-    pub body: Vec<Stmt>,
+    pub body: Vec<TypedExpr>,
     pub local_vars: Vec<VariableDecl>,
     pub closure: Vec<ClosureRef>,
     pub local_var_map: HashMap<String, u32>,
@@ -32,6 +33,10 @@ impl Func {
             out.push(arg.r#type.clone());
         }
         out
+    }
+
+    pub fn get_func_type(&self) -> FuncType {
+        FuncType{out_type: self.return_type.clone(), in_types: self.get_arg_types()}
     }
 }
 
