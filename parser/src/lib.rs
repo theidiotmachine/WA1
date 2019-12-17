@@ -587,6 +587,7 @@ impl<'b> Parser<'b> {
                         Ok(Type::Array(Box::new(inner)))
                     },
                     Keyword::BigInt => Ok(Type::BigInt),
+                    Keyword::Int => Ok(Type::Int),
                     //Keyword::Tuple => Ok(Type::Tuple),
                     Keyword::Object => Ok(Type::Object),
                     Keyword::Any => Ok(Type::Any),
@@ -634,20 +635,40 @@ impl<'b> Parser<'b> {
             Token::Number(n) => {
                 match n.kind() {
                     NumberKind::Hex => {
-                        let number = n.parse_f64();
-                        return Ok(Type::FloatLiteral(number.unwrap()));
+                        let number_i64 = n.parse_i64().unwrap();
+                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
+                            return Ok(Type::BigIntLiteral(number_i64));
+                        } else {
+                            let number_i32 = n.parse_i32().unwrap();
+                            return Ok(Type::IntLiteral(number_i32));
+                        }
                     },
                     NumberKind::DecI => {
-                        let number = n.parse_f64();
-                        return Ok(Type::FloatLiteral(number.unwrap()));
+                        let number_i64 = n.parse_i64().unwrap();
+                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
+                            return Ok(Type::BigIntLiteral(number_i64));
+                        } else {
+                            let number_i32 = n.parse_i32().unwrap();
+                            return Ok(Type::IntLiteral(number_i32));
+                        }
                     },
                     NumberKind::Bin => {
-                        let number = n.parse_f64();
-                        return Ok(Type::FloatLiteral(number.unwrap()));
+                        let number_i64 = n.parse_i64().unwrap();
+                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
+                            return Ok(Type::BigIntLiteral(number_i64));
+                        } else {
+                            let number_i32 = n.parse_i32().unwrap();
+                            return Ok(Type::IntLiteral(number_i32));
+                        }                    
                     },
                     NumberKind::Oct => {
-                        let number = n.parse_f64();
-                        return Ok(Type::FloatLiteral(number.unwrap()));
+                        let number_i64 = n.parse_i64().unwrap();
+                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
+                            return Ok(Type::BigIntLiteral(number_i64));
+                        } else {
+                            let number_i32 = n.parse_i32().unwrap();
+                            return Ok(Type::IntLiteral(number_i32));
+                        }
                     },
                     NumberKind::DecF => {
                         let number = n.parse_f64();

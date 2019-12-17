@@ -1194,6 +1194,7 @@ pub enum Keyword {
     Tuple,
     Undefined,
     Unknown,
+    Int,
     Ptr
 }
 
@@ -1217,6 +1218,7 @@ impl Keyword {
             "for" => Keyword::For,
             "function" => Keyword::Function,
             "if" => Keyword::If,
+            "int" => Keyword::Int,
             "instanceof" => Keyword::InstanceOf,
             "in" => Keyword::In,
             "new" => Keyword::New,
@@ -1294,6 +1296,7 @@ impl Keyword {
             Keyword::Function => "function",
             Keyword::If => "if",
             Keyword::In => "in",
+            Keyword::Int => "int",
             Keyword::Implements => "implements",
             Keyword::InstanceOf => "instanceof",
             Keyword::Interface => "interface",

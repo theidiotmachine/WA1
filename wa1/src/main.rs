@@ -29,7 +29,18 @@ fn main() {
     let input_contents = fs::read_to_string(input).expect(format!("Couldn't read {}", input).as_str());
 
     let mut parser = Parser::new(input_contents.as_str()).unwrap();
-    let script = parser.parse().unwrap();
-    println!("{:#?}", script);
-    writer::write(script, &output.to_owned());  
+    let o_script = parser.parse();
+    match o_script {
+        Err(errs) => {
+            println!("Parse failed.");
+            for err in errs {
+                println!("{}", err);    
+            }
+        },
+        _ => {
+            let script = o_script.unwrap();
+            println!("{:#?}", script);
+            writer::write(script, &output.to_owned());  
+        }
+    }
 }

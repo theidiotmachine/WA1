@@ -95,6 +95,7 @@ impl<'a> Tokenizer<'a> {
             2 if ident == b"in" => Some(RawToken::Keyword(Keyword::In)),
             3 if ident == b"any" => Some(RawToken::Keyword(Keyword::Any)),
             3 if ident == b"for" => Some(RawToken::Keyword(Keyword::For)),
+            3 if ident == b"int" => Some(RawToken::Keyword(Keyword::Int)),
             3 if ident == b"new" => Some(RawToken::Keyword(Keyword::New)),
             3 if ident == b"try" => Some(RawToken::Keyword(Keyword::Try)),
             3 if ident == b"var" => Some(RawToken::Keyword(Keyword::Var)),
