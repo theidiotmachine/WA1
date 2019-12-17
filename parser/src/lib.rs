@@ -575,6 +575,7 @@ impl<'b> Parser<'b> {
             Token::Keyword(keyword) => {
                 match keyword {
                     Keyword::Void => Ok(Type::RealVoid),
+                    Keyword::Boolean => Ok(Type::Boolean),
                     Keyword::Unknown => Ok(Type::Unknown),
                     Keyword::Never => Ok(Type::Never),
                     Keyword::Number => Ok(Type::Number),
