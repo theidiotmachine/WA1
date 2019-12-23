@@ -1436,10 +1436,14 @@ impl<'b> Parser<'b> {
     ) -> Option<Res<TypedExpr>> {
         match id.as_str() {
             "__memorySize" => {
-                Some(self.parse_mem_size(parser_context))
+                Some(self.parse_mem_size())
             },
             "__memoryGrow" => {
                 Some(self.parse_mem_grow(parser_func_context, parser_context))
+            },
+            //it's a 
+            "__trap" => {
+                Some(self.parse_trap())
             },
             _ => None
         }
@@ -1786,6 +1790,7 @@ impl<'b> Parser<'b> {
                 Punct::PipeEqual => Some(AssignmentOperator::BitOrAssign),
                 Punct::PlusEqual => Some(AssignmentOperator::PlusAssign),
                 Punct::TripleGreaterThanEqual => Some(AssignmentOperator::UnsignedRightShiftAssign),
+                Punct::Equal => Some(AssignmentOperator::Assign),
                 _ => None
             },
             _ => None
@@ -1813,7 +1818,7 @@ impl<'b> Parser<'b> {
                         let lhs_out = match o_cast {
                             Some(cast) => Box::new(cast),
                             None => {
-                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc));
+                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
                                 Box::new(lhs.clone())
                             }
                         };
@@ -1822,7 +1827,7 @@ impl<'b> Parser<'b> {
                         let rhs_out = match o_cast {
                             Some(cast) => Box::new(cast),
                             None => {
-                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc));
+                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
                                 Box::new(rhs.clone())
                             }
                         };
@@ -1830,7 +1835,7 @@ impl<'b> Parser<'b> {
                         TypedExpr{expr: Expr::BinaryOperator(BinaryOperatorApplication{op: bin_op, lhs: lhs_out, rhs: rhs_out}), r#type: bin_op_type_cast.out_type, is_const: true, loc: loc}
                     },
                     None => {
-                        parser_context.errors.push(Error::TypeFailureBinaryOperator(loc));
+                        parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
                         TypedExpr{expr: Expr::BinaryOperator(BinaryOperatorApplication{op: bin_op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone())}), r#type: Type::Unknown, is_const: true, loc: loc}
                     }
                 }
@@ -1857,14 +1862,14 @@ impl<'b> Parser<'b> {
                                         let rhs_out = match o_cast {
                                             Some(cast) => Box::new(cast),
                                             None => {
-                                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc));
+                                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
                                                 Box::new(rhs.clone())
                                             }
                                         };
                                         TypedExpr{expr: Expr::Assignment(l_value, ass_op, rhs_out), r#type: bin_op_type_cast.out_type, is_const: false, loc: loc}
                                     },
                                     None => {
-                                        parser_context.errors.push(Error::TypeFailureBinaryOperator(loc));
+                                        parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
                                         TypedExpr{expr: Expr::Assignment(l_value, ass_op, Box::new(rhs.clone())), r#type: Type::Unknown, is_const: false, loc: loc}
                                     }
                                 }
@@ -1872,7 +1877,7 @@ impl<'b> Parser<'b> {
                         }
                     }, 
                     None => {
-                        parser_context.errors.push(Error::TypeFailureBinaryOperator(loc));
+                        parser_context.errors.push(Error::NotYetImplemented(loc, format!("{:#?}", op)));
                         lhs.clone()
                     }
                 }

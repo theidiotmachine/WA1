@@ -35,18 +35,26 @@ impl<'a> Parser<'a> {
         Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemoryGrow(Box::new(expr))), is_const: true, r#type: Type::Ptr(PtrAlign::Align0), loc: loc})
     }
 
-    pub(crate) fn parse_mem_size(&mut self,    
-        parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    pub(crate) fn parse_mem_size(&mut self) -> Res<TypedExpr> {
         let mut loc = self.peek_next_location();
         self.skip_next_item();
 
-        //assert_punct!(self, Punct::OpenParen);
         let loc_after = self.peek_next_location();
         loc.end = loc_after.end.clone();
 
         assert_punct!(self, Punct::CloseParen);
         
         Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemorySize), is_const: true, r#type: Type::Ptr(PtrAlign::Align0), loc: loc})
+    }
+
+    pub(crate) fn parse_trap(&mut self) -> Res<TypedExpr> {
+        let mut loc = self.peek_next_location();
+        self.skip_next_item();
+        let loc_after = self.peek_next_location();
+        loc.end = loc_after.end.clone();
+
+        assert_punct!(self, Punct::CloseParen);
+        
+        Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::Trap), is_const: true, r#type: Type::Never, loc: loc})
     }
 }

@@ -8,4 +8,5 @@ pub mod prelude {
 pub enum Intrinsic {
     MemoryGrow(Box<TypedExpr>),
     MemorySize,
+    Trap
 }

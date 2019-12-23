@@ -14,7 +14,7 @@ pub enum Error {
     VariableNotRecognised(String),
     FuncNotRecognised(String),
     TypeFailureUnaryOperator,
-    TypeFailureBinaryOperator(SourceLocation),
+    TypeFailureBinaryOperator(SourceLocation, String, String),
     TypeFailureVariableCreation(SourceLocation),
     TypeFailure(SourceLocation, Type, Type),
     NoValueReturned,
@@ -43,7 +43,8 @@ impl Display for Error {
             Error::VariableNotRecognised(ref var_name) => write!(f, "Var not recognised: {}", var_name),
             Error::FuncNotRecognised(ref func_name) => write!(f, "Func not recognised: {}", func_name),
             Error::TypeFailureUnaryOperator => write!(f, "Type failure unary operator"),
-            Error::TypeFailureBinaryOperator(ref pos) => write!(f, "ERROR {}: can't make type of lhs and rhs of binary operator agree", pos),
+            Error::TypeFailureBinaryOperator(ref pos, ref lhs_type, ref rhs_type) => 
+                write!(f, "ERROR {}: can't make type of lhs ({}) and rhs ({}) of binary operator agree", pos, lhs_type, rhs_type),
             Error::TypeFailureVariableCreation(ref pos) => write!(f, "ERROR {}: initialiser type doesn't match variable type", pos),
             Error::TypeFailure(ref pos, ref wanted, ref got) => write!(f, "ERROR {}: expecting expression of type {}, found {}", pos, wanted, got),
             Error::NoValueReturned => write!(f, "Must return a value"),

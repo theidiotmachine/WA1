@@ -347,7 +347,6 @@ fn transform_typed_expr(
             } else {
                 vi.append(&mut transform_lvalue_get(l_value, global_var_map, local_var_map, context));
                 vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, context));
-            
 
                 match l_value.r#type {
                     //number *= ?
@@ -565,6 +564,9 @@ fn transform_typed_expr(
                     
                     //multiply by page size!
                     context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr))));
+                },
+                Intrinsic::Trap => {
+                    vi.push(Instruction::Unreachable)
                 }
             }  
         },
