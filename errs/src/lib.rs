@@ -1,22 +1,22 @@
-use ress::Position;
+use ress::{Position, SourceLocation};
 use std::fmt::{Display, Formatter, Result};
 use types::Type;
 
 #[derive(Debug, Clone)]
 pub enum Error {
-    UnexpectedToken(Position, String),
+    UnexpectedToken(SourceLocation, String),
     UnexpectedEoF(String),
     ParseAfterEoF,
-    InvalidTypeName(Position, String),
+    InvalidTypeName(SourceLocation, String),
     InvalidType(Position),
     Other(String),
-    NotYetImplemented(String),
+    NotYetImplemented(SourceLocation, String),
     VariableNotRecognised(String),
     FuncNotRecognised(String),
     TypeFailureUnaryOperator,
-    TypeFailureBinaryOperator,
-    TypeFailureVariableCreation,
-    TypeFailure(Type, Type),
+    TypeFailureBinaryOperator(SourceLocation),
+    TypeFailureVariableCreation(SourceLocation),
+    TypeFailure(SourceLocation, Type, Type),
     NoValueReturned,
     TypeFailureReturn(Type, Type),
     NotAnLValue,
@@ -33,19 +33,19 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
-            Error::UnexpectedToken(ref pos, ref msg) => write!(f, "Unexpected Token at {}, {}: {}", pos.line, pos.column, msg),
+            Error::UnexpectedToken(ref loc, ref msg) => write!(f, "ERROR {}: unexpected token {}", loc, msg),
             Error::UnexpectedEoF(ref msg) => write!(f, "Unexpectedly found the end of the file: {}", msg),
             Error::ParseAfterEoF => write!(f, "Parser attempted to get the next token after finding the end of the file"),
-            Error::InvalidTypeName(ref pos, ref msg) => write!(f, "Invalid type name, {}: {}", pos, msg),
+            Error::InvalidTypeName(ref pos, ref msg) => write!(f, "ERROR {}: Invalid type name {}", pos, msg),
             Error::InvalidType(ref pos) => write!(f, "Invalid type, {}", pos),
             Error::Other(ref msg) => write!(f, "{}", msg),
-            Error::NotYetImplemented(ref msg) => write!(f, "Not yet implemented: {}", msg),
+            Error::NotYetImplemented(ref pos, ref msg) => write!(f, "ERROR {}: not yet implemented: {}", pos, msg),
             Error::VariableNotRecognised(ref var_name) => write!(f, "Var not recognised: {}", var_name),
             Error::FuncNotRecognised(ref func_name) => write!(f, "Func not recognised: {}", func_name),
             Error::TypeFailureUnaryOperator => write!(f, "Type failure unary operator"),
-            Error::TypeFailureBinaryOperator => write!(f, "Type failure binary operator"),
-            Error::TypeFailureVariableCreation => write!(f, "Type failure variable creation"),
-            Error::TypeFailure(ref wanted, ref got) => write!(f, "Expecting expression of type {}, found {}", wanted, got),
+            Error::TypeFailureBinaryOperator(ref pos) => write!(f, "ERROR {}: can't make type of lhs and rhs of binary operator agree", pos),
+            Error::TypeFailureVariableCreation(ref pos) => write!(f, "ERROR {}: initialiser type doesn't match variable type", pos),
+            Error::TypeFailure(ref pos, ref wanted, ref got) => write!(f, "ERROR {}: expecting expression of type {}, found {}", pos, wanted, got),
             Error::NoValueReturned => write!(f, "Must return a value"),
             Error::TypeFailureReturn(ref wanted, ref got) => write!(f, "Expecting return value of type {}, found {}", wanted, got),
             Error::NotAnLValue => write!(f, "Expression is not a l value"),
@@ -62,4 +62,10 @@ impl Display for Error {
 }
 
 impl Error {
+}
+
+pub fn pretty_print_errs(errs: &Vec<Error>) -> () {
+    for err in errs {
+        println!("{}", err);    
+    }
 }

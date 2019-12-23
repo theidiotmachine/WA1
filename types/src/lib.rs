@@ -1,3 +1,9 @@
+pub mod cast;
+use cast::get_type_casts_for_function_set;
+use cast::FuncCallTypeCast;
+use cast::TypeCast;
+use cast::try_cast;
+
 pub mod prelude {
     pub use super::Type;
     pub use super::OpType;
@@ -6,14 +12,12 @@ pub mod prelude {
     pub use super::ClassMember;
     pub use super::Privacy;
     pub use super::get_unary_op_type;
-    pub use super::get_binary_op_type;
-    pub use super::try_up_cast_binary_op_lhs;
-    pub use super::try_up_cast_binary_op_rhs;
+    pub use super::get_binary_op_type_cast;
     pub use super::AbsTypeDecl;
     pub use super::PtrAlign;
-    pub use super::BinaryOpUpCast;
     pub use super::StructType;
     pub use super::StructMember;
+    pub use super::cast::prelude::*;
 }
 
 use std::fmt::Display;
@@ -43,9 +47,10 @@ pub enum OpType{
     SimpleOpType(Vec<FuncType>),
     /// The type of an assignment operator. rhs must be the same type as lhs, rv is same type as lhs.
     AssignmentOpType,
-    /// The type of an assign and modify operator. This is, say +=. In my type system, 
-    /// rv is the same as lhs, rhs can vary depending on lhs.
-    AssignModifyOpType,
+    /// The type of an assign and modify operator. This is, say +=. We onlt have an array of types
+    /// here because they represent the various things the lhs can be; the rhs must be cast to
+    /// that.
+    AssignModifyOpType(Vec<Type>),
     /// The type of an equality or inequality operator. In my very simple type system, lhs must be the 
     /// same type as rhs; return value is boolean.
     EqualityOpType,
@@ -113,12 +118,13 @@ pub struct AbsTypeDecl{
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PtrAlign{
-    Align8, Align16, Align32, Align64
+    Align0, Align8, Align16, Align32, Align64
 }
 
 impl PtrAlign{
     pub fn from_i32(i: i32) -> Option<PtrAlign> {
         match i {
+            0 => Some(PtrAlign::Align0),
             8 => Some(PtrAlign::Align8),
             16 => Some(PtrAlign::Align16),
             32 => Some(PtrAlign::Align32),
@@ -268,104 +274,120 @@ pub fn get_unary_op_type(op_type: &OpType, operand_type: &Type) -> Option<Type> 
     }
 }
 
+pub struct BinOpTypeCast{
+    pub lhs_type: Type,
+    pub lhs_type_cast: TypeCast,
+    pub rhs_type: Type,
+    pub rhs_type_cast: TypeCast,
+    pub out_type: Type,
+}
 
 /// Given a binary operator type, and the types of the operands, find the type
 /// of the resulting intermediate value.
-pub fn get_binary_op_type(op_type: &OpType, lhs_type: &Type, rhs_type: &Type) -> Option<Type> {
+pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Type) -> Option<BinOpTypeCast> {
     match op_type {
+        //simple binary operator like +.
         OpType::SimpleOpType(func_types) => {
-            // simply look for a matching operator type.
-            let o_this_func_type = func_types.iter().find(
-                |&func_type| func_type.in_types.len() == 2 && func_type.in_types[0] == *lhs_type && func_type.in_types[1] == *rhs_type 
-            );
-            match o_this_func_type {
-                Some(this_func_type) => Some(this_func_type.out_type.clone()),
-                None => None
+            //we treat this guy like a function.
+            let t = get_type_casts_for_function_set(&func_types, &vec![lhs_type.clone(), rhs_type.clone()]);
+            match t {
+                None => None,
+                Some(FuncCallTypeCast{func_type, arg_type_casts}) => {
+                    let out_lhs_type_cast = arg_type_casts.get(0).unwrap().clone();
+                    let out_lhs_type = match &out_lhs_type_cast{
+                        TypeCast::NotNeeded => func_type.in_types.get(0).unwrap().clone(),
+                        TypeCast::FreeWiden => lhs_type.clone(),
+                        TypeCast::IntToBigIntWiden => Type::BigInt,
+                        TypeCast::IntToNumberWiden => Type::Number,
+                        TypeCast::None => {
+                            //if we get a return from get_type_casts_for_function_set it won't have a None
+                            return None;
+                        }
+                    };
+                    let out_rhs_type_cast = arg_type_casts.get(1).unwrap().clone();
+                    let out_rhs_type = match &out_rhs_type_cast{
+                        TypeCast::NotNeeded => func_type.in_types.get(1).unwrap().clone(),
+                        TypeCast::FreeWiden => lhs_type.clone(),
+                        TypeCast::IntToBigIntWiden => Type::BigInt,
+                        TypeCast::IntToNumberWiden => Type::Number,
+                        TypeCast::None => {
+                            //if we get a return from get_type_casts_for_function_set it won't have a None
+                            return None;
+                        }
+                    };
+
+                    Some(BinOpTypeCast{lhs_type: out_lhs_type, lhs_type_cast: out_lhs_type_cast.clone(), rhs_type: out_rhs_type, rhs_type_cast: out_rhs_type_cast.clone(), out_type: func_type.out_type.clone()})
+                }
             }
         },
 
+        //assignment.
         OpType::AssignmentOpType => {
-            if lhs_type == rhs_type {
-                Some(lhs_type.clone())
+            //this is simple; either rhs can be cast to lhs or it can't
+            let type_cast = try_cast(rhs_type, lhs_type);
+            let out_rhs_type = match &type_cast{
+                TypeCast::NotNeeded => lhs_type.clone(),
+                TypeCast::FreeWiden => lhs_type.clone(),
+                TypeCast::IntToBigIntWiden => Type::BigInt,
+                TypeCast::IntToNumberWiden => Type::Number,
+                TypeCast::None => {
+                    return None;
+                }
+            };
+            Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: out_rhs_type, rhs_type_cast: type_cast, out_type: lhs_type.clone()})
+        },
+
+        // these guys are things like |=. 
+        OpType::AssignModifyOpType(types) => {
+            //First, find if the lhs is one of the permitted types
+            let yes = types.iter().find(|t| *t == lhs_type).is_some();
+            if yes {
+                //if it is, see if the rhs can be cast to the lhs
+                let type_cast = try_cast(rhs_type, lhs_type);
+                let out_rhs_type = match &type_cast{
+                    TypeCast::NotNeeded => lhs_type.clone(),
+                    TypeCast::FreeWiden => lhs_type.clone(),
+                    TypeCast::IntToBigIntWiden => Type::BigInt,
+                    TypeCast::IntToNumberWiden => Type::Number,
+                    TypeCast::None => {
+                        return None;
+                    }
+                };
+                Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: out_rhs_type, rhs_type_cast: type_cast, out_type: lhs_type.clone()})
             } else {
                 None
             }
         },
 
-        // ok, today I will just assume that all sides are the same. This is of course wrong.
-        OpType::AssignModifyOpType => {
-            if lhs_type == rhs_type {
-                Some(lhs_type.clone())
-            } else {
-                None
-            }
-        },
-
+        //full equality (or inequality)
         OpType::EqualityOpType => {
-            if lhs_type == rhs_type {
-                Some(Type::Boolean)
-            } else {
-                None
+            //try casting from one to the other. lhs to rhs first
+            let type_cast = try_cast(lhs_type, &rhs_type);
+            match &type_cast{
+                TypeCast::NotNeeded => {
+                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean})
+                },
+                TypeCast::FreeWiden | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden => {
+                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: lhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean})
+                },   
+                TypeCast::None => {
+                    //now try going the other way
+                    let type_cast = try_cast(rhs_type, &lhs_type);
+                    match &type_cast{
+                        TypeCast::NotNeeded => {
+                            Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean})
+                        },
+                        TypeCast::FreeWiden | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden => {
+                            Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: type_cast, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean})
+                        },   
+                        TypeCast::None => {
+                            None
+                        }
+                    }    
+                }
             }
         },
 
         OpType::NotImplementedOpType => None,
-    }
-}
-
-pub enum BinaryOpUpCast{
-    UpCast{new_type: Type, out_type: Type},
-    None
-}
-
-pub fn try_up_cast_binary_op_lhs(op_type: &OpType, lhs_type: &Type, rhs_type: &Type) -> BinaryOpUpCast {
-    if *lhs_type == Type::Int {
-        if *rhs_type == Type::Number {
-            let hmm = get_binary_op_type(op_type, &Type::Number, rhs_type);
-            match hmm {
-                Some(t) => {
-                    BinaryOpUpCast::UpCast{new_type: Type::Number, out_type: t}
-                },
-                _ => BinaryOpUpCast::None
-            }   
-        } else if *rhs_type == Type::BigInt {
-            let hmm = get_binary_op_type(op_type, &Type::Number, rhs_type);
-            match hmm {
-                Some(t) => {
-                    BinaryOpUpCast::UpCast{new_type: Type::BigInt, out_type: t}
-                },
-                _ => BinaryOpUpCast::None
-            }
-        } else {
-            BinaryOpUpCast::None
-        }
-    } else {
-        BinaryOpUpCast::None
-    }
-}
-
-pub fn try_up_cast_binary_op_rhs(op_type: &OpType, lhs_type: &Type, rhs_type: &Type) -> BinaryOpUpCast {
-    if *rhs_type == Type::Int {
-        if *lhs_type == Type::Number {
-            let hmm = get_binary_op_type(op_type, lhs_type, &Type::Number);
-            match hmm {
-                Some(t) => {
-                    BinaryOpUpCast::UpCast{new_type: Type::Number, out_type: t}
-                },
-                _ => BinaryOpUpCast::None
-            }   
-        } else if *lhs_type == Type::BigInt {
-            let hmm = get_binary_op_type(op_type, lhs_type, &Type::BigInt);
-            match hmm {
-                Some(t) => {
-                    BinaryOpUpCast::UpCast{new_type: Type::BigInt, out_type: t}
-                },
-                _ => BinaryOpUpCast::None
-            }
-        } else {
-            BinaryOpUpCast::None
-        }
-    } else {
-        BinaryOpUpCast::None
     }
 }

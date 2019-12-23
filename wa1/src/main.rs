@@ -5,6 +5,10 @@ extern crate parser;
 use parser::*;
 extern crate writer;
 
+extern crate errs;
+pub use errs::Error;
+pub use errs::pretty_print_errs;
+
 fn main() {
     let matches = App::new("wa1")
         .version("0.0.1")
@@ -33,9 +37,7 @@ fn main() {
     match o_script {
         Err(errs) => {
             println!("Parse failed.");
-            for err in errs {
-                println!("{}", err);    
-            }
+            pretty_print_errs(&errs);
         },
         _ => {
             let script = o_script.unwrap();

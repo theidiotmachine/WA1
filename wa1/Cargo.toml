@@ -10,4 +10,5 @@ ress = { path = "../ress" }
 ast = { path = "../ast" }
 parser = { path = "../parser" }
 writer = { path = "../writer" }
+errs = { path = "../errs" }
 clap = "~2.33.0"

@@ -26,7 +26,6 @@ export function bang(x: number): number {
     out;
 }
 
-
 function mul(x: number, y: number): number {
     x * y;
 }
@@ -39,3 +38,8 @@ export function fourTimes(x: number): number{
 export function mul3(x: number, y: number, z: number): number {
     return x * y * z;
 }
+
+export function idNumber(x:  number): number {
+    x;
+}
+

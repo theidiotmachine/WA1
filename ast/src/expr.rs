@@ -1,5 +1,7 @@
 use types::*;
 use crate::func::FuncDecl;
+use crate::intrinsic::Intrinsic;
+use ress::SourceLocation;
 
 pub mod prelude {
     pub use super::Expr;
@@ -53,6 +55,7 @@ static ref COMPARISON_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Boolean},
     FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Boolean},
     FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::Boolean},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align0), Type::Ptr(PtrAlign::Align0)], out_type: Type::Boolean},
     FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8), Type::Ptr(PtrAlign::Align8)], out_type: Type::Boolean},
     FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16), Type::Ptr(PtrAlign::Align16)], out_type: Type::Boolean},
     FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32), Type::Ptr(PtrAlign::Align32)], out_type: Type::Boolean},
@@ -60,21 +63,14 @@ static ref COMPARISON_OP: OpType = OpType::SimpleOpType(vec![
 ]);
 
 static ref MATHS_BIN_OP: OpType = OpType::SimpleOpType(vec![
-    FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Number},
+    FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
     FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Number},
     FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align0), Type::Ptr(PtrAlign::Align0)], out_type: Type::Ptr(PtrAlign::Align0)},
     FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8), Type::Ptr(PtrAlign::Align8)], out_type: Type::Ptr(PtrAlign::Align8)},
     FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16), Type::Ptr(PtrAlign::Align16)], out_type: Type::Ptr(PtrAlign::Align16)},
     FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32), Type::Ptr(PtrAlign::Align32)], out_type: Type::Ptr(PtrAlign::Align32)},
     FuncType{in_types: vec![Type::Ptr(PtrAlign::Align64), Type::Ptr(PtrAlign::Align64)], out_type: Type::Ptr(PtrAlign::Align64)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8), Type::Int], out_type: Type::Ptr(PtrAlign::Align8)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16), Type::Int], out_type: Type::Ptr(PtrAlign::Align16)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32), Type::Int], out_type: Type::Ptr(PtrAlign::Align32)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align64), Type::Int], out_type: Type::Ptr(PtrAlign::Align64)},
-    FuncType{in_types: vec![Type::Int, Type::Ptr(PtrAlign::Align8)], out_type: Type::Ptr(PtrAlign::Align8)},
-    FuncType{in_types: vec![Type::Int, Type::Ptr(PtrAlign::Align16)], out_type: Type::Ptr(PtrAlign::Align16)},
-    FuncType{in_types: vec![Type::Int, Type::Ptr(PtrAlign::Align32)], out_type: Type::Ptr(PtrAlign::Align32)},
-    FuncType{in_types: vec![Type::Int, Type::Ptr(PtrAlign::Align64)], out_type: Type::Ptr(PtrAlign::Align64)},
 ]);
 
 static ref MATHS_UN_OP: OpType = OpType::SimpleOpType(vec![
@@ -107,7 +103,22 @@ static ref BIT_UN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Number], out_type: Type::Number},
 ]);
 
-static ref ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType;
+static ref MATHS_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
+    Type::Int,
+    Type::Number,
+    Type::BigInt,
+    Type::Ptr(PtrAlign::Align0),
+    Type::Ptr(PtrAlign::Align8),
+    Type::Ptr(PtrAlign::Align16),
+    Type::Ptr(PtrAlign::Align32),
+    Type::Ptr(PtrAlign::Align64),
+]);
+
+
+static ref BIT_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
+    Type::Int,
+    Type::BigInt,
+]);
 
 static ref ASSIGN_OP: OpType = OpType::AssignmentOpType;
 
@@ -203,18 +214,18 @@ impl AssignmentOperator{
     pub fn get_op_type(&self) -> &OpType {
         match self {
             AssignmentOperator::Assign => &ASSIGN_OP,
-            AssignmentOperator::PlusAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::MinusAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::ExponentAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::MultiplyAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::DivideAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::ModAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::LeftShiftAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::RightShiftAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::UnsignedRightShiftAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::BitAndAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::BitXorAssign => &ASSIGN_MODIFY_OP,
-            AssignmentOperator::BitOrAssign => &ASSIGN_MODIFY_OP
+            AssignmentOperator::PlusAssign => &MATHS_ASSIGN_MODIFY_OP,
+            AssignmentOperator::MinusAssign => &MATHS_ASSIGN_MODIFY_OP,
+            AssignmentOperator::ExponentAssign => &MATHS_ASSIGN_MODIFY_OP,
+            AssignmentOperator::MultiplyAssign => &MATHS_ASSIGN_MODIFY_OP,
+            AssignmentOperator::DivideAssign => &MATHS_ASSIGN_MODIFY_OP,
+            AssignmentOperator::ModAssign => &MATHS_ASSIGN_MODIFY_OP,
+            AssignmentOperator::LeftShiftAssign => &BIT_ASSIGN_MODIFY_OP,
+            AssignmentOperator::RightShiftAssign => &BIT_ASSIGN_MODIFY_OP,
+            AssignmentOperator::UnsignedRightShiftAssign => &BIT_ASSIGN_MODIFY_OP,
+            AssignmentOperator::BitAndAssign => &BIT_ASSIGN_MODIFY_OP,
+            AssignmentOperator::BitXorAssign => &BIT_ASSIGN_MODIFY_OP,
+            AssignmentOperator::BitOrAssign => &BIT_ASSIGN_MODIFY_OP
         }
     }
 }
@@ -293,6 +304,8 @@ pub enum Expr {
     IntToNumber(Box<TypedExpr>),
     /// Implicit i32 -> i64 cast
     IntToBigInt(Box<TypedExpr>),
+    /// A type widen that has no runtime cost
+    FreeTypeWiden(Box<TypedExpr>),
 
     Block(Vec<TypedExpr>),
 
@@ -320,6 +333,7 @@ pub enum Expr {
     Break,
     /// continue
     Continue,
+    Intrinsic(Intrinsic)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -327,6 +341,7 @@ pub struct TypedExpr{
     pub expr: Expr,
     pub r#type: Type,
     pub is_const: bool,
+    pub loc: SourceLocation,
 }
 
 impl TypedExpr{
@@ -336,21 +351,21 @@ impl TypedExpr{
                 if self.is_const {
                     None
                 } else {
-                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::GlobalVariableAssign(name.clone())})
+                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::GlobalVariableAssign(name.clone()), loc: self.loc})
                 }
             },
             Expr::LocalVariableUse(name) => {
                 if self.is_const {
                     None
                 } else {
-                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::LocalVariableAssign(name.clone())})
+                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::LocalVariableAssign(name.clone()), loc: self.loc})
                 }
             },
             Expr::ClosureVariableUse(name) => {
                 if self.is_const {
                     None
                 } else {
-                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::ClosureVariableAssign(name.clone())})
+                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::ClosureVariableAssign(name.clone()), loc: self.loc})
                 }
             },
             _ => None,
@@ -378,4 +393,5 @@ pub enum LValueExpr{
 pub struct TypedLValueExpr{
     pub expr: LValueExpr,
     pub r#type: Type,
+    pub loc: SourceLocation,
 }

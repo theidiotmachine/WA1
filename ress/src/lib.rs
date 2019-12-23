@@ -71,6 +71,12 @@ impl SourceLocation {
     }
 }
 
+impl ::std::fmt::Display for SourceLocation {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f, "{}-{}", self.start, self.end)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 /// A single character position in the
 /// file including the line/column number

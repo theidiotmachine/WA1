@@ -8,6 +8,7 @@ use parity_wasm::elements::serialize_to_file;
 use std::path::Path;
 
 pub use errs::Error;
+pub use errs::pretty_print_errs;
 
 /// Generate an s expression string from a program, to be serialised
 /// into a file
@@ -15,7 +16,8 @@ pub fn write(program: Program, out_file: &String) {
     let mut errors: Vec<Error> = vec![];
     let module = transform(program, &mut errors);
     if !errors.is_empty() {
-        println!("{:#?}", errors);
+        println!("Compile failed.");
+        pretty_print_errs(&errors);
         panic!()
     }
     let string = out_file;

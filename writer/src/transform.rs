@@ -67,7 +67,7 @@ fn transform_lvalue_get(
                 }
             }
         },
-        _ => { context.errors.push(Error::NotYetImplemented(String::from("lvalue get"))); vec![] }
+        _ => { context.errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from("lvalue get"))); vec![] }
     }
 }
 
@@ -97,7 +97,7 @@ fn transform_lvalue_tee(
                 }
             }
         },
-        _ => { context.errors.push(Error::NotYetImplemented(String::from("lvalue get"))); vec![] }
+        _ => { context.errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from("lvalue get"))); vec![] }
     }
 }
 
@@ -159,7 +159,7 @@ fn transform_typed_expr(
                                 BinaryOperator::Multiply => vi.push(Instruction::F64Mul),
                                 BinaryOperator::Divide => vi.push(Instruction::F64Div),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
                             }
                         },
@@ -171,12 +171,12 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThan=> vi.push(Instruction::F64Lt),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::F64Le),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
                             }
                         },        
                         _ => {
-                            context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                         }
                     }
                 },
@@ -196,7 +196,7 @@ fn transform_typed_expr(
                                 BinaryOperator::BitXor => vi.push(Instruction::I32Xor),
 
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
                             }
                         },
@@ -208,12 +208,12 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThan=> vi.push(Instruction::I32LtS),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeS),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
                             }
                         },
                         _ => {
-                            context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                         }
                     }
                 },
@@ -233,7 +233,7 @@ fn transform_typed_expr(
                                 BinaryOperator::BitXor => vi.push(Instruction::I64Xor),
 
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
                             }
                         },
@@ -245,12 +245,12 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThan=> vi.push(Instruction::I64LtS),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::I64LeS),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
                             }
                         },
                         _ => {
-                            context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                         }
                     }
                 },
@@ -264,7 +264,7 @@ fn transform_typed_expr(
                                 BinaryOperator::Multiply => vi.push(Instruction::I32Mul),
                                 BinaryOperator::Divide => vi.push(Instruction::I32DivU),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
                             }
                         },
@@ -275,12 +275,12 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThan=> vi.push(Instruction::I32LtS),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeS),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
                             }
                         },
                         _ => {
-                            context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                         }
                     }
                 },
@@ -292,13 +292,13 @@ fn transform_typed_expr(
                         BinaryOperator::LogicalAnd => vi.push(Instruction::I32And),
                         BinaryOperator::LogicalOr => vi.push(Instruction::I32Or),
                         _ => {
-                            context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                         }
                     }
                 },
 
                 _ => {
-                    context.errors.push(Error::NotYetImplemented(String::from("binary operator")))
+                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                 }
             };
         },
@@ -323,7 +323,7 @@ fn transform_typed_expr(
                     vi.push(Instruction::F64Mul);
                 },
                 _ => {
-                    context.errors.push(Error::NotYetImplemented(String::from("unary operator")))
+                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("unary operator")))
                 }
             };
         }
@@ -358,7 +358,7 @@ fn transform_typed_expr(
                             AssignmentOperator::MultiplyAssign => vi.push(Instruction::F64Mul),
                             AssignmentOperator::DivideAssign => vi.push(Instruction::F64Div),
                             _ => {
-                                context.errors.push(Error::NotYetImplemented(String::from("assignment operator")))
+                                context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
                             }
                         }    
                     },
@@ -374,7 +374,7 @@ fn transform_typed_expr(
                             AssignmentOperator::BitXorAssign => vi.push(Instruction::I32Xor),
                     
                             _ => {
-                                context.errors.push(Error::NotYetImplemented(String::from("assignment operator")))
+                                context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
                             }
                         }
                     },
@@ -390,13 +390,13 @@ fn transform_typed_expr(
                             AssignmentOperator::BitXorAssign => vi.push(Instruction::I64Xor),
                     
                             _ => {
-                                context.errors.push(Error::NotYetImplemented(String::from("assignment operator")))
+                                context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
                             }
                         }
                     },
 
                     _ => {
-                        context.errors.push(Error::NotYetImplemented(String::from("assignment operator")))
+                        context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
                     }
                 }
                 
@@ -552,9 +552,31 @@ fn transform_typed_expr(
                 vi.append(& mut this_vi);
             }
         },
-        
 
-        _ => { context.errors.push(Error::NotYetImplemented(String::from(format!("expr{:#?}", typed_expr.expr)))); },
+        Expr::Intrinsic(i) => {
+            match i {
+                Intrinsic::MemorySize => {
+                    //multiply by page size!
+                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr))));
+                },
+                Intrinsic::MemoryGrow(sz_expr) => {
+                    let mut this_vi = transform_typed_expr(&sz_expr, global_var_map, local_var_map, func_map, context);
+                    vi.append(& mut this_vi);
+                    
+                    //multiply by page size!
+                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr))));
+                }
+            }  
+        },
+
+
+        Expr::FuncDecl(fd) => {
+            if fd.closure.len() > 0 {
+                context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("closure")));
+            }
+        },
+
+        _ => { context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))); },
     };
 
     context.prev_type = typed_expr.r#type.clone();

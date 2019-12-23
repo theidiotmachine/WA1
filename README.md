@@ -134,49 +134,60 @@ let a = 0;
 
 ## TODO
 
-1. [ ] typing 
+1. Typing 
     1. [x] every expr needs a return type!
     1. [ ] functions decls are exprs, not statements
     1. [ ] Infer return types
     1. [ ] Handle `never` properly
-1. [x] expression based language
+    1. [x] do proper auto-widening. means you can widen anything to unknown. Needed for templates, I think. 
+        1. [x] means subsuming the number code, which is probably a good thing
+    1. [ ] typescript-style const types, where a = 0 means typeof a == 0
+    1. [ ] move the bin op types from the ast
+1. Expression based language
     1. [x] blocks return a value
     1. [x] no need for a return statement (but still supported - what is this, scala?)
     1. [x] if as an expression 
-1. [ ] control flow
+1. Error handling
+    1. [x] all exprs have a loc
+    1. [ ] all errors have a loc
+1. Control flow
     1. [x] if
     1. [x] while
     1. [ ] simple for loops
-1. optimise steps. These should be on even on O0
+1. Optimise steps. These should be on even on O0
     1. [ ] remove returns right before end
     1. [ ] change tee + drop into set
     1. [ ] remove get + drop
     1. [ ] remove casts straight after consts, and just have the appropriately typed const inline
-1. [ ] function calling
+1. Function calling
     1. [x] simple static function call
-    1. [ ] function return type inference
     1. [ ] functions as first class objects (but not closures)
 1. [x] assignments and consts
 1. bugs
     1. [ ] fairly sure prefix unary operators are wrong - may need to start at a precedence
 1. [ ] global variables (currently not init'ed)
+1. [ ] inline numeric constants
 1. [ ] a runtime
     1. [ ] a simple allocator
     1. [ ] a small object allocator
     1. [ ] a gc based on the rajan & bacon paper
         1. [ ] but with gc counter!
-1. [ ] structs, ptrs
+1. Structs, ptrs
     1. [ ] structs
     1. [ ] union types are discriminated unions like Rust enums - yeah!
     1. [ ] option is union T | null
         1. [ ] means map over a union is well understood, I guess
     1. opt: booleans are 1 bit in structs, 32 bits on the heap?
+1. Types
+    1. [ ] type keyword is a first class type, not an alias (might as well, eh? I always disliked that Scala and TS do that)
 1. [ ] closure generation and usage
     1. [ ] optimisation - don't capture consts, you have all the information to roll them inline. This is awesome because I don't think JS can do this
+1. [ ] templates
+    1. [ ] generate meta code to turn into templates, type check against unknown
 1. [ ] containers
     1. [ ] map/foreach are macros
     1. [ ] more complex for loops (in, of)
-1. [ ] numbers
+1. Numbers
     1. [x] there is an i32 type, an i64 type and an 164 type; the compiler auto promotes i32 to the other two types
     1. [ ] colors are a special type
 1. imports, exports
