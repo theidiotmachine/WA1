@@ -1,7 +1,7 @@
 use ast::prelude::*;
 
 use parity_wasm::builder::module;
-use parity_wasm::elements::{Module, ValueType, Local, Instructions, Instruction, BlockType};
+use parity_wasm::elements::{Module, ValueType, Local, Instructions, Instruction, BlockType, GlobalEntry, GlobalType, InitExpr};
 use parity_wasm::builder::{FunctionDefinition, FunctionBuilder};
 
 use std::collections::HashMap;
@@ -170,6 +170,7 @@ fn transform_typed_expr(
                                 BinaryOperator::GreaterThanEqual => vi.push(Instruction::F64Ge),
                                 BinaryOperator::LessThan=> vi.push(Instruction::F64Lt),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::F64Le),
+                                BinaryOperator::Equal => vi.push(Instruction::F64Eq),
                                 _ => {
                                     context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
@@ -207,6 +208,7 @@ fn transform_typed_expr(
                                 BinaryOperator::GreaterThanEqual => vi.push(Instruction::I32GeS),
                                 BinaryOperator::LessThan=> vi.push(Instruction::I32LtS),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeS),
+                                BinaryOperator::Equal => vi.push(Instruction::I32Eq),
                                 _ => {
                                     context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
@@ -244,6 +246,7 @@ fn transform_typed_expr(
                                 BinaryOperator::GreaterThanEqual => vi.push(Instruction::I64GeS),
                                 BinaryOperator::LessThan=> vi.push(Instruction::I64LtS),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::I64LeS),
+                                BinaryOperator::Equal => vi.push(Instruction::I64Eq),
                                 _ => {
                                     context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                                 }
@@ -291,6 +294,7 @@ fn transform_typed_expr(
                         //these are the bit instructions, but our strong typing should mean that this is safe
                         BinaryOperator::LogicalAnd => vi.push(Instruction::I32And),
                         BinaryOperator::LogicalOr => vi.push(Instruction::I32Or),
+                        BinaryOperator::Equal => vi.push(Instruction::I32Eq),
                         _ => {
                             context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
                         }
@@ -305,27 +309,55 @@ fn transform_typed_expr(
 
         Expr::UnaryOperator(uo) => {
             vi.append(&mut transform_typed_expr(&uo.expr, global_var_map, local_var_map, func_map, context));
-            match uo.op {
-                UnaryOperator::LogicalNot => {
-                    vi.push(Instruction::I32Eqz);
+
+            match uo.expr.r#type {
+                Type::Int => {
+                    match uo.op {
+                        UnaryOperator::BitNot => {
+                            vi.push(Instruction::I32Const(-1));
+                            vi.push(Instruction::I32Xor);
+                        },
+        
+                        UnaryOperator::Plus => {},
+                        UnaryOperator::Minus => {
+                            vi.push(Instruction::I32Const(-1));
+                            vi.push(Instruction::I32Mul);
+                        },
+                        _ => {
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("unary operator")))
+                        }
+                    }
                 },
 
-                UnaryOperator::BitNot => {
-                    vi.push(Instruction::I32Const(-1));
-                    vi.push(Instruction::I32Xor);
+                Type::Number => {
+                    match uo.op {
+                        UnaryOperator::Plus => {},
+                        UnaryOperator::Minus => {
+                            let v: f64 = -1.0;
+                            vi.push(Instruction::F64Const(v.to_bits()));
+                            vi.push(Instruction::F64Mul);
+                        },
+                        _ => {
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("unary operator")))
+                        }
+                    }
                 },
 
-                UnaryOperator::Plus => {},
-
-                UnaryOperator::Minus => {
-                    let v: f64 = -1.0;
-                    vi.push(Instruction::F64Const(v.to_bits()));
-                    vi.push(Instruction::F64Mul);
+                Type::Boolean => {
+                    match uo.op {
+                        UnaryOperator::LogicalNot => {
+                            vi.push(Instruction::I32Eqz);
+                        },
+                        _ => {
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("unary operator")))
+                        }
+                    }
                 },
+
                 _ => {
                     context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("unary operator")))
                 }
-            };
+            }
         }
 
         Expr::Parens(p) => {
@@ -348,7 +380,7 @@ fn transform_typed_expr(
                 vi.append(&mut transform_lvalue_get(l_value, global_var_map, local_var_map, context));
                 vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, context));
 
-                match l_value.r#type {
+                match &l_value.r#type {
                     //number *= ?
                     Type::Number => {
                         match op {
@@ -371,7 +403,6 @@ fn transform_typed_expr(
                             AssignmentOperator::BitAndAssign => vi.push(Instruction::I32And),
                             AssignmentOperator::BitOrAssign => vi.push(Instruction::I32Or),
                             AssignmentOperator::BitXorAssign => vi.push(Instruction::I32Xor),
-                    
                             _ => {
                                 context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
                             }
@@ -387,7 +418,21 @@ fn transform_typed_expr(
                             AssignmentOperator::BitAndAssign => vi.push(Instruction::I64And),
                             AssignmentOperator::BitOrAssign => vi.push(Instruction::I64Or),
                             AssignmentOperator::BitXorAssign => vi.push(Instruction::I64Xor),
-                    
+                            _ => {
+                                context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
+                            }
+                        }
+                    },
+
+                    Type::Ptr(_) => {
+                        match op {
+                            AssignmentOperator::MinusAssign => vi.push(Instruction::I32Sub),
+                            AssignmentOperator::PlusAssign => vi.push(Instruction::I32Add),
+                            AssignmentOperator::MultiplyAssign => vi.push(Instruction::I32Mul),
+                            AssignmentOperator::DivideAssign => vi.push(Instruction::I32DivU),
+                            AssignmentOperator::BitAndAssign => vi.push(Instruction::I32And),
+                            AssignmentOperator::BitOrAssign => vi.push(Instruction::I32Or),
+                            AssignmentOperator::BitXorAssign => vi.push(Instruction::I32Xor),
                             _ => {
                                 context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
                             }
@@ -465,6 +510,13 @@ fn transform_typed_expr(
 
             let mut this_vi: Vec<Instruction> = transform_typed_expr(&**t, global_var_map, local_var_map, func_map, context);
             vi.append(&mut this_vi);
+
+            //an if-then block never returns a value, so we have to drop whatever came out of the last thing.
+            if context.prev_type != Type::RealVoid {
+                vi.push(Instruction::Drop);
+                context.prev_type = Type::RealVoid;
+            }
+
             vi.push(Instruction::End);
         },
 
@@ -545,6 +597,26 @@ fn transform_typed_expr(
             };
         },
 
+        Expr::GlobalVariableDecl(v) => {
+            if context.prev_type != Type::RealVoid {
+                vi.push(Instruction::Drop);
+            };
+            //first,  run the init expression
+            match &v.init {
+                Some(expr) => {
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context);
+                    vi.append(& mut this_vi);
+                    //then set the variable
+                    let o_idx = global_var_map.get(&v.name);
+                    match o_idx {
+                        Some(idx) => vi.push(Instruction::SetGlobal(*idx)),
+                        None => context.errors.push(Error::VariableNotRecognised(v.name.clone())),
+                    };
+                },
+                _ => {}
+            };
+        },
+
         Expr::Block(b) => {
             for elem in b {
                 let mut this_vi = transform_typed_expr(&elem, global_var_map, local_var_map, func_map, context);
@@ -555,15 +627,12 @@ fn transform_typed_expr(
         Expr::Intrinsic(i) => {
             match i {
                 Intrinsic::MemorySize => {
-                    //multiply by page size!
-                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr))));
+                    vi.push(Instruction::CurrentMemory(0));
                 },
                 Intrinsic::MemoryGrow(sz_expr) => {
                     let mut this_vi = transform_typed_expr(&sz_expr, global_var_map, local_var_map, func_map, context);
                     vi.append(& mut this_vi);
-                    
-                    //multiply by page size!
-                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr))));
+                    vi.push(Instruction::GrowMemory(0));
                 },
                 Intrinsic::Trap => {
                     vi.push(Instruction::Unreachable)
@@ -571,11 +640,19 @@ fn transform_typed_expr(
             }  
         },
 
-
         Expr::FuncDecl(fd) => {
             if fd.closure.len() > 0 {
                 context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("closure")));
             }
+        },
+
+        Expr::FreeTypeWiden(t) => {
+            let mut this_vi = transform_typed_expr(&t, global_var_map, local_var_map, func_map, context);
+            vi.append(& mut this_vi);
+        },
+
+        Expr::StructDecl(_) => {
+            //all done at compile time
         },
 
         _ => { context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))); },
@@ -647,6 +724,21 @@ fn transform_func(func: &Func,
 
 pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
     let mut m = module();
+
+    //let mut global_builder = m.global();
+    for g in program.globals {
+        let vt = get_ir_value_type(&g.r#type);
+        let instruction = match vt {
+            ValueType::F32 => Instruction::F32Const(0),
+            ValueType::F64 => Instruction::F64Const(0),
+            ValueType::I32 => Instruction::I32Const(0),
+            ValueType::I64 => Instruction::I64Const(0),
+        };
+
+        //global_builder = global_builder.with_type(vt).build();
+        m = m.with_global(GlobalEntry::new(GlobalType::new(vt, true), InitExpr::new(vec![instruction, Instruction::End])));
+    }
+
     let mut context = Context{
         errors: vec![],
         prev_type: Type::RealVoid,

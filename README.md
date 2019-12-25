@@ -132,6 +132,14 @@ let a = 0;
 * Local variables - type inference works here.
 * if, else, while, continue, break, return.
 
+### Super secret things, shhh
+
+* __ptr type - not yet finished. __ptr<x> means a pointer aligned to x bits (only supports 8, 16, 32 and 64). __ptr<0> is a general purpose usize type
+* intrinsics - wrap low level wasm calls
+* * __memorySize() - `memory.size` instruction
+* * __memoryGrow(0, numPages) - `memory.grow` instruction
+* * __trap() - `unreachable` instruction
+
 ## TODO
 
 1. Typing 
@@ -159,14 +167,28 @@ let a = 0;
     1. [ ] change tee + drop into set
     1. [ ] remove get + drop
     1. [ ] remove casts straight after consts, and just have the appropriately typed const inline
+    1. [ ] == 0 is eqz
+    1. [ ] globals that are init to a const should use the wasm global init mechansim
 1. Function calling
     1. [x] simple static function call
     1. [ ] functions as first class objects (but not closures)
 1. [x] assignments and consts
-1. bugs
+1. Known bugs
     1. [ ] fairly sure prefix unary operators are wrong - may need to start at a precedence
+    1. [ ] the lexer doesn't parse negative numbers!
 1. [ ] global variables (currently not init'ed)
-1. [ ] inline numeric constants
+1. Inlining
+    1. [ ] inline numeric constants?
+    1. [ ] or full blown inlining, of which this is just a special case?
+1. Purity
+    1. [ ] Record (some? one?) of states pre expr
+        * globally pure (no non-const global access)
+        * locally pure (true purity)
+        * locally impure, globally pure (essentially reassignment to a local variable - referential integrity but not proper FP)
+        * changing passed in object
+        * side effecting (e.g. writing a mutable global, writing a file)
+        * non-deterministic (e.g. currenttime, memorysize, reading a global or file)
+    1. [ ] evaluate globally and locally pure functions if they have literals passed in. Is this... insane?
 1. [ ] a runtime
     1. [ ] a simple allocator
     1. [ ] a small object allocator
