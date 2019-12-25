@@ -176,7 +176,7 @@ let a = 0;
 1. Known bugs
     1. [ ] fairly sure prefix unary operators are wrong - may need to start at a precedence
     1. [ ] the lexer doesn't parse negative numbers!
-1. [ ] global variables (currently not init'ed)
+1. [x] global variables (currently not init'ed)
 1. Inlining
     1. [ ] inline numeric constants?
     1. [ ] or full blown inlining, of which this is just a special case?
