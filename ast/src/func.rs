@@ -19,8 +19,8 @@ pub struct Func {
     pub args: Vec<FuncArg>,
     pub export: bool,
     pub import: bool,
-    /// if import is true, this will be an empty vec
-    pub body: Vec<TypedExpr>,
+    /// if import is true, this will be a nop?
+    pub body: TypedExpr,
     pub local_vars: Vec<VariableDecl>,
     pub closure: Vec<ClosureRef>,
     pub local_var_map: HashMap<String, u32>,

@@ -1,0 +1,35 @@
+/// The WA1 allocator
+__struct Header{
+    size: __ptr<0>;
+    next: __ptr<32>;
+    prev: __ptr<32>;
+    free: boolean;
+}
+
+const PAGE_SIZE: __ptr<0> = 65536;
+
+//this is the pointer to the first available free address
+let memTop: __ptr<0> = __memorySize() * PAGE_SIZE;
+
+//this is the pointer to the last available free address
+let memBottom: __ptr<0> = __memorySize() * PAGE_SIZE;
+
+//let's do the simplest malloc possible: sbrk
+function malloc(sz: __ptr<0>): __ptr<32> {
+    if(memTop + sz > memBottom) {
+        const numPages = (sz / PAGE_SIZE) + 1;
+        const r = __memoryGrow(0, numPages);
+        if (r == -1) {
+            __trap();
+        }
+        memBottom = __memorySize() * PAGE_SIZE;
+    }
+
+    const out = memTop;
+    memTop += sz;
+    out;
+}
+
+function free(ptr: __ptr<32>): void {
+
+}

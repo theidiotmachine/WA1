@@ -325,7 +325,13 @@ impl<'b> Parser<'b> {
         }
 
         let start_function = Func{ 
-            name: String::from("__start"), return_type: Type::RealVoid, args: vec![], export: false, import: false, body: init_body, 
+            name: String::from("__start"), return_type: Type::RealVoid, args: vec![], export: false, import: false, 
+                body: TypedExpr{
+                    expr: Expr::Block(init_body),
+                    r#type: Type::RealVoid,
+                    is_const: true,
+                    loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))
+                },
             local_vars: vec![], closure: vec![], local_var_map: HashMap::new()
         };
 
@@ -698,7 +704,7 @@ impl<'b> Parser<'b> {
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr>{
         let mut parser_func_context_inner = ParserFuncContext::new();
-        let mut loc = self.peek_next_location();
+        let loc = self.peek_next_location();
 
         self.expect_keyword(Keyword::Function)?;
         let next = assert_next!(self, "Expecting function name");
@@ -727,27 +733,11 @@ impl<'b> Parser<'b> {
         assert_ok!(return_type);
         parser_func_context_inner.func_return_type = return_type;
 
-        // for the moment, all functions need to have squigglies
-        assert_punct!(self, Punct::OpenBrace);
-
         let old_in_iteration = self.context.in_iteration;
         self.context.in_iteration = false;
         
-        let mut exprs:  Vec<TypedExpr> = Vec::new();
-        loop {
-            let next = self.peek_next_item();
-            let token = &next.token;
-            
-            if token.matches_punct(Punct::CloseBrace) {
-                loc.end = next.location.end.clone();
-                self.skip_next_item();
-                break;
-            }
-
-            let expr = self.parse_statement(&mut parser_func_context_inner, parser_context);
-            assert_ok!(expr);
-            exprs.push(expr);
-        }
+        let block = self.parse_block(&mut parser_func_context_inner, parser_context);
+        assert_ok!(block);
 
         self.context.pop_scope();
         self.context.in_iteration = old_in_iteration;
@@ -756,28 +746,42 @@ impl<'b> Parser<'b> {
 
         // today if you don't have a return value at the end of function, you get errors at run time. So let's check now.
         if parser_func_context_inner.func_return_type != Type::RealVoid {
-            let o_last = exprs.last();
-            match o_last {
-                Some(last) => {
-                    match &last.expr {
-                        Expr::Return(o_e) => {
-                            if o_e.is_none() {
-                                parser_context.errors.push(Error::NoValueReturned)
+            match &block.expr {
+                Expr::Block(exprs) => {
+                    let o_last = exprs.last();
+                    match o_last {
+                        Some(last) => {
+                            match &last.expr {
+                                Expr::Return(o_e) => {
+                                    if o_e.is_none() {
+                                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()))
+                                    }
+                                },
+                                _ => {
+                                    if last.r#type == Type::RealVoid {
+                                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()));
+                                    }
+                                },
                             }
                         },
-                        _ => {
-                            if last.r#type == Type::RealVoid {
-                                parser_context.errors.push(Error::NoValueReturned);
-                            }
-                        },
+                        _ => parser_context.errors.push(Error::NoValueReturned(block.loc.clone()))
                     }
                 },
-                _ => parser_context.errors.push(Error::NoValueReturned)
+                Expr::Return(o_e) => {
+                    if o_e.is_none() {
+                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()))
+                    }
+                },
+                _ => {
+                    if block.r#type == Type::RealVoid {
+                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()));
+                    }
+                },
             }
         }
         
         let func = Func{
-            name: id.to_string(), return_type: parser_func_context_inner.func_return_type, args: arg_list, export, body: exprs, 
+            name: id.to_string(), return_type: parser_func_context_inner.func_return_type, args: arg_list, export, body: block, 
             local_vars: parser_func_context_inner.local_vars, closure: parser_func_context_inner.closure, 
             local_var_map: parser_func_context_inner.local_var_map, import: false
         };

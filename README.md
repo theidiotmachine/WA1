@@ -134,11 +134,11 @@ let a = 0;
 
 ### Super secret things, shhh
 
-* __ptr type - not yet finished. __ptr<x> means a pointer aligned to x bits (only supports 8, 16, 32 and 64). __ptr<0> is a general purpose usize type
+* __ptr type - not yet finished. `__ptr<x>` means a pointer aligned to x bits (only supports 8, 16, 32 and 64). `__ptr<0>` is a general purpose usize type
 * intrinsics - wrap low level wasm calls
-* * __memorySize() - `memory.size` instruction
-* * __memoryGrow(0, numPages) - `memory.grow` instruction
-* * __trap() - `unreachable` instruction
+    * __memorySize() - `memory.size` instruction
+    * __memoryGrow(0, numPages) - `memory.grow` instruction
+    * __trap() - `unreachable` instruction
 
 ## TODO
 
@@ -146,7 +146,7 @@ let a = 0;
     1. [x] every expr needs a return type!
     1. [ ] functions decls are exprs, not statements
     1. [ ] Infer return types
-    1. [ ] Handle `never` properly
+    1. [ ] Handle `never` properly - i.e. complain about dead code
     1. [x] do proper auto-widening. means you can widen anything to unknown. Needed for templates, I think. 
         1. [x] means subsuming the number code, which is probably a good thing
     1. [ ] typescript-style const types, where a = 0 means typeof a == 0
@@ -213,6 +213,9 @@ let a = 0;
     1. [x] there is an i32 type, an i64 type and an 164 type; the compiler auto promotes i32 to the other two types
     1. [ ] colors are a special type
 1. imports, exports
-  1. imports need to be rolled into the function index map
-  1. write a linker (!)
-  1. write an export format equiv to ts.d
+    1. imports need to be rolled into the function index map
+    1. write a linker (!)
+    1. write an export format equiv to ts.d
+1. tool chain
+    1. [ ] npm 
+    1. [ ] binaryen optimiser

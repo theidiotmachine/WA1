@@ -10,7 +10,6 @@ pub use errs::Error;
 pub use types::Type;
 
 struct Context{
-    pub prev_type: Type,
     pub errors: Vec<Error>,
 }
 
@@ -107,8 +106,10 @@ fn transform_typed_expr(
     local_var_map: &HashMap<String, u32>,
     func_map: &HashMap<String, u32>,
     context: &mut Context,
+    consume_result: bool,
 ) -> Vec<Instruction> {
     let mut vi: Vec<Instruction> = vec![];
+    let mut nop = false;
     
     match &typed_expr.expr {
         Expr::FloatLiteral(v) => {
@@ -144,8 +145,8 @@ fn transform_typed_expr(
         },
 
         Expr::BinaryOperator(bo) => {
-            vi.append(&mut transform_typed_expr(&bo.lhs, global_var_map, local_var_map, func_map, context));
-            vi.append(&mut transform_typed_expr(&bo.rhs, global_var_map, local_var_map, func_map, context));
+            vi.append(&mut transform_typed_expr(&bo.lhs, global_var_map, local_var_map, func_map, context, true));
+            vi.append(&mut transform_typed_expr(&bo.rhs, global_var_map, local_var_map, func_map, context, true));
 
             match bo.lhs.r#type {
                 Type::Number => {
@@ -308,7 +309,7 @@ fn transform_typed_expr(
         },
 
         Expr::UnaryOperator(uo) => {
-            vi.append(&mut transform_typed_expr(&uo.expr, global_var_map, local_var_map, func_map, context));
+            vi.append(&mut transform_typed_expr(&uo.expr, global_var_map, local_var_map, func_map, context, true));
 
             match uo.expr.r#type {
                 Type::Int => {
@@ -361,7 +362,7 @@ fn transform_typed_expr(
         }
 
         Expr::Parens(p) => {
-            vi.append(&mut transform_typed_expr(&p, global_var_map, local_var_map, func_map, context))
+            vi.append(&mut transform_typed_expr(&p, global_var_map, local_var_map, func_map, context, consume_result))
         },
 
         Expr::BoolLiteral(b) => {
@@ -374,11 +375,11 @@ fn transform_typed_expr(
 
         Expr::Assignment(l_value, op, r_value) => {
             if *op == AssignmentOperator::Assign {
-                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, context));
+                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, context, true));
                 vi.append(&mut transform_lvalue_tee(l_value, global_var_map, local_var_map, context));
             } else {
                 vi.append(&mut transform_lvalue_get(l_value, global_var_map, local_var_map, context));
-                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, context));
+                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, context, true));
 
                 match &l_value.r#type {
                     //number *= ?
@@ -449,11 +450,8 @@ fn transform_typed_expr(
         },
 
         Expr::StaticFuncCall(name, args) => {
-            if context.prev_type != Type::RealVoid {
-                vi.push(Instruction::Drop);
-            };
             for arg in args {
-                vi.append(&mut transform_typed_expr(&arg, global_var_map, local_var_map, func_map, context));
+                vi.append(&mut transform_typed_expr(&arg, global_var_map, local_var_map, func_map, context, true));
             }
 
             let o_func_id = func_map.get(name);
@@ -465,12 +463,12 @@ fn transform_typed_expr(
         },
 
         Expr::IntToNumber(p) => {
-            vi.append(&mut transform_typed_expr(&p, global_var_map, local_var_map, func_map, context));
+            vi.append(&mut transform_typed_expr(&p, global_var_map, local_var_map, func_map, context, true));
             vi.push(Instruction::F64ConvertSI32);
         },
 
         Expr::IntToBigInt(p) => {
-            vi.append(&mut transform_typed_expr(&p, global_var_map, local_var_map, func_map, context));
+            vi.append(&mut transform_typed_expr(&p, global_var_map, local_var_map, func_map, context, true));
             vi.push(Instruction::I64ExtendSI32);
         },
 
@@ -478,79 +476,55 @@ fn transform_typed_expr(
             match &**bo_expr {
                 None => vi.push(Instruction::Return),
                 Some(expr) => {
-                    vi.append(&mut transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context));
+                    vi.append(&mut transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context, true));
                     vi.push(Instruction::Return);
                 }
             }
         },
 
         Expr::Break => {
-            if context.prev_type != Type::RealVoid {
-                vi.push(Instruction::Drop);
-            };
             vi.push(Instruction::Br(1))
         },
 
         Expr::Continue => {
-            if context.prev_type != Type::RealVoid {
-                vi.push(Instruction::Drop);
-            };
             vi.push(Instruction::Br(0))
         },
 
         Expr::IfThen(c, t) => {
-            if context.prev_type != Type::RealVoid {
-                vi.push(Instruction::Drop);
-            };
-            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, func_map, context);
+            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, func_map, context, true);
             vi.append(&mut this_vi);
             
             vi.push(Instruction::If(BlockType::NoResult));
-            context.prev_type = Type::RealVoid;
 
-            let mut this_vi: Vec<Instruction> = transform_typed_expr(&**t, global_var_map, local_var_map, func_map, context);
+            let mut this_vi: Vec<Instruction> = transform_typed_expr(&**t, global_var_map, local_var_map, func_map, context, false);
             vi.append(&mut this_vi);
-
-            //an if-then block never returns a value, so we have to drop whatever came out of the last thing.
-            if context.prev_type != Type::RealVoid {
-                vi.push(Instruction::Drop);
-                context.prev_type = Type::RealVoid;
-            }
 
             vi.push(Instruction::End);
         },
 
         Expr::IfThenElse(c, t, e) => {
-            if context.prev_type != Type::RealVoid {
-                vi.push(Instruction::Drop);
-            };
-            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, func_map, context);
+            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, func_map, context, true);
             vi.append(&mut this_vi);
             
             vi.push(Instruction::If(get_ir_block_type(&typed_expr.r#type)));
-            context.prev_type = Type::RealVoid;
 
-            let mut this_vi: Vec<Instruction> = transform_typed_expr(&**t, global_var_map, local_var_map, func_map, context);
+            let mut this_vi: Vec<Instruction> = transform_typed_expr(&**t, global_var_map, local_var_map, func_map, context, consume_result);
             vi.append(&mut this_vi);
             vi.push(Instruction::Else);
-            context.prev_type = Type::RealVoid;
 
-            let mut this_vi: Vec<Instruction> = transform_typed_expr(&**e, global_var_map, local_var_map, func_map, context);
+            let mut this_vi: Vec<Instruction> = transform_typed_expr(&**e, global_var_map, local_var_map, func_map, context, consume_result);
             vi.append(&mut this_vi);            
             vi.push(Instruction::End);
         },
 
         Expr::While(c, b) => {
-            if context.prev_type != Type::RealVoid {
-                vi.push(Instruction::Drop);
-            };
             // a br of 1 will be break
             vi.push(Instruction::Block(BlockType::NoResult));
 
             // a br of 0 will be continue
             vi.push(Instruction::Loop(BlockType::NoResult));
 
-            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, func_map, context);
+            let mut this_vi = transform_typed_expr(&c, global_var_map, local_var_map, func_map, context, true);
             vi.append(&mut this_vi);
             
             // if the condition failed, we bail
@@ -558,17 +532,10 @@ fn transform_typed_expr(
             // instruction really
             vi.push(Instruction::I32Eqz);
             vi.push(Instruction::BrIf(1));
-            context.prev_type = Type::RealVoid;
 
             //run the body
-            let mut this_vi: Vec<Instruction> = transform_typed_expr(&**b, global_var_map, local_var_map, func_map, context);
+            let mut this_vi: Vec<Instruction> = transform_typed_expr(&**b, global_var_map, local_var_map, func_map, context, false);
             vi.append(&mut this_vi);
-
-            //a while loop never returns a value, so we have to drop whatever came out of the last thing.
-            if context.prev_type != Type::RealVoid {
-                vi.push(Instruction::Drop);
-                context.prev_type = Type::RealVoid;
-            }
 
             // jump back to the start of the loop
             vi.push(Instruction::Br(0));
@@ -578,13 +545,10 @@ fn transform_typed_expr(
         },
 
         Expr::VariableDecl(v) => {
-            if context.prev_type != Type::RealVoid {
-                vi.push(Instruction::Drop);
-            };
             //first,  run the init expression
             match &v.init {
                 Some(expr) => {
-                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context);
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context, true);
                     vi.append(& mut this_vi);
                     //then set the variable
                     let o_idx = local_var_map.get(&v.internal_name);
@@ -598,13 +562,10 @@ fn transform_typed_expr(
         },
 
         Expr::GlobalVariableDecl(v) => {
-            if context.prev_type != Type::RealVoid {
-                vi.push(Instruction::Drop);
-            };
             //first,  run the init expression
             match &v.init {
                 Some(expr) => {
-                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context);
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context, true);
                     vi.append(& mut this_vi);
                     //then set the variable
                     let o_idx = global_var_map.get(&v.name);
@@ -618,10 +579,14 @@ fn transform_typed_expr(
         },
 
         Expr::Block(b) => {
+            let mut i = b.len();
             for elem in b {
-                let mut this_vi = transform_typed_expr(&elem, global_var_map, local_var_map, func_map, context);
+                i -= 1;
+                let mut this_vi = transform_typed_expr(&elem, global_var_map, local_var_map, func_map, context, i == 0 && consume_result);
                 vi.append(& mut this_vi);
             }
+            //this is a horrible hack to stop a double drop
+            nop = true;
         },
 
         Expr::Intrinsic(i) => {
@@ -630,7 +595,7 @@ fn transform_typed_expr(
                     vi.push(Instruction::CurrentMemory(0));
                 },
                 Intrinsic::MemoryGrow(sz_expr) => {
-                    let mut this_vi = transform_typed_expr(&sz_expr, global_var_map, local_var_map, func_map, context);
+                    let mut this_vi = transform_typed_expr(&sz_expr, global_var_map, local_var_map, func_map, context, true);
                     vi.append(& mut this_vi);
                     vi.push(Instruction::GrowMemory(0));
                 },
@@ -644,36 +609,25 @@ fn transform_typed_expr(
             if fd.closure.len() > 0 {
                 context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("closure")));
             }
+            //kinda wrong for the moment, but
+            nop = true;
         },
 
         Expr::FreeTypeWiden(t) => {
-            let mut this_vi = transform_typed_expr(&t, global_var_map, local_var_map, func_map, context);
+            let mut this_vi = transform_typed_expr(&t, global_var_map, local_var_map, func_map, context, true);
             vi.append(& mut this_vi);
         },
 
         Expr::StructDecl(_) => {
             //all done at compile time
+            nop = true;
         },
 
         _ => { context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))); },
     };
 
-    context.prev_type = typed_expr.r#type.clone();
-
-    vi
-}
-
-fn transform_exprs(stmts: &Vec<TypedExpr>, 
-    global_var_map: &HashMap<String, u32>,
-    local_var_map: &HashMap<String, u32>,
-    func_map: &HashMap<String, u32>,
-    context: &mut Context
-)-> Vec<Instruction> {
-    let mut vi: Vec<Instruction> = vec![];
-    
-    for stmt in stmts {
-        let mut this_vi = transform_typed_expr(stmt, global_var_map, local_var_map, func_map, context);
-        vi.append(&mut this_vi);
+    if !consume_result && typed_expr.r#type != Type::RealVoid && !nop{
+        vi.push(Instruction::Drop);
     }
 
     vi
@@ -704,10 +658,9 @@ fn transform_func(func: &Func,
     let fbb = fb.body();
     let fbb = fbb.with_locals(locals);
 
-    context.prev_type = Type::RealVoid;
-
-    let mut vi: Vec<Instruction> = transform_exprs(&func.body, global_var_map, &func.local_var_map, func_map, context);
-    
+    let consume_result = func.return_type != Type::RealVoid;
+    let mut vi = transform_typed_expr(&func.body, global_var_map, &func.local_var_map, func_map, context, consume_result);
+        
     vi.push(Instruction::End);
     let fbb = fbb.with_instructions(Instructions::new(vi));
 
@@ -725,7 +678,8 @@ fn transform_func(func: &Func,
 pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
     let mut m = module();
 
-    //let mut global_builder = m.global();
+    m = m.memory().with_min(1).build();
+
     for g in program.globals {
         let vt = get_ir_value_type(&g.r#type);
         let instruction = match vt {
@@ -735,13 +689,11 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
             ValueType::I64 => Instruction::I64Const(0),
         };
 
-        //global_builder = global_builder.with_type(vt).build();
         m = m.with_global(GlobalEntry::new(GlobalType::new(vt, true), InitExpr::new(vec![instruction, Instruction::End])));
     }
 
     let mut context = Context{
         errors: vec![],
-        prev_type: Type::RealVoid,
     };
     for func in &program.funcs {
         if !func.import {

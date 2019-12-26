@@ -2,7 +2,6 @@ export function addd(x: number, y: number): number {
     x + y;
 }
 
-
 export function negMax(x: number, y: number): number {
     let b = true;
     if(b && x > y)
@@ -26,14 +25,13 @@ export function bang(x: number): number {
     out;
 }
 
-function mul(x: number, y: number): number {
-    x * y;
-}
+//test of non block function. The syntax is pretty weird
+function mul(x: number, y: number): number x * y;
 
+//test of function call
 export function fourTimes(x: number): number{
     mul(x, 2) * 2;
 }
-
 
 export function mul3(x: number, y: number, z: number): number {
     return x * y * z;
@@ -42,4 +40,3 @@ export function mul3(x: number, y: number, z: number): number {
 export function idNumber(x:  number): number {
     x;
 }
-
