@@ -304,14 +304,12 @@ pub enum Expr {
     IntToNumber(Box<TypedExpr>),
     /// Implicit i32 -> i64 cast
     IntToBigInt(Box<TypedExpr>),
-    /// A type widen that has no runtime cost
+    /// A type widen that has no runtime cost. Used to make the types of the AST correct
     FreeTypeWiden(Box<TypedExpr>),
-
+    /// a block of code. In code, either a set of statements surrounded by squigglies, or a single statement
     Block(Vec<TypedExpr>),
-
     /// if-then-else
     IfThenElse(Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>),
-
     /// a function declaration. This might compile to a closure creation, a function pointer, or a no op 
     /// this is wrong - in JS this is an expression
     FuncDecl(FuncDecl),
@@ -325,15 +323,18 @@ pub enum Expr {
     IfThen(Box<TypedExpr>, Box<TypedExpr>),
     /// while loop
     While(Box<TypedExpr>, Box<TypedExpr>),
-    // class decl
+    /// class decl
     ClassDecl(String),
-    // class decl
+    /// __struct declaration
     StructDecl(String),
     /// break
     Break,
     /// continue
     Continue,
-    Intrinsic(Intrinsic)
+    /// A single wasm instruction. 
+    Intrinsic(Intrinsic),
+    /// Member of a thing, such as a.b
+    NamedMember(Box<TypedExpr>, String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -368,6 +369,19 @@ impl TypedExpr{
                     Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::ClosureVariableAssign(name.clone()), loc: self.loc})
                 }
             },
+            Expr::NamedMember(lhs, name) => {
+                if self.is_const {
+                    None
+                } else {
+                    let o_lhs = lhs.as_l_value();
+                    match o_lhs {
+                        None => None,
+                        Some(lhs_lhs) => {
+                            Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(Box::new(lhs_lhs), name.clone()), loc: self.loc})
+                        }
+                    }
+                }
+            },
             _ => None,
         }
     }
@@ -383,9 +397,9 @@ pub enum LValueExpr{
     //Assign a closure variable
     ClosureVariableAssign(String),
     //Assign a static named member of some data, so e.g. a.b
-    StaticNamedMemberAssign(Box<LValueExpr>, String),
+    StaticNamedMemberAssign(Box<TypedLValueExpr>, String),
     //Assign a static numeric member of some data, so e.g. a[2]
-    StaticU32MemberAssign(Box<LValueExpr>, u32),
+    StaticU32MemberAssign(Box<TypedLValueExpr>, u32),
 }
 
 

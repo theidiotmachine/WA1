@@ -26,12 +26,6 @@ macro_rules! assert_punct {
     )
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum UserType{
-    Class(ClassType),
-    Struct(StructType)
-}
-
 #[derive(Debug)]
 struct ParserContext {
     pub globals: Vec<GlobalVariableDecl>,

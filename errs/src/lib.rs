@@ -28,6 +28,8 @@ pub enum Error {
     NotInLoop(String),
     TypeFailureIf(Type, Type),
     WhileMayNotReturn,
+    NoComponents(SourceLocation),
+    NoComponent(SourceLocation, String),
 }
 
 impl Display for Error {
@@ -36,18 +38,18 @@ impl Display for Error {
             Error::UnexpectedToken(ref loc, ref msg) => write!(f, "ERROR {}: unexpected token {}", loc, msg),
             Error::UnexpectedEoF(ref msg) => write!(f, "Unexpectedly found the end of the file: {}", msg),
             Error::ParseAfterEoF => write!(f, "Parser attempted to get the next token after finding the end of the file"),
-            Error::InvalidTypeName(ref pos, ref msg) => write!(f, "ERROR {}: Invalid type name {}", pos, msg),
-            Error::InvalidType(ref pos) => write!(f, "Invalid type, {}", pos),
+            Error::InvalidTypeName(ref loc, ref msg) => write!(f, "ERROR {}: Invalid type name {}", loc, msg),
+            Error::InvalidType(ref loc) => write!(f, "Invalid type, {}", loc),
             Error::Other(ref msg) => write!(f, "{}", msg),
-            Error::NotYetImplemented(ref pos, ref msg) => write!(f, "ERROR {}: not yet implemented: {}", pos, msg),
+            Error::NotYetImplemented(ref loc, ref msg) => write!(f, "ERROR {}: not yet implemented: {}", loc, msg),
             Error::VariableNotRecognised(ref var_name) => write!(f, "Var not recognised: {}", var_name),
             Error::FuncNotRecognised(ref func_name) => write!(f, "Func not recognised: {}", func_name),
             Error::TypeFailureUnaryOperator => write!(f, "Type failure unary operator"),
-            Error::TypeFailureBinaryOperator(ref pos, ref lhs_type, ref rhs_type) => 
-                write!(f, "ERROR {}: can't make type of lhs ({}) and rhs ({}) of binary operator agree", pos, lhs_type, rhs_type),
-            Error::TypeFailureVariableCreation(ref pos) => write!(f, "ERROR {}: initialiser type doesn't match variable type", pos),
-            Error::TypeFailure(ref pos, ref wanted, ref got) => write!(f, "ERROR {}: expecting expression of type {}, found {}", pos, wanted, got),
-            Error::NoValueReturned(ref pos) => write!(f, "ERROR {}: must return a value", pos),
+            Error::TypeFailureBinaryOperator(ref loc, ref lhs_type, ref rhs_type) => 
+                write!(f, "ERROR {}: can't make type of lhs ({}) and rhs ({}) of binary operator agree", loc, lhs_type, rhs_type),
+            Error::TypeFailureVariableCreation(ref loc) => write!(f, "ERROR {}: initialiser type doesn't match variable type", loc),
+            Error::TypeFailure(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: expecting expression of type {}, found {}", loc, wanted, got),
+            Error::NoValueReturned(ref loc) => write!(f, "ERROR {}: must return a value", loc),
             Error::TypeFailureReturn(ref wanted, ref got) => write!(f, "Expecting return value of type {}, found {}", wanted, got),
             Error::NotAnLValue => write!(f, "Expression is not a l value"),
             Error::ConstFailure => write!(f, "Expression is const and may not be assigned to"),
@@ -58,6 +60,8 @@ impl Display for Error {
             Error::NotInLoop(what) => write!(f, "Used loop keyword outside a loop: {}", what),
             Error::TypeFailureIf(then_type, else_type) => write!(f, "Branches of if staement to not match: {}, {}", then_type, else_type),
             Error::WhileMayNotReturn => write!(f, "while loops may not have a return value"),
+            Error::NoComponents(ref loc) => write!(f, "ERROR {}: object has no components", loc),
+            Error::NoComponent(ref loc, ref c) => write!(f, "ERROR {}: object has no component {}", loc, c),
         }
     }
 }

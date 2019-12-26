@@ -9,20 +9,22 @@ use std::collections::HashMap;
 pub use errs::Error;
 pub use types::Type;
 
+use crate::wasm_types::get_ir_value_type;
+use crate::mem::*;
+
 struct Context{
     pub errors: Vec<Error>,
+    pub mem_layout_map: HashMap<String, UserMemLayout>,
 }
 
-fn get_ir_value_type(r#type: &Type) -> ValueType {
-    match r#type {
-        Type::Number => ValueType::F64,
-        Type::Int => ValueType::I32,
-        Type::BigInt => ValueType::I64,
-        //if we end up at runtime generating such an argument, just pass an empty int and be done. It's probably a generic.
-        Type::FakeVoid => ValueType::I32, 
-        Type::Boolean => ValueType::I32,
-        Type::Ptr(_) => ValueType::I32,
-        _ => panic!()
+fn stupid_log2(x: u32) -> u32 {
+    //I am ashamed to say I have no idea how to do this properly in Rust
+    match x {
+        16 => 4,
+        8 => 3,
+        4 => 2,
+        2 => 1,
+        _ => panic!(),
     }
 }
 
@@ -37,6 +39,48 @@ fn get_ir_block_type(r#type: &Type) -> BlockType {
     match r#type {
         Type::RealVoid => BlockType::NoResult,
         _ => BlockType::Value(get_ir_value_type(r#type))
+    }
+}
+
+fn transform_struct_member_get(
+    type_name: &String,
+    member_name: &String,
+    vi: &mut Vec<Instruction>,
+    context: &mut Context
+) -> () {
+    let mem_layout = context.mem_layout_map.get(type_name).unwrap();
+    match mem_layout {
+        UserMemLayout::Struct(struct_mem_layout) => {
+            let mem_layout_elem = struct_mem_layout.members.get(member_name).unwrap();
+            let align = stupid_log2(mem_layout_elem.align);
+            match mem_layout_elem.value_type {
+                ValueType::I32 => vi.push(Instruction::I32Load(align, mem_layout_elem.offset)),
+                ValueType::I64 => vi.push(Instruction::I64Load(align, mem_layout_elem.offset)),
+                ValueType::F32 => vi.push(Instruction::F32Load(align, mem_layout_elem.offset)),
+                ValueType::F64 => vi.push(Instruction::F64Load(align, mem_layout_elem.offset)),
+            }
+        },
+    }
+}
+
+fn transform_struct_member_set(
+    type_name: &String,
+    member_name: &String,
+    vi: &mut Vec<Instruction>,
+    context: &mut Context
+) -> () {
+    let mem_layout = context.mem_layout_map.get(type_name).unwrap();
+    match mem_layout {
+        UserMemLayout::Struct(struct_mem_layout) => {
+            let mem_layout_elem = struct_mem_layout.members.get(member_name).unwrap();
+            let align = stupid_log2(mem_layout_elem.align);
+            match mem_layout_elem.value_type {
+                ValueType::I32 => vi.push(Instruction::I32Store(align, mem_layout_elem.offset)),
+                ValueType::I64 => vi.push(Instruction::I64Store(align, mem_layout_elem.offset)),
+                ValueType::F32 => vi.push(Instruction::F32Store(align, mem_layout_elem.offset)),
+                ValueType::F64 => vi.push(Instruction::F64Store(align, mem_layout_elem.offset)),
+            }
+        },
     }
 }
 
@@ -66,36 +110,73 @@ fn transform_lvalue_get(
                 }
             }
         },
+
+        LValueExpr::StaticNamedMemberAssign(inner_l_value, member_name) => {
+            let mut vi: Vec<Instruction> = vec![];
+            vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
+
+            match &inner_l_value.r#type {
+                Type::UserStruct{name: type_name} => {
+                    transform_struct_member_get(type_name, member_name, &mut vi, context);
+                },
+                _ => context.errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from(format!("expr{:#?}", l_value)))),
+            }
+
+            vi
+        },
+
         _ => { context.errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from("lvalue get"))); vec![] }
     }
 }
 
 fn transform_lvalue_tee(
     l_value: &TypedLValueExpr,
+    r_value_code: &mut Vec<Instruction>,
     global_var_map: &HashMap<String, u32>,
     local_var_map: &HashMap<String, u32>,
     context: &mut Context
 ) -> Vec<Instruction> {
+    let mut vi: Vec<Instruction> = vec![];
     match &l_value.expr {
         LValueExpr::GlobalVariableAssign(name) => {
+            vi.append(r_value_code);
             let o_idx = global_var_map.get(name);
             match o_idx {
-                None => { context.errors.push(Error::VariableNotRecognised(name.clone())); vec![] },
+                None => { context.errors.push(Error::VariableNotRecognised(name.clone())); },
                 Some(idx) => {
-                    vec![Instruction::SetGlobal(*idx), Instruction::GetGlobal(*idx)]
+                    vi.push(Instruction::SetGlobal(*idx));
+                    vi.push(Instruction::GetGlobal(*idx));
                 }
-            }
+            };
+            vi
         },
 
         LValueExpr::LocalVariableAssign(name) => {
+            vi.append(r_value_code);
             let o_idx = local_var_map.get(name);
             match o_idx {
-                None => { context.errors.push(Error::VariableNotRecognised(name.clone())); vec![] },
+                None => { context.errors.push(Error::VariableNotRecognised(name.clone())); },
                 Some(idx) => {
-                    vec![Instruction::TeeLocal(*idx)]
+                    vi.push(Instruction::TeeLocal(*idx))
                 }
-            }
+            };
+            vi
         },
+
+        LValueExpr::StaticNamedMemberAssign(inner_l_value, member_name) => {
+            let mut vi: Vec<Instruction> = vec![];
+            vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
+            vi.append(r_value_code);
+            match &inner_l_value.r#type {
+                Type::UserStruct{name: type_name} => {
+                    transform_struct_member_set(type_name, member_name, &mut vi, context);
+                },
+                _ => context.errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from(format!("expr{:#?}", l_value)))),
+            }
+
+            vi
+        },
+
         _ => { context.errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from("lvalue get"))); vec![] }
     }
 }
@@ -375,20 +456,20 @@ fn transform_typed_expr(
 
         Expr::Assignment(l_value, op, r_value) => {
             if *op == AssignmentOperator::Assign {
-                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, context, true));
-                vi.append(&mut transform_lvalue_tee(l_value, global_var_map, local_var_map, context));
+                let mut r_value_code = transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, context, true);
+                vi.append(&mut transform_lvalue_tee(l_value, &mut r_value_code, global_var_map, local_var_map, context));
             } else {
-                vi.append(&mut transform_lvalue_get(l_value, global_var_map, local_var_map, context));
-                vi.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, context, true));
-
+                let mut r_value_code = transform_lvalue_get(l_value, global_var_map, local_var_map, context);
+                r_value_code.append(&mut transform_typed_expr(&r_value, global_var_map, local_var_map, func_map, context, true));
+                
                 match &l_value.r#type {
                     //number *= ?
                     Type::Number => {
                         match op {
-                            AssignmentOperator::MinusAssign => vi.push(Instruction::F64Sub),
-                            AssignmentOperator::PlusAssign => vi.push(Instruction::F64Add),
-                            AssignmentOperator::MultiplyAssign => vi.push(Instruction::F64Mul),
-                            AssignmentOperator::DivideAssign => vi.push(Instruction::F64Div),
+                            AssignmentOperator::MinusAssign => r_value_code.push(Instruction::F64Sub),
+                            AssignmentOperator::PlusAssign => r_value_code.push(Instruction::F64Add),
+                            AssignmentOperator::MultiplyAssign => r_value_code.push(Instruction::F64Mul),
+                            AssignmentOperator::DivideAssign => r_value_code.push(Instruction::F64Div),
                             _ => {
                                 context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
                             }
@@ -397,13 +478,13 @@ fn transform_typed_expr(
 
                     Type::Int => {
                         match op {
-                            AssignmentOperator::MinusAssign => vi.push(Instruction::I32Sub),
-                            AssignmentOperator::PlusAssign => vi.push(Instruction::I32Add),
-                            AssignmentOperator::MultiplyAssign => vi.push(Instruction::I32Mul),
-                            AssignmentOperator::DivideAssign => vi.push(Instruction::I32DivS),
-                            AssignmentOperator::BitAndAssign => vi.push(Instruction::I32And),
-                            AssignmentOperator::BitOrAssign => vi.push(Instruction::I32Or),
-                            AssignmentOperator::BitXorAssign => vi.push(Instruction::I32Xor),
+                            AssignmentOperator::MinusAssign => r_value_code.push(Instruction::I32Sub),
+                            AssignmentOperator::PlusAssign => r_value_code.push(Instruction::I32Add),
+                            AssignmentOperator::MultiplyAssign => r_value_code.push(Instruction::I32Mul),
+                            AssignmentOperator::DivideAssign => r_value_code.push(Instruction::I32DivS),
+                            AssignmentOperator::BitAndAssign => r_value_code.push(Instruction::I32And),
+                            AssignmentOperator::BitOrAssign => r_value_code.push(Instruction::I32Or),
+                            AssignmentOperator::BitXorAssign => r_value_code.push(Instruction::I32Xor),
                             _ => {
                                 context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
                             }
@@ -412,13 +493,13 @@ fn transform_typed_expr(
 
                     Type::BigInt => {
                         match op {
-                            AssignmentOperator::MinusAssign => vi.push(Instruction::I64Sub),
-                            AssignmentOperator::PlusAssign => vi.push(Instruction::I64Add),
-                            AssignmentOperator::MultiplyAssign => vi.push(Instruction::I64Mul),
-                            AssignmentOperator::DivideAssign => vi.push(Instruction::I64DivS),
-                            AssignmentOperator::BitAndAssign => vi.push(Instruction::I64And),
-                            AssignmentOperator::BitOrAssign => vi.push(Instruction::I64Or),
-                            AssignmentOperator::BitXorAssign => vi.push(Instruction::I64Xor),
+                            AssignmentOperator::MinusAssign => r_value_code.push(Instruction::I64Sub),
+                            AssignmentOperator::PlusAssign => r_value_code.push(Instruction::I64Add),
+                            AssignmentOperator::MultiplyAssign => r_value_code.push(Instruction::I64Mul),
+                            AssignmentOperator::DivideAssign => r_value_code.push(Instruction::I64DivS),
+                            AssignmentOperator::BitAndAssign => r_value_code.push(Instruction::I64And),
+                            AssignmentOperator::BitOrAssign => r_value_code.push(Instruction::I64Or),
+                            AssignmentOperator::BitXorAssign => r_value_code.push(Instruction::I64Xor),
                             _ => {
                                 context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
                             }
@@ -427,13 +508,13 @@ fn transform_typed_expr(
 
                     Type::Ptr(_) => {
                         match op {
-                            AssignmentOperator::MinusAssign => vi.push(Instruction::I32Sub),
-                            AssignmentOperator::PlusAssign => vi.push(Instruction::I32Add),
-                            AssignmentOperator::MultiplyAssign => vi.push(Instruction::I32Mul),
-                            AssignmentOperator::DivideAssign => vi.push(Instruction::I32DivU),
-                            AssignmentOperator::BitAndAssign => vi.push(Instruction::I32And),
-                            AssignmentOperator::BitOrAssign => vi.push(Instruction::I32Or),
-                            AssignmentOperator::BitXorAssign => vi.push(Instruction::I32Xor),
+                            AssignmentOperator::MinusAssign => r_value_code.push(Instruction::I32Sub),
+                            AssignmentOperator::PlusAssign => r_value_code.push(Instruction::I32Add),
+                            AssignmentOperator::MultiplyAssign => r_value_code.push(Instruction::I32Mul),
+                            AssignmentOperator::DivideAssign => r_value_code.push(Instruction::I32DivU),
+                            AssignmentOperator::BitAndAssign => r_value_code.push(Instruction::I32And),
+                            AssignmentOperator::BitOrAssign => r_value_code.push(Instruction::I32Or),
+                            AssignmentOperator::BitXorAssign => r_value_code.push(Instruction::I32Xor),
                             _ => {
                                 context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("assignment operator")))
                             }
@@ -445,7 +526,7 @@ fn transform_typed_expr(
                     }
                 }
                 
-                vi.append(&mut transform_lvalue_tee(l_value, global_var_map, local_var_map, context));
+                vi.append(&mut transform_lvalue_tee(l_value, &mut r_value_code, global_var_map, local_var_map, context));
             }
         },
 
@@ -623,6 +704,18 @@ fn transform_typed_expr(
             nop = true;
         },
 
+        Expr::NamedMember(lhs, member_name) => {
+            let mut this_vi = transform_typed_expr(&lhs, global_var_map, local_var_map, func_map, context, true);
+            vi.append(& mut this_vi);
+
+            match &lhs.r#type {
+                Type::UserStruct{name: type_name} => {
+                    transform_struct_member_get(type_name, member_name, &mut vi, context);
+                },
+                _ => context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))),
+            }
+        },
+
         _ => { context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))); },
     };
 
@@ -694,7 +787,9 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
 
     let mut context = Context{
         errors: vec![],
+        mem_layout_map: generate_mem_layout_map(&program.type_map),
     };
+
     for func in &program.funcs {
         if !func.import {
             m.push_function(transform_func(func, &program.start, &program.global_var_map, &program.func_map, &mut context));

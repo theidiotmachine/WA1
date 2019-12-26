@@ -58,12 +58,16 @@ fn main() {
     }
                     
     let result = func.borrow().call(&args_to_pass).expect("success");
-    match result[0]{
-        Val::F32(n) => println!("Answer f32: {}", n),
-        Val::F64(n) => println!("Answer f64: {}", f64::from_bits(n)),
-        Val::I32(n) => println!("Answer i32: {}", n),
-        Val::I64(n) => println!("Answer i64: {}", n),
-        _ => println!("Unkniwn Answer"),
+    if result.len() > 0 {
+        match result[0]{
+            Val::F32(n) => println!("Answer f32: {}", n),
+            Val::F64(n) => println!("Answer f64: {}", f64::from_bits(n)),
+            Val::I32(n) => println!("Answer i32: {}", n),
+            Val::I64(n) => println!("Answer i64: {}", n),
+            _ => println!("Unknown answer"),
+        }
+    } else {
+        println!("No answer");
     }
                 
     /*

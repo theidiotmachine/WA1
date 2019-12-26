@@ -15,7 +15,6 @@ mod parser_unsafe;
 
 use crate::ParserContext;
 use crate::ParserFuncContext;
-use crate::UserType;
 use crate::Res;
 use crate::assert_punct;
 use crate::assert_ok;
@@ -349,7 +348,9 @@ impl<'b> Parser<'b> {
         let mut parser_context = ParserContext::new();
         self.parse_internal(&mut parser_context);
         if parser_context.errors.is_empty() {
-            Ok(Program {start: String::from("__start"), globals: parser_context.globals, funcs: parser_context.funcs, global_var_map: parser_context.global_var_map, func_map: parser_context.func_map})
+            Ok(Program{start: String::from("__start"), globals: parser_context.globals, 
+                funcs: parser_context.funcs, global_var_map: parser_context.global_var_map, func_map: parser_context.func_map, type_map: parser_context.type_map
+            })
         } else {
             Err(parser_context.errors)
         }
@@ -1386,9 +1387,47 @@ impl<'b> Parser<'b> {
         }
     }
 
-    fn parse_component(&mut self, id: String) -> Res<TypedExpr> {
+    fn parse_struct_component(&mut self,
+        lhs: &TypedExpr,
+        struct_type: &StructType,
+    ) -> Res<TypedExpr> {
         let next_item = self.next_item();
-        return Err(Error::NotYetImplemented(next_item.unwrap().location, "dot component".to_string()));
+        assert_ok!(next_item);
+        let next_loc = next_item.location.clone();
+
+        let id = assert_ident!(next_item, "Expecting __struct component to be an identifier");
+        let component = id.to_string();
+        let o_mem = struct_type.members.iter().find(|x| x.name == component);
+        match o_mem {
+            None => Err(Error::NoComponent(next_loc, component.clone())),
+            Some(mem) => {
+                Ok(TypedExpr{
+                    expr: Expr::NamedMember(Box::new(lhs.clone()), component),
+                    r#type: mem.r#type.clone(),
+                    is_const: lhs.is_const,
+                    loc: SourceLocation::new(lhs.loc.start.clone(), next_loc.end.clone())
+                })
+            }
+        }
+    }
+
+    fn parse_component(&mut self, 
+        lhs: &TypedExpr,
+        parser_context: &mut ParserContext,
+    ) -> Res<TypedExpr> {
+        assert_punct!(self, Punct::Period);
+        let lhs_type = &lhs.r#type;
+
+        match lhs_type {
+            Type::UserStruct{name} => {
+                let tm_entry = parser_context.type_map.get(name).unwrap();
+                match tm_entry {
+                    UserType::Struct(st) => self.parse_struct_component(lhs, &st),
+                    _ => unreachable!()
+                }
+            },
+            _ => Err(Error::NoComponents(lhs.loc.clone()))
+        }
     }
 
     fn parse_paren_expr(&mut self, 
@@ -1544,7 +1583,8 @@ impl<'b> Parser<'b> {
                         match o_outer_type {
                             Some(outer_type) => { 
                                 let loc = SourceLocation::new(expr.loc.start.clone(), lookahead_item.location.end.clone());
-                                expr = TypedExpr{expr: Expr::UnaryOperator(UnaryOperatorApplication{op: op, expr: Box::new(expr.clone())}), r#type: outer_type, is_const: true, loc: loc}; continue 
+                                expr = TypedExpr{expr: Expr::UnaryOperator(UnaryOperatorApplication{op: op, expr: Box::new(expr.clone())}), r#type: outer_type, is_const: true, loc: loc}; 
+                                continue;
                             },
                             None => return Err(Error::TypeFailureUnaryOperator),
                         };
@@ -1570,7 +1610,7 @@ impl<'b> Parser<'b> {
                         
                     },
                     Punct::Period => { 
-                        let new_expr = self.parse_component(id.to_string());
+                        let new_expr = self.parse_component(&expr, parser_context);
                         assert_ok!(new_expr);
                         expr = new_expr;
                         continue;

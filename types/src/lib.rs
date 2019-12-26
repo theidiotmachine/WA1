@@ -13,7 +13,7 @@ pub mod prelude {
     pub use super::Privacy;
     pub use super::get_unary_op_type;
     pub use super::get_binary_op_type_cast;
-    pub use super::AbsTypeDecl;
+    pub use super::AbstractTypeDecl;
     pub use super::PtrAlign;
     pub use super::StructType;
     pub use super::StructMember;
@@ -93,10 +93,10 @@ pub struct StructType{
 /// This is part of the type system rewrite. I am not sure it's correct yet.
 /// This is the body of a type function that consumes type args and returns a type.
 #[derive(Debug, Clone, PartialEq)]
-pub enum AbsTypeBody{
+pub enum AbstractTypeBody{
     VariableUse(String),
-    Array(Box<AbsTypeBody>),
-    Func(Vec<AbsTypeBody>, Box<AbsTypeBody>),
+    Array(Box<AbstractTypeBody>),
+    Func(Vec<AbstractTypeBody>, Box<AbstractTypeBody>),
     UserType,
     Number,
     String,
@@ -111,9 +111,9 @@ pub enum AbsTypeBody{
 /// This is part of the type system rewrite. I am not sure it's correct yet.
 /// This is a type function that conumes type args and returns a type.
 #[derive(Debug, Clone, PartialEq)]
-pub struct AbsTypeDecl{
+pub struct AbstractTypeDecl{
     pub args: Vec<String>,
-    pub out: AbsTypeBody,
+    pub out: AbstractTypeBody,
 }
 
 #[derive(Debug, Clone, PartialEq)]

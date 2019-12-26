@@ -4,6 +4,9 @@ use ast::prelude::*;
 mod transform;
 use transform::transform;
 
+mod mem;
+mod wasm_types;
+
 use parity_wasm::elements::serialize_to_file;
 use std::path::Path;
 
@@ -22,5 +25,5 @@ pub fn write(program: Program, out_file: &String) {
     }
     let string = out_file;
     let from_string = Path::new(&string);
-    serialize_to_file(from_string, module);
+    serialize_to_file(from_string, module).unwrap();
 }

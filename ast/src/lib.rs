@@ -1,15 +1,18 @@
 pub mod expr;
 pub mod func;
 pub mod intrinsic;
+pub mod ast_types;
 
 use expr::GlobalVariableDecl;
 use func::Func;
+use ast_types::UserType;
 use std::collections::HashMap;
 
 pub mod prelude {
     pub use super::func::prelude::*;
     pub use super::expr::prelude::*;
     pub use super::intrinsic::prelude::*;
+    pub use super::ast_types::prelude::*;
     pub use super::Program;
 }
 
@@ -28,4 +31,5 @@ pub struct Program {
     /// name to index map
     pub global_var_map: HashMap<String, u32>,
     pub func_map: HashMap<String, u32>,
+    pub type_map: HashMap<String, UserType>,
 }
