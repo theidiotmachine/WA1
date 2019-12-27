@@ -16,6 +16,7 @@ pub mod prelude {
     pub use super::GlobalVariableDecl;
     pub use super::ClosureRef;
     pub use super::VariableDecl;
+    pub use super::ObjectLiteralElem;
 }
 
 use lazy_static;
@@ -254,7 +255,7 @@ pub struct GlobalVariableDecl {
     pub name: String,
     pub r#type: Type,
     pub constant: bool,
-    pub init: Option<TypedExpr>,
+    pub init: TypedExpr,
     pub export: bool,
 }
 
@@ -263,6 +264,12 @@ pub struct ClosureRef {
     pub internal_name: String,
     pub r#type: Type,
     pub constant: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectLiteralElem{
+    pub name: String,
+    pub value: TypedExpr,
 }
 
 /// Something that returns something. This is really an RValue.
@@ -335,6 +342,8 @@ pub enum Expr {
     Intrinsic(Intrinsic),
     /// Member of a thing, such as a.b
     NamedMember(Box<TypedExpr>, String),
+    /// object literal
+    ObjectLiteral(Vec<ObjectLiteralElem>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

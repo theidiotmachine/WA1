@@ -3,6 +3,7 @@ use cast::get_type_casts_for_function_set;
 use cast::FuncCallTypeCast;
 use cast::TypeCast;
 use cast::try_cast;
+use std::collections::HashMap;
 
 pub mod prelude {
     pub use super::Type;
@@ -165,7 +166,10 @@ pub enum Type {
     Tuple(Vec<Type>),
     
     ///object
-    Object,
+    //Object,
+
+    /// untyped object literal - can be cast to a matching struct or class
+    ObjectLiteral(HashMap<String, Type>),
 
     /// boxed type
     Any,
@@ -239,7 +243,7 @@ impl Display for Type {
                 }
                 write!(f, "[{}]", vec.join(",")) 
             },
-            Type::Object => write!(f, "object"),
+            //Type::Object => write!(f, "object"),
             Type::Any => write!(f, "any"),
             Type::Option(inner) => write!(f, "Option<{}>", inner),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
@@ -253,6 +257,7 @@ impl Display for Type {
             Type::IntLiteral(n) => write!(f, "{}", n),
             Type::BigIntLiteral(n) => write!(f, "{}", n),
             Type::StringLiteral(n) => write!(f, "\"{}\"", n),
+            Type::ObjectLiteral(_) => write!(f, "{{}}"),
         }
     }
 }

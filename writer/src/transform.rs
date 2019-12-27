@@ -644,18 +644,13 @@ fn transform_typed_expr(
 
         Expr::GlobalVariableDecl(v) => {
             //first,  run the init expression
-            match &v.init {
-                Some(expr) => {
-                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context, true);
-                    vi.append(& mut this_vi);
-                    //then set the variable
-                    let o_idx = global_var_map.get(&v.name);
-                    match o_idx {
-                        Some(idx) => vi.push(Instruction::SetGlobal(*idx)),
-                        None => context.errors.push(Error::VariableNotRecognised(v.name.clone())),
-                    };
-                },
-                _ => {}
+            let mut this_vi = transform_typed_expr(&v.init, global_var_map, local_var_map, func_map, context, true);
+            vi.append(& mut this_vi);
+            //then set the variable
+            let o_idx = global_var_map.get(&v.name);
+            match o_idx {
+                Some(idx) => vi.push(Instruction::SetGlobal(*idx)),
+                None => context.errors.push(Error::VariableNotRecognised(v.name.clone())),
             };
         },
 
