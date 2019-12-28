@@ -129,7 +129,9 @@ struct Context<> {
     /// before the next token
     has_line_term: bool,
     /// local variables
-    var_stack: Vec<Scope>,
+    func_var_stack: Vec<Scope>,
+    block_var_stack: Vec<Scope>,
+    
     /// type variables
     type_var_stack: Vec<TypeScope>,
     /// Uniqueness counter
@@ -137,14 +139,18 @@ struct Context<> {
 }
 
 impl Context {
-    fn push_empty_scope(&mut self) {
-        self.var_stack.push(Scope::default());
+    fn push_empty_block_scope(&mut self) {
+        self.block_var_stack.push(Scope::default());
+    }
+
+    fn push_empty_func_scope(&mut self) {
+        self.func_var_stack.push(Scope::default());
     }
 
     fn push_block_scope(&mut self) {
-        let o_head = self.var_stack.last();
+        let o_head = self.block_var_stack.last();
         match o_head {
-            None => self.push_empty_scope(),
+            None => self.push_empty_block_scope(),
             Some(head) => {
                 let mut new_var_names: HashMap<String, ScopedVar> = HashMap::new();
                 
@@ -152,15 +158,18 @@ impl Context {
                     new_var_names.insert(key.clone(), val.clone());
                 }
 
-                self.var_stack.push(Scope{var_names: new_var_names});
+                self.block_var_stack.push(Scope{var_names: new_var_names});
             }
         }
     }
 
     fn push_func_scope(&mut self) {
-        let o_head = self.var_stack.last();
+        let o_head = self.func_var_stack.last();
         match o_head {
-            None => self.push_empty_scope(),
+            None => {
+                self.push_empty_func_scope();
+                self.push_empty_block_scope();
+            },
             Some(head) => {
                 let mut new_var_names: HashMap<String, ScopedVar> = HashMap::new();
                 
@@ -174,27 +183,42 @@ impl Context {
                     new_var_names.insert(key.clone(), new_val);
                 }
 
-                self.var_stack.push(Scope{var_names: new_var_names});
+                self.func_var_stack.push(Scope{var_names: new_var_names.clone()});
+
+                self.block_var_stack.push(Scope{var_names: new_var_names});
             }
         }
     }
 
-    fn pop_scope(&mut self) {
-        self.var_stack.pop();
+    fn pop_block_scope(&mut self) {
+        self.block_var_stack.pop();
     }
 
-    fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: Type, constant: bool,) {
-        let o_head = self.var_stack.last_mut();
+    fn pop_func_scope(&mut self) {
+        self.block_var_stack.pop();
+        self.func_var_stack.pop();
+    }
+
+    fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: &Type, constant: bool,) {
+        let o_head = self.func_var_stack.last_mut();
         match o_head {
             None => panic!(),
             Some(head) => {
-                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type, constant: constant});
+                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant});
+            }
+        }
+
+        let o_head = self.block_var_stack.last_mut();
+        match o_head {
+            None => panic!(),
+            Some(head) => {
+                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant});
             }
         }
     }
 
     fn get_scoped_var(&mut self, var_name: &String) -> Option<&ScopedVar> {
-        match self.var_stack.last() {
+        match self.block_var_stack.last() {
             None => None,
             Some(s) => {
                 s.var_names.get(var_name)
@@ -243,7 +267,8 @@ impl<> Default for Context<> {
         Self {
             in_iteration: false,
             has_line_term: false,
-            var_stack: Vec::new(),
+            block_var_stack: Vec::new(),
+            func_var_stack: Vec::new(),
             type_var_stack: Vec::new(),
             counter: 0,
         }
@@ -690,7 +715,7 @@ impl<'b> Parser<'b> {
     fn register_params(&mut self, arg_list: &Vec<FuncArg>, parser_func_context: &mut ParserFuncContext) {
         for arg in arg_list {
             let internal_name = self.context.get_unique_name(&arg.name);
-            self.context.add_var(&arg.name, &internal_name, arg.r#type.clone(), false);
+            self.context.add_var(&arg.name, &internal_name, &arg.r#type, false);
             //todo: constant params
             //todo: default params
             let idx = parser_func_context.local_vars.len();
@@ -737,10 +762,10 @@ impl<'b> Parser<'b> {
         let old_in_iteration = self.context.in_iteration;
         self.context.in_iteration = false;
         
-        let block = self.parse_block(&mut parser_func_context_inner, parser_context);
+        let block = self.parse_block(false, &mut parser_func_context_inner, parser_context);
         assert_ok!(block);
 
-        self.context.pop_scope();
+        self.context.pop_func_scope();
         self.context.in_iteration = old_in_iteration;
 
         self.context.pop_type_scope();
@@ -897,7 +922,7 @@ impl<'b> Parser<'b> {
         let name = id.to_string();
         if !global {
             let internal_name = self.context.get_unique_name(&name);
-            self.context.add_var(&name, &internal_name, var_type.clone(), constant);
+            self.context.add_var(&name, &internal_name, &var_type, constant);
         
             let vd = VariableDecl{
                 internal_name: internal_name, r#type: var_type, constant, init: Some(init), closure_source: false, arg: false, orig_name: name
@@ -993,6 +1018,7 @@ impl<'b> Parser<'b> {
     }
 
     fn parse_block(&mut self,
+        push_scope: bool,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
@@ -1007,8 +1033,10 @@ impl<'b> Parser<'b> {
                 
             let mut next = self.peek_next_item();
             let mut token = &next.token;
-            self.context.push_block_scope();
-            
+            if push_scope {
+                self.context.push_block_scope();
+            }
+
             while !token.matches_punct(Punct::CloseBrace) {
                 let stmt = self.parse_statement(parser_func_context, parser_context);    
                 assert_ok!(stmt);
@@ -1018,9 +1046,9 @@ impl<'b> Parser<'b> {
                 token = &next.token;
             }
             self.skip_next_item();
-            
-            self.context.pop_scope();
-        
+            if push_scope {
+                self.context.pop_block_scope();
+            }
         } else {
             let stmt = self.parse_statement(parser_func_context, parser_context);
             assert_ok!(stmt);
@@ -1048,14 +1076,14 @@ impl<'b> Parser<'b> {
         }
         assert_punct!(self, Punct::CloseParen);
 
-        let then_block = self.parse_block(parser_func_context, parser_context);
+        let then_block = self.parse_block(false, parser_func_context, parser_context);
         assert_ok!(then_block);
             
         let next = self.peek_next_item();
         let token = &next.token;
         if token.matches_keyword(Keyword::Else) {
             self.skip_next_item();
-            let else_block = self.parse_block(parser_func_context, parser_context);
+            let else_block = self.parse_block(false, parser_func_context, parser_context);
             assert_ok!(else_block);
             let then_block_type = then_block.r#type.clone();
             if then_block.r#type != else_block.r#type {
@@ -1086,7 +1114,7 @@ impl<'b> Parser<'b> {
 
         let old_in_iteration = self.context.in_iteration;
         self.context.in_iteration = true;
-        let block = self.parse_block(parser_func_context, parser_context);
+        let block = self.parse_block(false, parser_func_context, parser_context);
         self.context.in_iteration = old_in_iteration;
         assert_ok!(block);
         loc.end = block.loc.end.clone();
@@ -1313,6 +1341,17 @@ impl<'b> Parser<'b> {
     ) -> Res<TypedExpr> {
         let mut loc = self.peek_next_location();
         assert_punct!(self, Punct::OpenBrace);
+
+        let scratch_malloc = String::from("__scratch_malloc");
+        let scratch_malloc_type = Type::Ptr(PtrAlign::Align0);
+        self.context.add_var(&scratch_malloc, &scratch_malloc, &scratch_malloc_type, false);
+        let vd = VariableDecl{
+            internal_name: scratch_malloc.clone(), r#type: scratch_malloc_type, constant: false, init: None, closure_source: false, arg: false, orig_name: scratch_malloc
+        };
+        let idx = parser_func_context.local_vars.len();
+        parser_func_context.local_vars.push(vd.clone());
+        parser_func_context.local_var_map.insert(vd.internal_name.clone(), idx as u32);
+        
 
         //this is what we want
         let member_map: HashMap<String, Type> = match for_type {

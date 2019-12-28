@@ -129,7 +129,7 @@ let a = 0;
 
 * Function creation - all arguments and return value must be typed.
 * Function calling.
-* Local variables - type inference works here.
+* Local and global variables - type inference works here.
 * if, else, while, continue, break, return.
 
 ### Super secret things, shhh
@@ -139,6 +139,8 @@ let a = 0;
     * __memorySize() - `memory.size` instruction
     * __memoryGrow(0, numPages) - `memory.grow` instruction
     * __trap() - `unreachable` instruction
+* __struct type - works but you need the super secret `malloc` function for them to be useful. You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to create 
+    (this last uses malloc). A __struct is and will always be a raw pointer to memory, used for writing the allocator and other low level things.
 
 ## TODO
 
@@ -163,6 +165,7 @@ let a = 0;
     1. [x] while
     1. [ ] simple for loops
 1. Optimise steps. These should be on even on O0
+    1. [ ] use the 'consume' code to not write drops
     1. [ ] remove returns right before end
     1. [ ] change tee + drop into set
     1. [ ] remove get + drop
@@ -195,7 +198,7 @@ let a = 0;
     1. [ ] a gc based on the rajan & bacon paper
         1. [ ] but with gc counter!
 1. Structs, ptrs
-    1. [ ] structs
+    1. [x] structs - initial code
     1. [ ] union types are discriminated unions like Rust enums - yeah!
     1. [ ] option is union T | null
         1. [ ] means map over a union is well understood, I guess
