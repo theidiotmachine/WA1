@@ -9,7 +9,7 @@ pub use errs::Error;
 
 use std::{mem::replace};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 mod parser_unsafe;
 
@@ -875,7 +875,7 @@ impl<'b> Parser<'b> {
         };
 
         assert_punct!(self, Punct::Equal);
-        let init = self.parse_expr(false, parser_func_context, parser_context);
+        let init = self.parse_expr(parser_func_context, parser_context);
         if init.is_err() { return Err(init.unwrap_err()) }; 
         let mut init = init?;
 
@@ -888,7 +888,7 @@ impl<'b> Parser<'b> {
             match o_cast_expr {
                 Some(cast_expr) => { init = cast_expr; },
                 None => { 
-                    parser_context.errors.push(Error::TypeFailureVariableCreation(init.loc));
+                    parser_context.errors.push(Error::TypeFailureVariableCreation(init.loc, format!("{}", var_type), format!("{}", init.r#type)));
                 }
             }
         }
@@ -966,7 +966,7 @@ impl<'b> Parser<'b> {
             },
             _ => {
                 // if we don't know what this statement is, parse it as an expr
-                let expr = self.parse_expr(true, fake_parser_func_context, parser_context);
+                let expr = self.parse_expr(fake_parser_func_context, parser_context);
 
                 // ugh this is like a hundred million lines to check the semi-colon
                 let next = self.next_item();
@@ -1041,7 +1041,7 @@ impl<'b> Parser<'b> {
         self.skip_next_item();
 
         assert_punct!(self, Punct::OpenParen);
-        let cond = self.parse_expr(true, parser_func_context, parser_context);
+        let cond = self.parse_expr(parser_func_context, parser_context);
         assert_ok!(cond);
         if cond.r#type != Type::Boolean {
             parser_context.errors.push(Error::TypeFailure(cond.loc.clone(), Type::Boolean,  cond.r#type.clone()));
@@ -1077,7 +1077,7 @@ impl<'b> Parser<'b> {
         self.skip_next_item();
 
         assert_punct!(self, Punct::OpenParen);
-        let cond = self.parse_expr(true, parser_func_context, parser_context);
+        let cond = self.parse_expr(parser_func_context, parser_context);
         assert_ok!(cond);
         if cond.r#type != Type::Boolean {
             parser_context.errors.push(Error::TypeFailure(cond.loc.clone(), Type::Boolean, cond.r#type.clone()));
@@ -1241,7 +1241,7 @@ impl<'b> Parser<'b> {
                         self.skip_next_item();
                         Ok(TypedExpr{expr: Expr::Return(Box::new(None)), is_const: true, r#type: Type::Never, loc: loc})
                     } else {
-                        let expr = self.parse_expr(true, parser_func_context, parser_context);
+                        let expr = self.parse_expr(parser_func_context, parser_context);
                         assert_semicolon!(self);
                         assert_ok!(expr);
                         // return type checking
@@ -1292,23 +1292,142 @@ impl<'b> Parser<'b> {
                 
                 _ => {
                     // if we don't know what this statement is, parse it as an expr
-                    let expr = self.parse_expr(true, parser_func_context, parser_context);
+                    let expr = self.parse_expr(parser_func_context, parser_context);
                     expr
                 }
             },
 
             _ => {
                 // if we don't know what this statement is, parse it as an expr
-                let expr = self.parse_expr(true, parser_func_context, parser_context);
+                let expr = self.parse_expr(parser_func_context, parser_context);
                 assert_semicolon!(self);
                 expr
             }
         }
     }
 
-    fn parse_new(&mut self) -> Res<TypedExpr> {
-        let next_item = self.next_item();
-        return Err(Error::NotYetImplemented(next_item.unwrap().location, "new".to_string()));
+    fn parse_object_literal_constructor(&mut self,
+        for_type: &Type,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> Res<TypedExpr> {
+        let mut loc = self.peek_next_location();
+        assert_punct!(self, Punct::OpenBrace);
+
+        //this is what we want
+        let member_map: HashMap<String, Type> = match for_type {
+            Type::UserStruct{name: struct_name} => {
+                let tm_entry = parser_context.type_map.get(struct_name).unwrap();
+                match tm_entry {
+                    UserType::Struct(st) => st.get_member_type_map(),
+                    _ => unreachable!()
+                }
+            }, 
+            _ => return Err(Error::CantConstructUsingObjectLiterall(loc.clone(), format!("{}", for_type)))
+        };
+
+        //this is what we got
+        let mut got: HashSet<String> = HashSet::new();
+
+        let mut out: Vec<ObjectLiteralElem> = vec![];
+
+        loop {
+            let next_item = self.next_item();
+            assert_ok!(next_item);
+            let token = next_item.token;
+
+            match token {
+                Token::Punct(p) => {
+                    match p {
+                        Punct::CloseBrace => {
+                            loc.end = next_item.location.end.clone();
+                            break;
+                        },
+                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
+                    }
+                },
+                Token::Ident(i) => {
+                    assert_punct!(self, Punct::Colon);
+                    let v = self.parse_expr(parser_func_context, parser_context);
+                    assert_ok!(v);
+
+                    if got.contains(&i.to_string()) {
+                        parser_context.errors.push(Error::ObjectDuplicateMember(next_item.location, i.to_string().clone()));
+                    }
+                    
+                    got.insert(i.to_string());
+
+                    let o_member_map_elem = member_map.get(&i.to_string());
+                    match o_member_map_elem {
+                        None => {
+                            parser_context.errors.push(Error::ObjectHasNoMember(next_item.location, i.to_string().clone()));
+                        },
+                        Some(member_map_elem) => {
+                            let o_cast = try_cast(member_map_elem, &v);
+                            match o_cast {
+                                None => {
+                                    parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, i.to_string().clone(), format!("{}", member_map_elem), format!("{}", v.r#type.clone())));
+                                },
+                                Some(cast) => {
+                                    out.push(ObjectLiteralElem{name: i.to_string(), value: cast});
+                                }
+                            }
+                        }
+                    }
+
+                    let lookahead = self.peek_next_token();
+                    match lookahead {
+                        Token::Punct(p) => {
+                            match p {
+                                Punct::CloseBrace => {
+                                },
+                                Punct::Comma => {
+                                    self.skip_next_item();
+                                },
+                                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
+                            }
+                        },
+                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
+                    }
+                },
+                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
+            }
+        }
+        
+        //make sure that we have everything we want
+        if got.len() != member_map.len() {
+            //ugh irritating 
+            let keys = member_map.keys();
+            for key in keys {
+                if !got.contains(key) {
+                    parser_context.errors.push(Error::ObjectMissingMember(loc.clone(), key.to_string().clone()));
+                }
+            }
+        }
+
+        Ok(TypedExpr{expr: Expr::ConstructFromObjectLiteral(for_type.clone(), out), is_const: true, loc: loc, r#type: for_type.clone()})
+    }
+
+    fn parse_new(&mut self,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> Res<TypedExpr> {
+        self.skip_next_item();
+
+        let type_to_construct = self.parse_type(parser_context);
+        assert_ok!(type_to_construct);
+
+        let lookahead_item = self.peek_next_item();
+        let lookahead = lookahead_item.token;
+        match lookahead {
+            Token::Punct(p) => {
+                match p {
+                    Punct::OpenBrace => self.parse_object_literal_constructor(&type_to_construct, parser_func_context, parser_context),
+                    _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "{"),
+                }
+            },
+            _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "{"),
+        }
     }
 
     fn parse_function_call_args(&mut self,
@@ -1337,7 +1456,7 @@ impl<'b> Parser<'b> {
         }
 
         loop{
-            let expr = self.parse_expr(false, parser_func_context, parser_context);
+            let expr = self.parse_expr(parser_func_context, parser_context);
             assert_ok!(expr);
             
             if out.len() == arg_types.len() {
@@ -1430,7 +1549,7 @@ impl<'b> Parser<'b> {
         let mut loc = lookahead_item.location.clone();
 
         assert_punct!(self, Punct::OpenParen);
-        let expr = self.parse_expr(true, parser_func_context, parser_context);
+        let expr = self.parse_expr(parser_func_context, parser_context);
         assert_ok!(expr);
         let lookahead_item = self.peek_next_item();
         loc.end = lookahead_item.location.end.clone();
@@ -1473,7 +1592,7 @@ impl<'b> Parser<'b> {
                 },
                 Token::Ident(i) => {
                     assert_punct!(self, Punct::Colon);
-                    let v = self.parse_expr(false, parser_func_context, parser_context);
+                    let v = self.parse_expr(parser_func_context, parser_context);
                     assert_ok!(v);
                     type_out.insert(i.to_string(), v.r#type.clone());
                     out.push(ObjectLiteralElem{name: i.to_string(), value: v});
@@ -1670,13 +1789,12 @@ impl<'b> Parser<'b> {
 
     /// From wikipedia
     fn parse_expr(&mut self,
-        allow_comma: bool,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let expr = self.parse_primary(parser_func_context, parser_context);
         assert_ok!(expr);
-        self.parse_expr_1(expr, 0, allow_comma, parser_func_context, parser_context)
+        self.parse_expr_1(expr, 0, parser_func_context, parser_context)
     }
 
     fn get_prefix_unary_operator_for_token(&self, span: Span, location: &SourceLocation, token: &Token<&'b str>) -> Res<UnaryOperator> {
@@ -1709,7 +1827,7 @@ impl<'b> Parser<'b> {
                     let op = self.get_prefix_unary_operator_for_token(lookahead_item.span, &lookahead_item.location, &lookahead);
                     assert_ok!(op);
                     self.skip_next_item();
-                    let inner = self.parse_expr(false, parser_func_context, parser_context);
+                    let inner = self.parse_expr(parser_func_context, parser_context);
                     assert_ok!(inner);
                     loc.end = inner.loc.end.clone();
                     let o_outer_type = types::get_unary_op_type(op.get_op_type(), &inner.r#type);
@@ -1792,18 +1910,13 @@ impl<'b> Parser<'b> {
 
             Token::Keyword(k) => {
                 match k {
-                    Keyword::New => return self.parse_new(),
+                    Keyword::New => return self.parse_new(parser_func_context, parser_context),
                     Keyword::Void => { 
                         self.skip_next_item();
                         return Ok(TypedExpr{expr:Expr::Void, r#type: Type::FakeVoid, is_const: true, loc: lookahead_item.location.clone()}); 
                     },
-                    Keyword::If => {
-                        self.parse_if(parser_func_context, parser_context)
-                    },
-                    Keyword::Function => { 
-                        self.parse_named_function_decl(false, parser_func_context, parser_context)
-                    },
-                    
+                    Keyword::If => self.parse_if(parser_func_context, parser_context),
+                    Keyword::Function => self.parse_named_function_decl(false, parser_func_context, parser_context),
                     _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "unexpected keyword"),
                 }
             },
@@ -1831,7 +1944,6 @@ impl<'b> Parser<'b> {
                 Punct::Ampersand => Some(BinaryOperator::BitAnd),
                 Punct::Asterisk => Some(BinaryOperator::Multiply),
                 Punct::Period => Some(BinaryOperator::Dot),
-                Punct::Comma => Some(BinaryOperator::Comma),
                 Punct::GreaterThan => Some(BinaryOperator::GreaterThan),
                 Punct::LessThan => Some(BinaryOperator::LessThan),
                 Punct::Plus => Some(BinaryOperator::Plus),
@@ -1988,7 +2100,6 @@ impl<'b> Parser<'b> {
     fn parse_expr_1(&mut self, 
         init_lhs: TypedExpr, 
         min_precedence: i32, 
-        allow_comma: bool,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
@@ -1999,7 +2110,7 @@ impl<'b> Parser<'b> {
         
         // while lookahead is a binary operator whose precedence is >= min_precedence
         loop {
-            let o_lookahead_data = lookahead.get_binary_operator_data(allow_comma);
+            let o_lookahead_data = lookahead.get_binary_operator_data();
             match o_lookahead_data {
                 None => break,
                 Some(lookahead_data) => {
@@ -2020,13 +2131,13 @@ impl<'b> Parser<'b> {
                         // than op's, or a right-associative operator
                         // whose precedence is equal to op's
                         loop {
-                            let o_lookahead_data = lookahead.get_binary_operator_data(allow_comma);
+                            let o_lookahead_data = lookahead.get_binary_operator_data();
                             match o_lookahead_data {
                                 None => break,
                                 Some(lookahead_data) => {
                                     if lookahead_data.precedence > op_precedence || (lookahead_data.association == Association::Right && lookahead_data.precedence == op_precedence) {
                                         //rhs := parse_expression_1 (rhs, lookahead's precedence)
-                                        let new_rhs = self.parse_expr_1(rhs, lookahead_data.precedence, allow_comma, parser_func_context, parser_context);
+                                        let new_rhs = self.parse_expr_1(rhs, lookahead_data.precedence, parser_func_context, parser_context);
                                         if new_rhs.is_err() { return Err(new_rhs.unwrap_err()) }; 
                                         rhs = new_rhs?;
                                         //lookahead := peek next token

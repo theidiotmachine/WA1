@@ -91,6 +91,16 @@ pub struct StructType{
     pub members: Vec<StructMember>
 }
 
+impl StructType {
+    pub fn get_member_type_map(&self) -> HashMap<String, Type> {
+        let mut out: HashMap<String, Type> = HashMap::new();
+        for m in &self.members {
+            out.insert(m.name.clone(), m.r#type.clone());
+        }
+        out
+    }
+}
+
 /// This is part of the type system rewrite. I am not sure it's correct yet.
 /// This is the body of a type function that consumes type args and returns a type.
 #[derive(Debug, Clone, PartialEq)]

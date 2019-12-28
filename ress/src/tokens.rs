@@ -117,7 +117,7 @@ pub trait TokenExt {
 
     fn matches_string_content(&self, content: &str) -> bool;
 
-    fn get_binary_operator_data(&self, allow_comma: bool) -> Option<BinaryOperatorData>;
+    fn get_binary_operator_data(&self) -> Option<BinaryOperatorData>;
 
     fn get_unary_operator_data(&self) -> Option<UnaryOperatorData>;
 }
@@ -938,10 +938,9 @@ impl Punct {
     }
 
     /// at the point where this could be a binary operator, what is its precedence and association
-    fn get_binary_operator_data(self, allow_comma: bool) -> Option<BinaryOperatorData> {
+    fn get_binary_operator_data(self) -> Option<BinaryOperatorData> {
         match self {
             Punct::Period => Some(BinaryOperatorData{precedence: 18, association: Association::Left}),
-            Punct::Comma => if allow_comma { Some(BinaryOperatorData{precedence: 0, association: Association::Left}) } else { None },
             Punct::Colon => None,
             Punct::QuestionMark => None,
             Punct::Tilde => None,
@@ -1582,9 +1581,9 @@ impl<'a> TokenExt for Token<&'a str> {
         }
     }
 
-    fn get_binary_operator_data(&self, allow_comma: bool) -> Option<BinaryOperatorData> {
+    fn get_binary_operator_data(&self) -> Option<BinaryOperatorData> {
         match self {
-            Token::Punct(p) => p.get_binary_operator_data(allow_comma),
+            Token::Punct(p) => p.get_binary_operator_data(),
             Token::Keyword(k) => k.get_binary_operator_data(),
             _ => None
         }

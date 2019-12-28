@@ -24,7 +24,6 @@ use lazy_static;
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOperator{
     Dot,
-    Comma,
     GreaterThan,
     LessThan,
     Plus,
@@ -131,7 +130,6 @@ impl BinaryOperator{
     pub fn get_op_type(&self) -> &OpType {
         match self {
             BinaryOperator::Dot => &NO_IDEA_OP,
-            BinaryOperator::Comma => &NO_IDEA_OP,
             BinaryOperator::GreaterThan => &COMPARISON_OP,
             BinaryOperator::LessThan => &COMPARISON_OP,
             BinaryOperator::Plus => &MATHS_BIN_OP,
@@ -344,6 +342,8 @@ pub enum Expr {
     NamedMember(Box<TypedExpr>, String),
     /// object literal
     ObjectLiteral(Vec<ObjectLiteralElem>),
+    /// constructor
+    ConstructFromObjectLiteral(Type, Vec<ObjectLiteralElem>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

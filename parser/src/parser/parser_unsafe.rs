@@ -25,7 +25,7 @@ impl<'a> Parser<'a> {
         }
         assert_punct!(self, Punct::Comma);
         
-        let expr = self.parse_expr(true, parser_func_context, parser_context);
+        let expr = self.parse_expr(parser_func_context, parser_context);
         assert_ok!(expr);
 
         let loc_after = self.peek_next_location();

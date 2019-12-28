@@ -15,7 +15,8 @@ pub enum Error {
     FuncNotRecognised(String),
     TypeFailureUnaryOperator,
     TypeFailureBinaryOperator(SourceLocation, String, String),
-    TypeFailureVariableCreation(SourceLocation),
+    TypeFailureVariableCreation(SourceLocation, String, String),
+    TypeFailureMemberCreation(SourceLocation, String, String, String),
     TypeFailure(SourceLocation, Type, Type),
     NoValueReturned(SourceLocation),
     TypeFailureReturn(Type, Type),
@@ -30,6 +31,10 @@ pub enum Error {
     WhileMayNotReturn,
     NoComponents(SourceLocation),
     NoComponent(SourceLocation, String),
+    CantConstructUsingObjectLiterall(SourceLocation, String),
+    ObjectHasNoMember(SourceLocation, String),
+    ObjectDuplicateMember(SourceLocation, String),
+    ObjectMissingMember(SourceLocation, String),
 }
 
 impl Display for Error {
@@ -47,7 +52,8 @@ impl Display for Error {
             Error::TypeFailureUnaryOperator => write!(f, "Type failure unary operator"),
             Error::TypeFailureBinaryOperator(ref loc, ref lhs_type, ref rhs_type) => 
                 write!(f, "ERROR {}: can't make type of lhs ({}) and rhs ({}) of binary operator agree", loc, lhs_type, rhs_type),
-            Error::TypeFailureVariableCreation(ref loc) => write!(f, "ERROR {}: initialiser type doesn't match variable type", loc),
+            Error::TypeFailureVariableCreation(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: initialiser type {} doesn't match variable type {}", loc, got, wanted),
+            Error::TypeFailureMemberCreation(ref loc, ref m, ref wanted, ref got) => write!(f, "ERROR {}: initialiser type {} of {} doesn't match variable type {}", loc, got, m, wanted),
             Error::TypeFailure(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: expecting expression of type {}, found {}", loc, wanted, got),
             Error::NoValueReturned(ref loc) => write!(f, "ERROR {}: must return a value", loc),
             Error::TypeFailureReturn(ref wanted, ref got) => write!(f, "Expecting return value of type {}, found {}", wanted, got),
@@ -62,6 +68,10 @@ impl Display for Error {
             Error::WhileMayNotReturn => write!(f, "while loops may not have a return value"),
             Error::NoComponents(ref loc) => write!(f, "ERROR {}: object has no components", loc),
             Error::NoComponent(ref loc, ref c) => write!(f, "ERROR {}: object has no component {}", loc, c),
+            Error::CantConstructUsingObjectLiterall(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {} from an object literal", loc, t),
+            Error::ObjectHasNoMember(ref loc, ref m) => write!(f, "ERROR {}: object has no member {}", loc, m),
+            Error::ObjectDuplicateMember(ref loc, ref m) => write!(f, "ERROR {}: object has multiple definitions for {}", loc, m),
+            Error::ObjectMissingMember(ref loc, ref m) => write!(f, "ERROR {}: object requires member {}", loc, m),
         }
     }
 }
