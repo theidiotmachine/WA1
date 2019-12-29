@@ -11,6 +11,7 @@ export function negMax(x: number, y: number): number {
     }
 }
 
+
 export function bang(x: number): number {
     if(x <= 0)
         return 0;
@@ -39,4 +40,17 @@ export function mul3(x: number, y: number, z: number): number {
 
 export function idNumber(x:  number): number {
     x;
+}
+
+function assert(x: boolean): void {
+    if(!x) __trap();
+}
+
+export function testSuite(): void {
+    assert(idNumber(3) == 3);
+    assert(idNumber(-3.0) == -3);
+    assert(addd(3, 5) == 8);
+    assert(negMax(8, 9.1) == -9.1);
+    assert(bang(3) == 6);
+    assert(fourTimes(3) == 12);
 }

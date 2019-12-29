@@ -380,20 +380,20 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             let type_cast = try_cast(lhs_type, &rhs_type);
             match &type_cast{
                 TypeCast::NotNeeded => {
-                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean})
+                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean})
                 },
                 TypeCast::FreeWiden | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden => {
-                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: lhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean})
+                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean})
                 },   
                 TypeCast::None => {
                     //now try going the other way
                     let type_cast = try_cast(rhs_type, &lhs_type);
                     match &type_cast{
                         TypeCast::NotNeeded => {
-                            Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean})
+                            Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean})
                         },
                         TypeCast::FreeWiden | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden => {
-                            Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: type_cast, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean})
+                            Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean})
                         },   
                         TypeCast::None => {
                             None
