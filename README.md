@@ -74,7 +74,8 @@ export function mul(x: number, y: number): number {
 }
 ```
 
-But this is also fine
+But this is also fine:
+
 ```
 function mul3(x: number, y: number, z: number): number {
     return x * y * z;
@@ -110,6 +111,8 @@ export function bang(x: number): number {
     out;
 }
 ```
+
+There are some examples in the `wa1\src\one.wa1` file which contains our one working test!
 
 ## Features
 
@@ -164,6 +167,12 @@ let a = 0;
     1. [x] if
     1. [x] while
     1. [ ] simple for loops
+    1. [x] assignments and consts
+    1. [x] global variables
+    1. [ ] match statements 
+        1. [ ] implement [this](http://cmph.sourceforge.net/papers/esa09.pdf) for strings
+1. Strings
+    1. [ ] a 'char' is a unicode grapheme cluster - see [this](https://manishearth.github.io/blog/2017/01/14/stop-ascribing-meaning-to-unicode-code-points/) - this guy has some cool rust libs
 1. Optimise steps. These should be on even on O0
     1. [ ] use the 'consume' code to not write drops
     1. [ ] remove returns right before end
@@ -175,11 +184,9 @@ let a = 0;
 1. Function calling
     1. [x] simple static function call
     1. [ ] functions as first class objects (but not closures)
-1. [x] assignments and consts
 1. Known bugs
     1. [ ] fairly sure prefix unary operators are wrong - may need to start at a precedence
     1. [ ] the lexer doesn't parse negative numbers!
-1. [x] global variables (currently not init'ed)
 1. Inlining
     1. [ ] inline numeric constants?
     1. [ ] or full blown inlining, of which this is just a special case?
@@ -192,7 +199,7 @@ let a = 0;
         * side effecting (e.g. writing a mutable global, writing a file)
         * non-deterministic (e.g. currenttime, memorysize, reading a global or file)
     1. [ ] evaluate globally and locally pure functions if they have literals passed in. Is this... insane?
-1. [ ] a runtime
+1. A runtime
     1. [ ] a simple allocator
     1. [ ] a small object allocator
     1. [ ] a gc based on the rajan & bacon paper
@@ -205,11 +212,16 @@ let a = 0;
     1. opt: booleans are 1 bit in structs, 32 bits on the heap?
 1. Types
     1. [ ] type keyword is a first class type, not an alias (might as well, eh? I always disliked that Scala and TS do that)
-1. [ ] closure generation and usage
+1. Closure generation and usage
+    1. [ ] closure capture
+    1. [ ] call function with closure
     1. [ ] optimisation - don't capture consts, you have all the information to roll them inline. This is awesome because I don't think JS can do this
-1. [ ] templates
+1. templates
     1. [ ] generate meta code to turn into templates, type check against unknown
-1. [ ] containers
+    1. [ ] we are going to do this at compile time! Yes, thank me later
+1. containers
+    1. [ ] arrays
+    1. [ ] hashmaps (probably called 'objects' to be JS friendly)
     1. [ ] map/foreach are macros
     1. [ ] more complex for loops (in, of)
 1. Numbers

@@ -12,12 +12,17 @@ use std::{mem::replace};
 use std::collections::{HashMap, HashSet};
 
 mod parser_unsafe;
+mod parser_int;
+mod parser_func;
 
 use crate::ParserContext;
 use crate::ParserFuncContext;
 use crate::Res;
 use crate::assert_punct;
 use crate::assert_ok;
+use crate::assert_ident;
+use crate::try_create_cast;
+use crate::create_cast;
 
 macro_rules! assert_semicolon {
     ($s:ident) => (
@@ -31,45 +36,6 @@ macro_rules! assert_semicolon {
 /// Get the next token, returning if it is not ok. Usage: `let next = assert_next!(self);`
 macro_rules! assert_next {
     ($s:ident, $m:expr) => ({let next = $s.next_item(); if next.is_err() { return Err(Error::UnexpectedEoF($m.to_string())); }; next?} )
-}
-
-macro_rules! assert_ident {
-    ($n:ident, $m:expr) => (
-        {
-            let token = $n.token; 
-            match token {
-                Token::Ident(i) => i, 
-                _ => return Err(Error::UnexpectedToken($n.location.clone(), $m.to_string())) 
-            }
-        }
-    )
-}
-
-fn cast_int_to_number(expr: &TypedExpr) -> TypedExpr {
-    TypedExpr{expr: Expr::IntToNumber(Box::new(expr.clone())), r#type: Type::Number, is_const: true, loc: expr.loc}
-}
-
-fn cast_int_to_bigint(expr: &TypedExpr) -> TypedExpr {
-    TypedExpr{expr: Expr::IntToBigInt(Box::new(expr.clone())), r#type: Type::BigInt, is_const: true, loc: expr.loc}
-}
-
-fn free_type_widen(expr: &TypedExpr, to: &Type) -> TypedExpr {
-    TypedExpr{expr: Expr::FreeTypeWiden(Box::new(expr.clone())), r#type: to.clone(), is_const: true, loc: expr.loc}
-}
-
-fn create_cast(want: &Type, got: &TypedExpr, cast: &TypeCast) -> Option<TypedExpr> {
-    match cast {
-        TypeCast::FreeWiden => Some(free_type_widen(got, want)),
-        TypeCast::IntToBigIntWiden => Some(cast_int_to_bigint(got)),
-        TypeCast::IntToNumberWiden => Some(cast_int_to_number(got)),
-        TypeCast::None => None,
-        TypeCast::NotNeeded => Some(got.clone()),
-    }
-}
-
-fn try_cast(want: &Type, got: &TypedExpr) -> Option<TypedExpr> {
-    let type_cast = types::cast::try_cast(&got.r#type, want);
-    create_cast(want, got, &type_cast)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -909,7 +875,7 @@ impl<'b> Parser<'b> {
         if var_type.is_undeclared() {
             var_type = init.r#type.clone();
         } else if var_type != init.r#type {
-            let o_cast_expr = try_cast(&var_type, &init);
+            let o_cast_expr = try_create_cast(&var_type, &init);
             match o_cast_expr {
                 Some(cast_expr) => { init = cast_expr; },
                 None => { 
@@ -1275,7 +1241,7 @@ impl<'b> Parser<'b> {
                         // return type checking
                         let expr_type = expr.r#type.clone();
                         if parser_func_context.func_return_type != expr.r#type {
-                            let o_cast = try_cast(&parser_func_context.func_return_type, &expr);
+                            let o_cast = try_create_cast(&parser_func_context.func_return_type, &expr);
                             match o_cast {
                                 None => { 
                                     Err(Error::TypeFailureReturn(parser_func_context.func_return_type.clone(), expr_type))
@@ -1402,7 +1368,7 @@ impl<'b> Parser<'b> {
                             parser_context.errors.push(Error::ObjectHasNoMember(next_item.location, i.to_string().clone()));
                         },
                         Some(member_map_elem) => {
-                            let o_cast = try_cast(member_map_elem, &v);
+                            let o_cast = try_create_cast(member_map_elem, &v);
                             match o_cast {
                                 None => {
                                     parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, i.to_string().clone(), format!("{}", member_map_elem), format!("{}", v.r#type.clone())));
@@ -1469,73 +1435,6 @@ impl<'b> Parser<'b> {
         }
     }
 
-    fn parse_function_call_args(&mut self,
-        arg_types: &Vec<Type>,
-        parser_func_context: &mut ParserFuncContext,
-        parser_context: &mut ParserContext,
-    ) -> Res<Vec<TypedExpr>> {
-
-        let mut out: Vec<TypedExpr> = vec![];
-        self.skip_next_item();
-
-        let lookahead_item = self.peek_next_item();
-        let lookahead = lookahead_item.token;
-        match lookahead {
-            Token::Punct(p) => match p {
-                Punct::CloseParen => { 
-                    self.skip_next_item();
-                    if arg_types.len() != 0 {
-                        parser_context.errors.push(Error::NotEnoughArgs);        
-                    }
-                    return Ok(out);
-                },
-                _ => {}
-            },
-            _ => {}
-        }
-
-        loop{
-            let expr = self.parse_expr(parser_func_context, parser_context);
-            assert_ok!(expr);
-            
-            if out.len() == arg_types.len() {
-                parser_context.errors.push(Error::TooManyArgs);
-            } else {
-                let arg_type = &arg_types[out.len()];
-                if *arg_type != expr.r#type {
-                    let expr_type = expr.r#type.clone();
-                    let o_cast = try_cast(arg_type, &expr);
-                    match o_cast {
-                        None => parser_context.errors.push(Error::TypeFailure(expr.loc.clone(), arg_type.clone(), expr_type)),
-                        Some(new_expr) => out.push(new_expr)
-                    }
-                } else {
-                    out.push(expr);
-                }
-            }
-
-            let lookahead_item = self.peek_next_item();
-            let lookahead = lookahead_item.token;
-         
-            match lookahead {
-                Token::Punct(p) => match p {
-                    Punct::CloseParen => { 
-                        self.skip_next_item();
-                        if arg_types.len() != out.len() {
-                            parser_context.errors.push(Error::NotEnoughArgs);        
-                        }
-                        return Ok(out);
-                    },
-                    Punct::Comma => {
-                        self.skip_next_item();
-                    },
-                    _ => return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "need expr or comma")
-                },
-                _ => return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "need expr or comma")
-            }
-        }
-    }
-
     fn parse_struct_component(&mut self,
         lhs: &TypedExpr,
         struct_type: &StructType,
@@ -1548,7 +1447,7 @@ impl<'b> Parser<'b> {
         let component = id.to_string();
         let o_mem = struct_type.members.iter().find(|x| x.name == component);
         match o_mem {
-            None => Err(Error::NoComponent(next_loc, component.clone())),
+            None => Err(Error::ObjectHasNoMember(next_loc, component.clone())),
             Some(mem) => {
                 Ok(TypedExpr{
                     expr: Expr::NamedMember(Box::new(lhs.clone()), component),
@@ -1562,6 +1461,7 @@ impl<'b> Parser<'b> {
 
     fn parse_component(&mut self, 
         lhs: &TypedExpr,
+        parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         assert_punct!(self, Punct::Period);
@@ -1574,6 +1474,13 @@ impl<'b> Parser<'b> {
                     UserType::Struct(st) => self.parse_struct_component(lhs, &st),
                     _ => unreachable!()
                 }
+            },
+            Type::Int | Type::IntLiteral(_)  => {
+                self.parse_int_component(lhs, parser_func_context, parser_context)
+            },
+            //FIXME64BIT
+            Type::Ptr(_) => {
+                self.parse_int_component(lhs, parser_func_context, parser_context)
             },
             _ => Err(Error::NoComponents(lhs.loc.clone()))
         }
@@ -1732,7 +1639,7 @@ impl<'b> Parser<'b> {
                                             //might be a built in, so check that
                                             let oe_built_in = self.try_parse_built_in(&id.to_string(), parser_func_context, parser_context);
                                             match oe_built_in {
-                                                None => {return Err(Error::VariableNotRecognised(id.to_string().clone()));},
+                                                None => {return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()));},
                                                 Some(e_built_in) => {
                                                     match e_built_in {
                                                         Err(e) => {return Err(e);},
@@ -1743,9 +1650,9 @@ impl<'b> Parser<'b> {
                                         }
                                     }
                                 },
-                                _ => return Err(Error::VariableNotRecognised(id.to_string().clone()))
+                                _ => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
                             },
-                            _ => return Err(Error::VariableNotRecognised(id.to_string().clone()))
+                            _ => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
                         }
                     }
                 }
@@ -1807,7 +1714,7 @@ impl<'b> Parser<'b> {
                         
                     },
                     Punct::Period => { 
-                        let new_expr = self.parse_component(&expr, parser_context);
+                        let new_expr = self.parse_component(&expr, parser_func_context, parser_context);
                         assert_ok!(new_expr);
                         expr = new_expr;
                         continue;

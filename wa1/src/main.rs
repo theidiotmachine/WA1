@@ -41,7 +41,7 @@ fn main() {
         },
         _ => {
             let script = o_script.unwrap();
-            println!("{:#?}", script);
+            //println!("{:#?}", script);
             writer::write(script, &output.to_owned());  
         }
     }

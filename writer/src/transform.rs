@@ -95,7 +95,7 @@ fn transform_lvalue_get(
         LValueExpr::GlobalVariableAssign(name) => {
             let o_idx = global_var_map.get(name);
             match o_idx {
-                None => { context.errors.push(Error::VariableNotRecognised(name.clone())); vec![] },
+                None => { context.errors.push(Error::VariableNotRecognised(l_value.loc.clone(), name.clone())); vec![] },
                 Some(idx) => {
                     vec![Instruction::GetGlobal(*idx)]
                 }
@@ -105,7 +105,7 @@ fn transform_lvalue_get(
         LValueExpr::LocalVariableAssign(name) => {
             let o_idx = local_var_map.get(name);
             match o_idx {
-                None => { context.errors.push(Error::VariableNotRecognised(name.clone())); vec![] },
+                None => { context.errors.push(Error::VariableNotRecognised(l_value.loc.clone(), name.clone())); vec![] },
                 Some(idx) => {
                     vec![Instruction::GetLocal(*idx)]
                 }
@@ -143,7 +143,7 @@ fn transform_lvalue_tee(
             vi.append(r_value_code);
             let o_idx = global_var_map.get(name);
             match o_idx {
-                None => { context.errors.push(Error::VariableNotRecognised(name.clone())); },
+                None => { context.errors.push(Error::VariableNotRecognised(l_value.loc.clone(), name.clone())); },
                 Some(idx) => {
                     vi.push(Instruction::SetGlobal(*idx));
                     vi.push(Instruction::GetGlobal(*idx));
@@ -156,7 +156,7 @@ fn transform_lvalue_tee(
             vi.append(r_value_code);
             let o_idx = local_var_map.get(name);
             match o_idx {
-                None => { context.errors.push(Error::VariableNotRecognised(name.clone())); },
+                None => { context.errors.push(Error::VariableNotRecognised(l_value.loc.clone(), name.clone())); },
                 Some(idx) => {
                     vi.push(Instruction::TeeLocal(*idx))
                 }
@@ -218,7 +218,7 @@ fn transform_typed_expr(
         Expr::LocalVariableUse(lvu) => {
             let o_idx = local_var_map.get(lvu);
             match o_idx {
-                None => { context.errors.push(Error::VariableNotRecognised(lvu.clone())); },
+                None => { context.errors.push(Error::VariableNotRecognised(typed_expr.loc.clone(), lvu.clone())); },
                 Some(idx) => {
                     vi.push(Instruction::GetLocal(*idx));
                 }
@@ -228,7 +228,7 @@ fn transform_typed_expr(
         Expr::GlobalVariableUse(vu) => {
             let o_idx = global_var_map.get(vu);
             match o_idx {
-                None => { context.errors.push(Error::VariableNotRecognised(vu.clone())); },
+                None => { context.errors.push(Error::VariableNotRecognised(typed_expr.loc.clone(), vu.clone())); },
                 Some(idx) => {
                     vi.push(Instruction::GetGlobal(*idx));
                 }
@@ -645,11 +645,8 @@ fn transform_typed_expr(
                     let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context, true);
                     vi.append(& mut this_vi);
                     //then set the variable
-                    let o_idx = local_var_map.get(&v.internal_name);
-                    match o_idx {
-                        Some(idx) => vi.push(Instruction::SetLocal(*idx)),
-                        None => context.errors.push(Error::VariableNotRecognised(v.internal_name.clone())),
-                    };
+                    let idx = local_var_map.get(&v.internal_name).unwrap();
+                    vi.push(Instruction::SetLocal(*idx));
                 },
                 _ => {}
             };
@@ -660,11 +657,8 @@ fn transform_typed_expr(
             let mut this_vi = transform_typed_expr(&v.init, global_var_map, local_var_map, func_map, context, true);
             vi.append(& mut this_vi);
             //then set the variable
-            let o_idx = global_var_map.get(&v.name);
-            match o_idx {
-                Some(idx) => vi.push(Instruction::SetGlobal(*idx)),
-                None => context.errors.push(Error::VariableNotRecognised(v.name.clone())),
-            };
+            let idx = global_var_map.get(&v.name).unwrap();
+            vi.push(Instruction::SetGlobal(*idx));
         },
 
         Expr::Block(b) => {
@@ -690,7 +684,17 @@ fn transform_typed_expr(
                 },
                 Intrinsic::Trap => {
                     vi.push(Instruction::Unreachable)
-                }
+                },
+                Intrinsic::I32Ctz(expr) => {
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context, true);
+                    vi.append(& mut this_vi);
+                    vi.push(Instruction::I32Ctz);
+                },
+                Intrinsic::I64Ctz(expr) => {
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context, true);
+                    vi.append(& mut this_vi);
+                    vi.push(Instruction::I64Ctz);
+                },
             }  
         },
 

@@ -8,5 +8,7 @@ pub mod prelude {
 pub enum Intrinsic {
     MemoryGrow(Box<TypedExpr>),
     MemorySize,
-    Trap
+    Trap,
+    I32Ctz(Box<TypedExpr>),
+    I64Ctz(Box<TypedExpr>),
 }
