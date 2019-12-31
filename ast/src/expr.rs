@@ -48,6 +48,7 @@ pub enum BinaryOperator{
     Exponent,
     In,
     InstanceOf,
+    As,
 }
 
 lazy_static!{
@@ -77,6 +78,7 @@ static ref MATHS_UN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int], out_type: Type::Int},
     FuncType{in_types: vec![Type::Number], out_type: Type::Number},
     FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align0)], out_type: Type::Ptr(PtrAlign::Align0)},
     FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8)], out_type: Type::Ptr(PtrAlign::Align8)},
     FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16)], out_type: Type::Ptr(PtrAlign::Align16)},
     FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32)], out_type: Type::Ptr(PtrAlign::Align32)},
@@ -85,10 +87,13 @@ static ref MATHS_UN_OP: OpType = OpType::SimpleOpType(vec![
 
 static ref BIT_BIN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
-    FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt}
+    FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
+    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align0), Type::Ptr(PtrAlign::Align0)], out_type: Type::Ptr(PtrAlign::Align0)},
 ]);
 
 static ref EQUALITY_OP: OpType = OpType::EqualityOpType;
+
+static ref AS_OP: OpType = OpType::AsOpType;
 
 static ref BOOL_BIN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Boolean, Type::Boolean], out_type: Type::Boolean},
@@ -154,6 +159,7 @@ impl BinaryOperator{
             BinaryOperator::Exponent => &MATHS_BIN_OP,
             BinaryOperator::In => &NO_IDEA_OP,
             BinaryOperator::InstanceOf => &NO_IDEA_OP,
+            BinaryOperator::As => &AS_OP,
         }
     }
 }
@@ -344,6 +350,8 @@ pub enum Expr {
     ObjectLiteral(Vec<ObjectLiteralElem>),
     /// constructor
     ConstructFromObjectLiteral(Type, Vec<ObjectLiteralElem>),
+    ///type literal
+    TypeLiteral(Box<Type>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

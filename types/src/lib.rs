@@ -57,6 +57,8 @@ pub enum OpType{
     EqualityOpType,
     /// Not implemented yet!
     NotImplementedOpType,
+    ///the cast operator
+    AsOpType,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -207,13 +209,14 @@ pub enum Type {
     BigIntLiteral(i64),
     //numeric literal - int
     IntLiteral(i32),
-
-
-    /// string lireral
+    /// string literal
     StringLiteral(String),
 
     ///ptr - internal type. Param is alignment
     Ptr(PtrAlign),
+
+    ///type literal
+    TypeLiteral(Box<Type>),
 }
 
 impl Type{
@@ -268,6 +271,7 @@ impl Display for Type {
             Type::BigIntLiteral(n) => write!(f, "{}", n),
             Type::StringLiteral(n) => write!(f, "\"{}\"", n),
             Type::ObjectLiteral(_) => write!(f, "{{}}"),
+            Type::TypeLiteral(t) => write!(f, "type: {}", t),
         }
     }
 }
@@ -379,29 +383,26 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             //try casting from one to the other. lhs to rhs first
             let type_cast = try_cast(lhs_type, &rhs_type);
             match &type_cast{
-                TypeCast::NotNeeded => {
-                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean})
-                },
-                TypeCast::FreeWiden | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden => {
-                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean})
-                },   
+                TypeCast::NotNeeded => 
+                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
+                TypeCast::FreeWiden | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden => 
+                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
                 TypeCast::None => {
                     //now try going the other way
                     let type_cast = try_cast(rhs_type, &lhs_type);
                     match &type_cast{
-                        TypeCast::NotNeeded => {
-                            Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean})
-                        },
-                        TypeCast::FreeWiden | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden => {
-                            Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean})
-                        },   
-                        TypeCast::None => {
-                            None
-                        }
+                        TypeCast::NotNeeded => 
+                            Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
+                        TypeCast::FreeWiden | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden =>
+                            Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean}),
+                        TypeCast::None => None
                     }    
                 }
             }
         },
+
+        //this is just a simple cast, so no need for all the fancy bin op stuff
+        OpType::AsOpType => None,
 
         OpType::NotImplementedOpType => None,
     }

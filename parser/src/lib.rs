@@ -17,6 +17,22 @@ macro_rules! assert_ok {
 }
 
 #[macro_export]
+macro_rules! assert_semicolon {
+    ($s:ident) => (
+        let next = $s.next_item()?;
+        if !next.token.matches_punct(Punct::SemiColon) {
+            return $s.expected_token_error(&next, &[&";"]);
+        }
+    )
+}
+
+/// Get the next token, returning if it is not ok. Usage: `let next = assert_next!(self);`
+#[macro_export]
+macro_rules! assert_next {
+    ($s:ident, $m:expr) => ({let next = $s.next_item(); if next.is_err() { return Err(Error::UnexpectedEoF($m.to_string())); }; next?} )
+}
+
+#[macro_export]
 macro_rules! assert_punct {
     ($s:ident, $p:path) => (
         let next = $s.next_item()?;

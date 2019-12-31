@@ -259,7 +259,7 @@ fn transform_typed_expr(
                                 BinaryOperator::Multiply => vi.push(Instruction::F64Mul),
                                 BinaryOperator::Divide => vi.push(Instruction::F64Div),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (number ★ ? => number)")))
                                 }
                             }
                         },
@@ -272,12 +272,12 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::F64Le),
                                 BinaryOperator::Equal => vi.push(Instruction::F64Eq),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (number ★ ? => boolean)")))
                                 }
                             }
                         },        
                         _ => {
-                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (number ★ ? => ?)")))
                         }
                     }
                 },
@@ -297,7 +297,7 @@ fn transform_typed_expr(
                                 BinaryOperator::BitXor => vi.push(Instruction::I32Xor),
 
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (int ★ ? => int)")))
                                 }
                             }
                         },
@@ -310,12 +310,12 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeS),
                                 BinaryOperator::Equal => vi.push(Instruction::I32Eq),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (int ★ ? => boolean)")))
                                 }
                             }
                         },
                         _ => {
-                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (int ★ ? => ?)")))
                         }
                     }
                 },
@@ -335,7 +335,7 @@ fn transform_typed_expr(
                                 BinaryOperator::BitXor => vi.push(Instruction::I64Xor),
 
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (bigint ★ ? => bigint)")))
                                 }
                             }
                         },
@@ -348,12 +348,12 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::I64LeS),
                                 BinaryOperator::Equal => vi.push(Instruction::I64Eq),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (bigint ★ ? => boolean)")))
                                 }
                             }
                         },
                         _ => {
-                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (bigint ★ ? => ?)")))
                         }
                     }
                 },
@@ -366,19 +366,23 @@ fn transform_typed_expr(
                                 BinaryOperator::Minus => vi.push(Instruction::I32Sub),
                                 BinaryOperator::Multiply => vi.push(Instruction::I32Mul),
                                 BinaryOperator::Divide => vi.push(Instruction::I32DivU),
+                                BinaryOperator::BitAnd => vi.push(Instruction::I32And),
+                                BinaryOperator::BitOr => vi.push(Instruction::I32Or),
+                                BinaryOperator::BitXor => vi.push(Instruction::I32Xor),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (ptr ★ ? => ptr)")))
                                 }
                             }
                         },
                         Type::Boolean => {
                             match bo.op {
-                                BinaryOperator::GreaterThan => vi.push(Instruction::I32GtS),
-                                BinaryOperator::GreaterThanEqual => vi.push(Instruction::I32GeS),
-                                BinaryOperator::LessThan=> vi.push(Instruction::I32LtS),
-                                BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeS),
+                                BinaryOperator::GreaterThan => vi.push(Instruction::I32GtU),
+                                BinaryOperator::GreaterThanEqual => vi.push(Instruction::I32GeU),
+                                BinaryOperator::LessThan=> vi.push(Instruction::I32LtU),
+                                BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeU),
+                                BinaryOperator::Equal => vi.push(Instruction::I32Eq),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (ptr ★ ? => boolean)")))
                                 }
                             }
                         },
@@ -396,13 +400,13 @@ fn transform_typed_expr(
                         BinaryOperator::LogicalOr => vi.push(Instruction::I32Or),
                         BinaryOperator::Equal => vi.push(Instruction::I32Eq),
                         _ => {
-                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (boolean ★ ? => boolean)")))
                         }
                     }
                 },
 
                 _ => {
-                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator")))
+                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (? ★ ? => ?)")))
                 }
             };
         },

@@ -14,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 mod parser_unsafe;
 mod parser_int;
 mod parser_func;
+mod parser_type;
 
 use crate::ParserContext;
 use crate::ParserFuncContext;
@@ -21,22 +22,10 @@ use crate::Res;
 use crate::assert_punct;
 use crate::assert_ok;
 use crate::assert_ident;
+use crate::assert_next;
+use crate::assert_semicolon;
 use crate::try_create_cast;
 use crate::create_cast;
-
-macro_rules! assert_semicolon {
-    ($s:ident) => (
-        let next = $s.next_item()?;
-        if !next.token.matches_punct(Punct::SemiColon) {
-            return $s.expected_token_error(&next, &[&";"]);
-        }
-    )
-}
-
-/// Get the next token, returning if it is not ok. Usage: `let next = assert_next!(self);`
-macro_rules! assert_next {
-    ($s:ident, $m:expr) => ({let next = $s.next_item(); if next.is_err() { return Err(Error::UnexpectedEoF($m.to_string())); }; next?} )
-}
 
 #[derive(Debug, Clone, PartialEq)]
 enum ScopedVar{
@@ -505,126 +494,6 @@ impl<'b> Parser<'b> {
         }
     }
 
-    fn parse_type(&mut self, 
-        parser_context: &mut ParserContext,
-    ) -> Res<Type> {
-        let next = assert_next!(self, "expecting type");
-        let token = next.token;
-        match token {
-            Token::Keyword(keyword) => {
-                match keyword {
-                    Keyword::Void => Ok(Type::RealVoid),
-                    Keyword::Boolean => Ok(Type::Boolean),
-                    Keyword::Unknown => Ok(Type::Unknown),
-                    Keyword::Never => Ok(Type::Never),
-                    Keyword::Number => Ok(Type::Number),
-                    Keyword::String => Ok(Type::String),
-                    Keyword::Array => {
-                        assert_punct!(self, Punct::LessThan);
-                        let inner = self.parse_type(parser_context);
-                        assert_ok!(inner);
-                        assert_punct!(self, Punct::GreaterThan);
-                        Ok(Type::Array(Box::new(inner)))
-                    },
-                    Keyword::BigInt => Ok(Type::BigInt),
-                    Keyword::Int => Ok(Type::Int),
-                    //Keyword::Tuple => Ok(Type::Tuple),
-                    //Keyword::Object => Ok(Type::Object),
-                    Keyword::Any => Ok(Type::Any),
-                    Keyword::Ptr => {
-                        assert_punct!(self, Punct::LessThan);
-                        let inner = self.parse_type(parser_context);
-                        assert_ok!(inner);
-                        assert_punct!(self, Punct::GreaterThan);
-                        match inner {
-                            Type::IntLiteral(n) => { 
-                                let o_pa = PtrAlign::from_i32(n);
-                                match o_pa {
-                                    Some(pa) => Ok(Type::Ptr(pa)),
-                                    None => Err(Error::InvalidTypeName(next.location.clone(), keyword.as_str().to_owned()))
-                                }
-                            },
-                            _ => Err(Error::InvalidTypeName(next.location.clone(), keyword.as_str().to_owned()))        
-                        }
-                        
-                    },
-                    _ => Err(Error::InvalidTypeName(next.location.clone(), keyword.as_str().to_owned()))
-                }
-            },
-            Token::Ident(ident) => {
-                let o_type = parser_context.type_map.get(&ident.to_string());
-                let next = self.peek_next_item();
-                let token = &next.token;
-                let type_args = vec![];
-                if token.matches_punct(Punct::LessThan) {
-                    Err(Error::NotYetImplemented(next.location.clone(), String::from("type args")))
-                } else {
-                    match o_type {
-                        None => Err(Error::InvalidTypeName(next.location.clone(), ident.as_str().to_owned())),
-                        Some(user_type) => {
-                            match user_type {
-                                UserType::Class(_) => {
-                                    Ok(Type::UserClass{name: ident.to_string(), type_args})
-                                },
-                                UserType::Struct(_) => {
-                                    Ok(Type::UserStruct{name: ident.to_string()})
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            Token::Number(n) => {
-                match n.kind() {
-                    NumberKind::Hex => {
-                        let number_i64 = n.parse_i64().unwrap();
-                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Ok(Type::BigIntLiteral(number_i64));
-                        } else {
-                            let number_i32 = n.parse_i32().unwrap();
-                            return Ok(Type::IntLiteral(number_i32));
-                        }
-                    },
-                    NumberKind::DecI => {
-                        let number_i64 = n.parse_i64().unwrap();
-                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Ok(Type::BigIntLiteral(number_i64));
-                        } else {
-                            let number_i32 = n.parse_i32().unwrap();
-                            return Ok(Type::IntLiteral(number_i32));
-                        }
-                    },
-                    NumberKind::Bin => {
-                        let number_i64 = n.parse_i64().unwrap();
-                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Ok(Type::BigIntLiteral(number_i64));
-                        } else {
-                            let number_i32 = n.parse_i32().unwrap();
-                            return Ok(Type::IntLiteral(number_i32));
-                        }                    
-                    },
-                    NumberKind::Oct => {
-                        let number_i64 = n.parse_i64().unwrap();
-                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Ok(Type::BigIntLiteral(number_i64));
-                        } else {
-                            let number_i32 = n.parse_i32().unwrap();
-                            return Ok(Type::IntLiteral(number_i32));
-                        }
-                    },
-                    NumberKind::DecF => {
-                        let number = n.parse_f64();
-                        return Ok(Type::FloatLiteral(number.unwrap()));
-                    },
-                }
-            },
-
-            Token::String(s) => Ok(Type::StringLiteral(s.to_string())),
-
-            _ => Err(Error::InvalidType(self.current_position))
-        }
-    }
-
     fn parse_function_decl_arg(&mut self,
         parser_context: &mut ParserContext,
     ) -> Res<FuncArg> {
@@ -1053,7 +922,7 @@ impl<'b> Parser<'b> {
             assert_ok!(else_block);
             let then_block_type = then_block.r#type.clone();
             if then_block.r#type != else_block.r#type {
-                parser_context.errors.push(Error::TypeFailureIf(then_block.r#type.clone(), else_block.r#type.clone()));
+                parser_context.errors.push(Error::TypeFailureIf(loc.clone(), then_block.r#type.clone(), else_block.r#type.clone()));
             } 
             loc.end = else_block.loc.end.clone();
             Ok(TypedExpr{expr: Expr::IfThenElse(Box::new(cond), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: then_block_type, loc: loc})
@@ -1582,16 +1451,10 @@ impl<'b> Parser<'b> {
         parser_context: &mut ParserContext,
     ) -> Option<Res<TypedExpr>> {
         match id.as_str() {
-            "__memorySize" => {
-                Some(self.parse_mem_size())
-            },
-            "__memoryGrow" => {
-                Some(self.parse_mem_grow(parser_func_context, parser_context))
-            },
+            "__memorySize" => Some(self.parse_mem_size()),
+            "__memoryGrow" => Some(self.parse_mem_grow(parser_func_context, parser_context)),
             //it's a 
-            "__trap" => {
-                Some(self.parse_trap())
-            },
+            "__trap" => Some(self.parse_trap()),
             _ => None
         }
     }
@@ -1613,46 +1476,55 @@ impl<'b> Parser<'b> {
                         TypedExpr{expr: Expr::GlobalVariableUse(id.to_string()), r#type: g_var.r#type.clone(), is_const: g_var.constant, loc: next.location.clone()}
                     },
                     None => { 
-                        // peek to see if this is a function call. If it is, we resolve it later
-                        let lookahead_item = self.peek_next_item();
-                        let lookahead = lookahead_item.token;
+                        //might be a type literal
+                        let o_type = self.parse_type_from_ident(&id, parser_context);
+                        match o_type {
+                            Ok(t) => 
+                                TypedExpr{expr: Expr::TypeLiteral(Box::new(t.clone())), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: next.location.clone()},
+                        
+                            _ => {
+                                // peek to see if this is a function call. If it is, we resolve it later
+                                let lookahead_item = self.peek_next_item();
+                                let lookahead = lookahead_item.token;
 
-                        match lookahead {
-                            Token::Punct(p) => match p {
-                                Punct::OpenParen => {
-                                    // the hash map returns a reference to the innards; the borrow checker freaks out
-                                    // unless I deref as soon as possible
-                                    let o_func_id = match parser_context.func_map.get(&id.to_string()) {
-                                        Some(idx) => Some(*idx),
-                                        None => None,
-                                    };
-                                    match o_func_id{
-                                        Some(func_id) => {
-                                            let arg_types = parser_context.funcs[func_id as usize].get_arg_types();
-                                            let args = self.parse_function_call_args(&arg_types, parser_func_context, parser_context);
-                                            assert_ok!(args);
-                                            let func_return_type = parser_context.funcs[func_id as usize].return_type.clone();
-                                            let loc = SourceLocation::new(next.location.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(next.location.end.clone()));
-                                            TypedExpr{expr: Expr::StaticFuncCall(id.to_string().clone(), args), r#type: func_return_type, is_const: true, loc: loc}
-                                        },
-                                        None => {
-                                            //might be a built in, so check that
-                                            let oe_built_in = self.try_parse_built_in(&id.to_string(), parser_func_context, parser_context);
-                                            match oe_built_in {
-                                                None => {return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()));},
-                                                Some(e_built_in) => {
-                                                    match e_built_in {
-                                                        Err(e) => {return Err(e);},
-                                                        Ok(built_in) => built_in
+                                match lookahead {
+                                    Token::Punct(p) => match p {
+                                        Punct::OpenParen => {
+                                            // the hash map returns a reference to the innards; the borrow checker freaks out
+                                            // unless I deref as soon as possible
+                                            let o_func_id = match parser_context.func_map.get(&id.to_string()) {
+                                                Some(idx) => Some(*idx),
+                                                None => None,
+                                            };
+                                            match o_func_id {
+                                                Some(func_id) => {
+                                                    let arg_types = parser_context.funcs[func_id as usize].get_arg_types();
+                                                    let args = self.parse_function_call_args(&arg_types, parser_func_context, parser_context);
+                                                    assert_ok!(args);
+                                                    let func_return_type = parser_context.funcs[func_id as usize].return_type.clone();
+                                                    let loc = SourceLocation::new(next.location.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(next.location.end.clone()));
+                                                    TypedExpr{expr: Expr::StaticFuncCall(id.to_string().clone(), args), r#type: func_return_type, is_const: true, loc: loc}
+                                                },
+                                                None => {
+                                                    //might be a built in, so check that
+                                                    let oe_built_in = self.try_parse_built_in(&id.to_string(), parser_func_context, parser_context);
+                                                    match oe_built_in {
+                                                        None => {return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()));},
+                                                        Some(e_built_in) => {
+                                                            match e_built_in {
+                                                                Err(e) => {return Err(e);},
+                                                                Ok(built_in) => built_in
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
-                                    }
-                                },
-                                _ => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
-                            },
-                            _ => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
+                                        },
+                                        _ => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
+                                    },
+                                    _ => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
+                                }
+                            }
                         }
                     }
                 }
@@ -1740,7 +1612,7 @@ impl<'b> Parser<'b> {
     ) -> Res<TypedExpr> {
         let expr = self.parse_primary(parser_func_context, parser_context);
         assert_ok!(expr);
-        self.parse_expr_1(expr, 0, parser_func_context, parser_context)
+        self.parse_expr_1(&expr, 0, parser_func_context, parser_context)
     }
 
     fn get_prefix_unary_operator_for_token(&self, span: Span, location: &SourceLocation, token: &Token<&'b str>) -> Res<UnaryOperator> {
@@ -1863,7 +1735,14 @@ impl<'b> Parser<'b> {
                     },
                     Keyword::If => self.parse_if(parser_func_context, parser_context),
                     Keyword::Function => self.parse_named_function_decl(false, parser_func_context, parser_context),
-                    _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "unexpected keyword"),
+                    _ => {
+                        self.skip_next_item();
+                        let o_type = self.parse_type_from_keyword(&k, &lookahead_item.location, parser_context);
+                        match o_type {
+                            Ok(t) => Ok(TypedExpr{expr: Expr::TypeLiteral(Box::new(t.clone())), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: lookahead_item.location.clone()}),
+                            Err(_) => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "unexpected keyword")
+                        }
+                    },
                 }
             },
 
@@ -1884,6 +1763,7 @@ impl<'b> Parser<'b> {
             Token::Keyword(ref k) => match k {
                 Keyword::In => Some(BinaryOperator::In),
                 Keyword::InstanceOf => Some(BinaryOperator::InstanceOf),
+                Keyword::As => Some(BinaryOperator::As),
                 _ => None
             },
             Token::Punct(ref p) => match p {
@@ -1938,7 +1818,7 @@ impl<'b> Parser<'b> {
         }
     }
 
-    /// parse a binary operator.
+    /// Parse a binary operator.
     fn parse_binary_op(&mut self,
         op: &Token<&str>,
         lhs: &TypedExpr,
@@ -1952,32 +1832,54 @@ impl<'b> Parser<'b> {
         match o_bin_op {
             Some(bin_op) => {
                 //type check the binary operator
-                let o_bin_op_type_cast = types::get_binary_op_type_cast(bin_op.get_op_type(), &lhs.r#type, &rhs.r#type);
-                match o_bin_op_type_cast {
-                    Some(bin_op_type_cast) => {
-                        let o_cast = create_cast(&bin_op_type_cast.lhs_type, lhs, &bin_op_type_cast.lhs_type_cast);
-                        let lhs_out = match o_cast {
-                            Some(cast) => Box::new(cast),
-                            None => {
-                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
-                                Box::new(lhs.clone())
+                let op_type = bin_op.get_op_type();
+                if *op_type == OpType::AsOpType {
+                    //as is just a straight cast; so 
+                    match &rhs.r#type {
+                        Type::TypeLiteral(t) => {
+                            let o_cast = try_create_cast(&t, lhs);
+                            match o_cast {
+                                Some(c) => c,
+                                None => {
+                                    parser_context.errors.push(Error::TypeFailure(loc, lhs.r#type.clone(), (**t).clone()));
+                                    lhs.clone()
+                                }
                             }
-                        };
+                        },
+                        _ => {
+                            parser_context.errors.push(Error::AsNeedsType(loc));
+                            lhs.clone()
+                        }
+                    }
+                    
+                } else {
+                    let o_bin_op_type_cast = types::get_binary_op_type_cast(op_type, &lhs.r#type, &rhs.r#type);
+                    match o_bin_op_type_cast {
+                        Some(bin_op_type_cast) => {
+                            let o_cast = create_cast(&bin_op_type_cast.lhs_type, lhs, &bin_op_type_cast.lhs_type_cast);
+                            let lhs_out = match o_cast {
+                                Some(cast) => Box::new(cast),
+                                None => {
+                                    parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                    Box::new(lhs.clone())
+                                }
+                            };
 
-                        let o_cast = create_cast(&bin_op_type_cast.rhs_type, rhs, &bin_op_type_cast.rhs_type_cast);
-                        let rhs_out = match o_cast {
-                            Some(cast) => Box::new(cast),
-                            None => {
-                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
-                                Box::new(rhs.clone())
-                            }
-                        };
-                        
-                        TypedExpr{expr: Expr::BinaryOperator(BinaryOperatorApplication{op: bin_op, lhs: lhs_out, rhs: rhs_out}), r#type: bin_op_type_cast.out_type, is_const: true, loc: loc}
-                    },
-                    None => {
-                        parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
-                        TypedExpr{expr: Expr::BinaryOperator(BinaryOperatorApplication{op: bin_op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone())}), r#type: Type::Unknown, is_const: true, loc: loc}
+                            let o_cast = create_cast(&bin_op_type_cast.rhs_type, rhs, &bin_op_type_cast.rhs_type_cast);
+                            let rhs_out = match o_cast {
+                                Some(cast) => Box::new(cast),
+                                None => {
+                                    parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                    Box::new(rhs.clone())
+                                }
+                            };
+                            
+                            TypedExpr{expr: Expr::BinaryOperator(BinaryOperatorApplication{op: bin_op, lhs: lhs_out, rhs: rhs_out}), r#type: bin_op_type_cast.out_type, is_const: true, loc: loc}
+                        },
+                        None => {
+                            parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                            TypedExpr{expr: Expr::BinaryOperator(BinaryOperatorApplication{op: bin_op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone())}), r#type: Type::Unknown, is_const: true, loc: loc}
+                        }
                     }
                 }
             },
@@ -2044,13 +1946,12 @@ impl<'b> Parser<'b> {
         return lhs
     */
     fn parse_expr_1(&mut self, 
-        init_lhs: TypedExpr, 
+        init_lhs: &TypedExpr, 
         min_precedence: i32, 
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
-        // lookahead := peek next token
-        let mut lhs = init_lhs;
+        let mut lhs = init_lhs.clone();
         let lookahead_item = self.peek_next_item();
         let mut lookahead = lookahead_item.token;
         
@@ -2083,7 +1984,7 @@ impl<'b> Parser<'b> {
                                 Some(lookahead_data) => {
                                     if lookahead_data.precedence > op_precedence || (lookahead_data.association == Association::Right && lookahead_data.precedence == op_precedence) {
                                         //rhs := parse_expression_1 (rhs, lookahead's precedence)
-                                        let new_rhs = self.parse_expr_1(rhs, lookahead_data.precedence, parser_func_context, parser_context);
+                                        let new_rhs = self.parse_expr_1(&rhs, lookahead_data.precedence, parser_func_context, parser_context);
                                         if new_rhs.is_err() { return Err(new_rhs.unwrap_err()) }; 
                                         rhs = new_rhs?;
                                         //lookahead := peek next token
@@ -2102,7 +2003,7 @@ impl<'b> Parser<'b> {
                 }
             }
         };
-        return Ok(lhs);
+        return Ok(lhs.clone());
     }
 }
 

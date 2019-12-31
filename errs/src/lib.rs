@@ -27,13 +27,14 @@ pub enum Error {
     NotEnoughArgs,
     DuplicateTypeName(String),
     NotInLoop(String),
-    TypeFailureIf(Type, Type),
+    TypeFailureIf(SourceLocation, Type, Type),
     WhileMayNotReturn,
     NoComponents(SourceLocation),
     CantConstructUsingObjectLiterall(SourceLocation, String),
     ObjectHasNoMember(SourceLocation, String),
     ObjectDuplicateMember(SourceLocation, String),
     ObjectMissingMember(SourceLocation, String),
+    AsNeedsType(SourceLocation),
 }
 
 impl Display for Error {
@@ -63,13 +64,14 @@ impl Display for Error {
             Error::NotEnoughArgs => write!(f, "Not enough args"),
             Error::DuplicateTypeName(name) => write!(f, "Duplicate type name: {}", name),
             Error::NotInLoop(what) => write!(f, "Used loop keyword outside a loop: {}", what),
-            Error::TypeFailureIf(then_type, else_type) => write!(f, "Branches of if staement to not match: {}, {}", then_type, else_type),
+            Error::TypeFailureIf(ref loc, ref then_type, ref else_type) => write!(f, "ERROR {}: Typed of branches of if statement do not match; then branch: {}, else branch: {}", loc, then_type, else_type),
             Error::WhileMayNotReturn => write!(f, "while loops may not have a return value"),
             Error::NoComponents(ref loc) => write!(f, "ERROR {}: object has no components", loc),
             Error::CantConstructUsingObjectLiterall(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {} from an object literal", loc, t),
             Error::ObjectHasNoMember(ref loc, ref m) => write!(f, "ERROR {}: object has no member {}", loc, m),
             Error::ObjectDuplicateMember(ref loc, ref m) => write!(f, "ERROR {}: object has multiple definitions for {}", loc, m),
             Error::ObjectMissingMember(ref loc, ref m) => write!(f, "ERROR {}: object requires member {}", loc, m),
+            Error::AsNeedsType(ref loc) => write!(f, "ERROR {}: 'as' must have a type literal on its rhs", loc),
         }
     }
 }

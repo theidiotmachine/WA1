@@ -11,7 +11,6 @@ export function negMax(x: number, y: number): number {
     }
 }
 
-
 export function bang(x: number): number {
     if(x <= 0)
         return 0;
@@ -46,6 +45,39 @@ function assert(x: boolean): void {
     if(!x) __trap();
 }
 
+__struct Simple{
+    a: int;
+    b: int;
+}
+
+function structTest(): void {
+    /*
+    //need malloc
+    let c = new Simple {a: 3, b: 4};
+    assert(c.a == 3);
+    assert(c.b == 4);
+    c.a = 8;
+    assert(c.a == 8);
+    assert(c.b == 4);
+    c.b = 9;
+    assert(c.a == 8);
+    assert(c.b == 9);
+    */
+}
+
+function intTest(): void {
+    const e = 8;
+    assert(e.countTrailingZeros() == 3);
+}
+
+function asTest(): void {
+    const a = 9;
+    const b = a as number;
+    const c: number = b;
+    //would fail
+    //const d: int = b;
+}
+
 export function testSuite(): void {
     assert(idNumber(3) == 3);
     assert(idNumber(-3.0) == -3);
@@ -53,4 +85,6 @@ export function testSuite(): void {
     assert(negMax(8, 9.1) == -9.1);
     assert(bang(3) == 6);
     assert(fourTimes(3) == 12);
+    structTest();
+    intTest();
 }

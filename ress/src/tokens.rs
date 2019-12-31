@@ -413,11 +413,21 @@ impl<'a> NumberExt for Number<&'a str> {
     }
 
     fn parse_i64(&self) -> Result<i64, <i64 as FromStr>::Err> {
-        self.0.parse()
+        match self.kind() {
+            NumberKind::DecF | NumberKind::DecI => self.0.parse(),
+            NumberKind::Hex => u64::from_str_radix(self.0.trim_start_matches("0x"), 16).map(|i| i as i64),
+            NumberKind::Oct => u64::from_str_radix(self.0.trim_start_matches("0o"), 8).map(|i| i as i64),
+            NumberKind::Bin => u64::from_str_radix(self.0.trim_start_matches("0b"), 2).map(|i| i as i64),
+        }
     }
 
     fn parse_i32(&self) -> Result<i32, <i32 as FromStr>::Err> {
-        self.0.parse()
+        match self.kind() {
+            NumberKind::DecF | NumberKind::DecI => self.0.parse(),
+            NumberKind::Hex => u32::from_str_radix(self.0.trim_start_matches("0x"), 16).map(|i| i as i32),
+            NumberKind::Oct => u32::from_str_radix(self.0.trim_start_matches("0o"), 8).map(|i| i as i32),
+            NumberKind::Bin => u32::from_str_radix(self.0.trim_start_matches("0b"), 2).map(|i| i as i32),
+        }
     }
 
     fn str_len(&self) -> usize {
@@ -474,11 +484,21 @@ impl NumberExt for Number<String> {
     }
 
     fn parse_i64(&self) -> Result<i64, <i64 as FromStr>::Err> {
-        self.0.parse()
+        match self.kind() {
+            NumberKind::DecF | NumberKind::DecI => self.0.parse(),
+            NumberKind::Hex => u64::from_str_radix(self.0.as_str().trim_start_matches("0x"), 16).map(|i| i as i64),
+            NumberKind::Oct => u64::from_str_radix(self.0.as_str().trim_start_matches("0o"), 8).map(|i| i as i64),
+            NumberKind::Bin => u64::from_str_radix(self.0.as_str().trim_start_matches("0b"), 2).map(|i| i as i64),
+        }
     }
 
     fn parse_i32(&self) -> Result<i32, <i32 as FromStr>::Err> {
-        self.0.parse()
+        match self.kind() {
+            NumberKind::DecF | NumberKind::DecI => self.0.parse(),
+            NumberKind::Hex => u32::from_str_radix(self.0.as_str().trim_start_matches("0x"), 16).map(|i| i as i32),
+            NumberKind::Oct => u32::from_str_radix(self.0.as_str().trim_start_matches("0o"), 8).map(|i| i as i32),
+            NumberKind::Bin => u32::from_str_radix(self.0.as_str().trim_start_matches("0b"), 2).map(|i| i as i32),
+        }
     }
 
     fn str_len(&self) -> usize {
@@ -1344,6 +1364,7 @@ impl Keyword {
         match self {
             Keyword::In => Some(BinaryOperatorData{precedence: 12, association: Association::Left}),
             Keyword::InstanceOf => Some(BinaryOperatorData{precedence: 12, association: Association::Left}),
+            Keyword::As => Some(BinaryOperatorData{precedence: 12, association: Association::Left}),
             _ => None
         }
     }
