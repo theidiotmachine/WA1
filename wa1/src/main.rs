@@ -23,6 +23,10 @@ fn main() {
             .value_name("OUTPUT")
             .help("output file")
             .takes_value(true))
+        .arg(Arg::with_name("unsafe")
+            .help("unsafe parse mode")
+            .long("unsafe")
+        )
         .get_matches();
 
     let input = matches.value_of("INPUT").unwrap();
@@ -30,10 +34,12 @@ fn main() {
     let output = matches.value_of("OUTPUT").unwrap_or(default_output.as_str());
     println!("Building {} to {}", &input, &output);
 
+    let is_unsafe = matches.is_present("unsafe");
+
     let input_contents = fs::read_to_string(input).expect(format!("Couldn't read {}", input).as_str());
 
     let mut parser = Parser::new(input_contents.as_str()).unwrap();
-    let o_script = parser.parse();
+    let o_script = parser.parse(is_unsafe);
     match o_script {
         Err(errs) => {
             println!("Parse failed.");

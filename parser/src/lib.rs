@@ -75,7 +75,7 @@ fn cast_int_to_bigint(expr: &TypedExpr) -> TypedExpr {
 }
 
 fn free_type_widen(expr: &TypedExpr, to: &Type) -> TypedExpr {
-    TypedExpr{expr: Expr::FreeTypeWiden(Box::new(expr.clone())), r#type: to.clone(), is_const: true, loc: expr.loc}
+    TypedExpr{expr: Expr::FreeTypeWiden(Box::new(expr.clone())), r#type: to.clone(), is_const: expr.is_const, loc: expr.loc}
 }
 
 fn create_cast(want: &Type, got: &TypedExpr, cast: &TypeCast) -> Option<TypedExpr> {
@@ -100,11 +100,12 @@ struct ParserContext {
     pub funcs: Vec<Func>,
     pub func_map: HashMap<String, u32>,
     pub errors: Vec<Error>,
-    pub type_map: HashMap<String, UserType>
+    pub type_map: HashMap<String, UserType>,
+    pub is_unsafe: bool,
 }
 
 impl ParserContext {
-    fn new() -> ParserContext {
+    fn new(is_unsafe: bool) -> ParserContext {
         ParserContext{
             globals: vec![],
             funcs: vec![],
@@ -112,6 +113,7 @@ impl ParserContext {
             global_var_map: HashMap::new(),
             func_map: HashMap::new(),
             type_map: HashMap::new(),
+            is_unsafe: is_unsafe,
         }
     }
 }

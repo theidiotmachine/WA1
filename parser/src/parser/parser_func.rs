@@ -12,12 +12,27 @@ use crate::assert_ok;
 use crate::try_create_cast;
 
 impl<'a> Parser<'a> {
+    /// If we are expecting a no arg function, call this.
+    pub(crate) fn parse_empty_function_call_args(&mut self,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> () {
+        let next = self.peek_next_item();
+        if !next.token.matches_punct(Punct::OpenParen) {
+            parser_context.errors.push(self.expected_token_error_raw(&next, &[&"("]));
+            return;
+        }
+        let args = self.parse_function_call_args(&vec![], parser_func_context, parser_context);
+        if args.is_err() { 
+            return parser_context.errors.push(args.unwrap_err());
+        }
+    }
+
     pub(crate) fn parse_function_call_args(&mut self,
         arg_types: &Vec<Type>,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<Vec<TypedExpr>> {
-
         let mut out: Vec<TypedExpr> = vec![];
         self.skip_next_item();
 

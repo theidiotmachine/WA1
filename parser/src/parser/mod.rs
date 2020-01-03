@@ -15,6 +15,7 @@ mod parser_unsafe;
 mod parser_int;
 mod parser_func;
 mod parser_type;
+mod parser_option;
 
 use crate::ParserContext;
 use crate::ParserFuncContext;
@@ -324,8 +325,10 @@ impl<'b> Parser<'b> {
     }
 
     ///parse!
-    pub fn parse(&mut self) -> Result<Program, Vec<Error>> {
-        let mut parser_context = ParserContext::new();
+    pub fn parse(&mut self, 
+        is_unsafe: bool,
+    ) -> Result<Program, Vec<Error>> {
+        let mut parser_context = ParserContext::new(is_unsafe);
         self.parse_internal(&mut parser_context);
         if parser_context.errors.is_empty() {
             Ok(Program{start: String::from("__start"), globals: parser_context.globals, 
@@ -1351,13 +1354,10 @@ impl<'b> Parser<'b> {
                     _ => unreachable!()
                 }
             },
-            Type::Int | Type::IntLiteral(_)  => {
-                self.parse_int_component(lhs, parser_func_context, parser_context)
-            },
+            Type::Int | Type::IntLiteral(_)  => self.parse_int_component(lhs, parser_func_context, parser_context),
             //FIXME64BIT
-            Type::Ptr | Type::SizeT => {
-                self.parse_int_component(lhs, parser_func_context, parser_context)
-            },
+            Type::Ptr | Type::SizeT => self.parse_int_component(lhs, parser_func_context, parser_context),
+            Type::Option(_) => self.parse_option_component(lhs, parser_func_context, parser_context),
             _ => Err(Error::NoComponents(lhs.loc.clone()))
         }
     }
@@ -1384,7 +1384,8 @@ impl<'b> Parser<'b> {
         }
 
         let expr_type = expr.r#type.clone();
-        Ok(TypedExpr{expr: Expr::Parens(Box::new(expr)), r#type: expr_type, is_const: true, loc: loc})
+        let expr_is_const = expr.is_const;
+        Ok(TypedExpr{expr: Expr::Parens(Box::new(expr)), r#type: expr_type, is_const: expr_is_const, loc: loc})
     }
 
     fn parse_object_literal(&mut self,
@@ -1458,10 +1459,9 @@ impl<'b> Parser<'b> {
         parser_context: &mut ParserContext,
     ) -> Option<Res<TypedExpr>> {
         match id.as_str() {
-            "__memorySize" => Some(self.parse_mem_size()),
+            "__memorySize" => Some(self.parse_mem_size(parser_func_context, parser_context)),
             "__memoryGrow" => Some(self.parse_mem_grow(parser_func_context, parser_context)),
-            //it's a 
-            "__trap" => Some(self.parse_trap()),
+            "__trap" => Some(self.parse_trap(parser_func_context, parser_context)),
             "__sizeof" => Some(self.parse_sizeof(parser_func_context, parser_context)),
             _ => None
         }
@@ -1745,7 +1745,7 @@ impl<'b> Parser<'b> {
 
             Token::Null => {
                 self.skip_next_item();
-                return Ok(TypedExpr{expr:Expr::Null, r#type: Type::Option(Box::new(Type::Never)), is_const: true, loc: lookahead_item.location.clone()});
+                return Ok(Parser::create_null(&lookahead_item.location));
             },
 
             Token::Template(_) => {
@@ -2052,7 +2052,7 @@ mod test {
         }";
 
         let mut parser = Parser::new(add).unwrap();
-        let script = parser.parse().unwrap();
+        let script = parser.parse(false).unwrap();
         println!("{:#?}", script);
     }
 }

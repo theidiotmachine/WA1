@@ -344,16 +344,24 @@ function request2size(req: __size_t): __size_t if(req < MIN_REQUEST) MIN_CHUNK_S
 
 /* extraction of fields from head words */
 /* WA1 - better get these guys inlined! */
+//#define cinuse(p)           ((p)->head & CINUSE_BIT)
 function cinuse(p: malloc_chunk): boolean           (p.head & (2 as __size_t)) != (0 as __size_t);
+//#define pinuse(p)           ((p)->head & PINUSE_BIT)
 function pinuse(p: malloc_chunk): boolean           (p.head & (1 as __size_t)) != (0 as __size_t);
+//#define flag4inuse(p)       ((p)->head & FLAG4_BIT)
 function flag4inuse(p: malloc_chunk): boolean       (p.head & (4 as __size_t)) != (0 as __size_t);
+//#define is_inuse(p)         (((p)->head & INUSE_BITS) != PINUSE_BIT)
 function is_inuse(p: malloc_chunk): boolean         (p.head & (3 as __size_t)) != (1 as __size_t);
 //#define is_mmapped(p)       (((p)->head & INUSE_BITS) == 0)
 
+//#define chunksize(p)        ((p)->head & ~(FLAG_BITS))
 function chunksize(p: malloc_chunk): __size_t        (p.head & ~(7 as __size_t));
 
+//#define clear_pinuse(p)     ((p)->head &= ~PINUSE_BIT)
 function clear_pinuse(p: malloc_chunk): void     p.head &= ~(1 as __size_t);
+//#define set_flag4(p)        ((p)->head |= FLAG4_BIT)
 function set_flag4(p: malloc_chunk): void        p.head |= (4 as __size_t);
+//#define clear_flag4(p)      ((p)->head &= ~FLAG4_BIT)
 function clear_flag4(p: malloc_chunk): void      p.head &= ~(4 as __size_t);
 
 /* Treat space at ptr +/- offset as a chunk */
@@ -369,8 +377,152 @@ function next_chunk(p: malloc_chunk): malloc_chunk ((p as __ptr) + (p.head & ~(7
 //#define prev_chunk(p) ((mchunkptr)( ((char*)(p)) - ((p)->prev_foot) ))
 function prev_chunk(p: malloc_chunk): malloc_chunk ((p as __ptr) - p.prev_foot) as malloc_chunk;
 
+/* extract next chunk's pinuse bit */
+//#define next_pinuse(p)  ((next_chunk(p)->head) & PINUSE_BIT)
+function next_pinuse(p: malloc_chunk): boolean (next_chunk(p).head & (1 as __size_t)) != (0 as __size_t);
 
+/* Get/set size at footer */
+//#define get_foot(p, s)  (((mchunkptr)((char*)(p) + (s)))->prev_foot)
+//#define set_foot(p, s)  (((mchunkptr)((char*)(p) + (s)))->prev_foot = (s))
+function set_foot(p: malloc_chunk, s: __size_t): void { 
+    // you need a temporary because the '+' operator can't be used as an lhs. 
+    let t = ((p as __ptr) + s) as malloc_chunk;
+    t.prev_foot = s;
+}
 
+/* Set size, pinuse bit, and foot */
+//#define set_size_and_pinuse_of_free_chunk(p, s)  ((p)->head = (s|PINUSE_BIT), set_foot(p, s))
+function set_size_and_pinuse_of_free_chunk(p: malloc_chunk, s: __size_t): void {
+    p.head = (s|(1 as __size_t));
+    set_foot(p, s);
+}
 
+/* Set size, pinuse bit, foot, and clear next pinuse */
+//#define set_free_with_pinuse(p, s, n)  (clear_pinuse(n), set_size_and_pinuse_of_free_chunk(p, s))
+function set_free_with_pinuse(p: malloc_chunk, s: __size_t, n: malloc_chunk): void {
+    clear_pinuse(n);
+    set_size_and_pinuse_of_free_chunk(p, s);
+}
 
+/* Get the internal overhead associated with chunk p */
+//#define overhead_for(p) (is_mmapped(p)? MMAP_CHUNK_OVERHEAD : CHUNK_OVERHEAD)
+//function overhead_for(p: malloc_chunk): __size_t 4;
 
+/* Return true if malloced space is not necessarily cleared */
+//#define calloc_must_clear(p) (1)
+//function calloc_must_clear(p: malloc_chunk): boolean true;
+
+/* ---------------------- Overlaid data structures ----------------------- */
+
+/*
+  When chunks are not in use, they are treated as nodes of either
+  lists or trees.
+
+  "Small"  chunks are stored in circular doubly-linked lists, and look
+  like this:
+
+    chunk-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Size of previous chunk                            |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    `head:' |             Size of chunk, in bytes                         |P|
+      mem-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Forward pointer to next chunk in list             |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Back pointer to previous chunk in list            |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Unused space (may be 0 bytes long)                .
+            .                                                               .
+            .                                                               |
+nextchunk-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    `foot:' |             Size of chunk, in bytes                           |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+  Larger chunks are kept in a form of bitwise digital trees (aka
+  tries) keyed on chunksizes.  Because malloc_tree_chunks are only for
+  free chunks greater than 256 bytes, their size doesn't impose any
+  constraints on user chunk sizes.  Each node looks like:
+
+    chunk-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Size of previous chunk                            |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    `head:' |             Size of chunk, in bytes                         |P|
+      mem-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Forward pointer to next chunk of same size        |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Back pointer to previous chunk of same size       |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Pointer to left child (child[0])                  |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Pointer to right child (child[1])                 |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Pointer to parent                                 |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             bin index of this chunk                           |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+            |             Unused space                                      .
+            .                                                               |
+nextchunk-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    `foot:' |             Size of chunk, in bytes                           |
+            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+  Each tree holding treenodes is a tree of unique chunk sizes.  Chunks
+  of the same size are arranged in a circularly-linked list, with only
+  the oldest chunk (the next to be used, in our FIFO ordering)
+  actually in the tree.  (Tree members are distinguished by a non-null
+  parent pointer.)  If a chunk with the same size an an existing node
+  is inserted, it is linked off the existing node using pointers that
+  work in the same way as fd/bk pointers of small chunks.
+
+  Each tree contains a power of 2 sized range of chunk sizes (the
+  smallest is 0x100 <= x < 0x180), which is is divided in half at each
+  tree level, with the chunks in the smaller half of the range (0x100
+  <= x < 0x140 for the top nose) in the left subtree and the larger
+  half (0x140 <= x < 0x180) in the right subtree.  This is, of course,
+  done by inspecting individual bits.
+
+  Using these rules, each node's left subtree contains all smaller
+  sizes than its right subtree.  However, the node at the root of each
+  subtree has no particular ordering relationship to either.  (The
+  dividing line between the subtree sizes is based on trie relation.)
+  If we remove the last chunk of a given size from the interior of the
+  tree, we need to replace it with a leaf node.  The tree ordering
+  rules permit a node to be replaced by any leaf below it.
+
+  The smallest chunk in a tree (a common operation in a best-fit
+  allocator) can be found by walking a path to the leftmost leaf in
+  the tree.  Unlike a usual binary tree, where we follow left child
+  pointers until we reach a null, here we follow the right child
+  pointer any time the left one is null, until we reach a leaf with
+  both child pointers null. The smallest chunk in the tree will be
+  somewhere along that path.
+
+  The worst case number of steps to add, find, or remove a node is
+  bounded by the number of bits differentiating chunks within
+  bins. Under current bin calculations, this ranges from 6 up to 21
+  (for 32 bit sizes) or up to 53 (for 64 bit sizes). The typical case
+  is of course much better.
+*/
+
+__struct malloc_tree_chunk {
+  /* The first four fields must be compatible with malloc_chunk */
+  prev_foot: __size_t;
+  head: __size_t;
+  fd: Option<malloc_tree_chunk>;
+  bk: Option<malloc_tree_chunk>;
+
+  //WA1 - in dlmalloc these are an array of size 2. I don't have an 
+  //array implementation yet, and it doesn't seem that important
+  child_0: Option<malloc_tree_chunk>; 
+  child_1: Option<malloc_tree_chunk>;
+  parent: Option<malloc_tree_chunk>;
+  index: __size_t; //actually should be a u32, but this will do
+}
+
+/* A little helper macro for trees */
+//#define leftmost_child(t) ((t)->child[0] != 0? (t)->child[0] : (t)->child[1])
+function leftmost_child(t: malloc_tree_chunk): Option<malloc_tree_chunk> {
+  if(t.child_0.isDefined())
+    t.child_0;
+  else 
+    t.child_1;
+}

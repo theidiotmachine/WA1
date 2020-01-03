@@ -9,7 +9,6 @@ use types::prelude::*;
 pub use errs::Error;
 use crate::assert_ident;
 use crate::assert_ok;
-use crate::assert_peek_punct;
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_int_component(&mut self,
@@ -25,11 +24,7 @@ impl<'a> Parser<'a> {
 
         match component.as_ref() {
             "countTrailingZeros" => {
-                assert_peek_punct!(self, Punct::OpenParen);
-                let args = self.parse_function_call_args(&vec![], parser_func_context, parser_context);
-                if args.is_err() { 
-                    return Err(args.unwrap_err()) 
-                }
+                self.parse_empty_function_call_args(parser_func_context, parser_context);
                 Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32Ctz(Box::new(lhs.clone()))), r#type: Type::Int, is_const: true, loc: next_item.location.clone()})
             },
             _ => {

@@ -391,6 +391,9 @@ impl TypedExpr{
                     }
                 }
             },
+            Expr::Parens(inner) => {
+                inner.as_l_value()
+            },
             _ => None,
         }
     }

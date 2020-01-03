@@ -448,6 +448,23 @@ fn transform_typed_expr(
                     }
                 },
 
+                Type::Option(_) => {
+                    match typed_expr.r#type {
+                        Type::Boolean => {
+                            match bo.op {
+                                BinaryOperator::Equal => vi.push(Instruction::I32Eq),
+                                BinaryOperator::NotEqual => vi.push(Instruction::I32Ne),
+                                _ => {
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (Option<T> ★ ? => boolean)")))
+                                }
+                            }
+                        },
+                        _ => {
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (Option<T> ★ ? => ?)")))
+                        }
+                    }
+                },
+
                 _ => {
                     context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (? ★ ? => ?)")))
                 }
