@@ -1,5 +1,7 @@
 use ast::prelude::*;
 
+use ress::SourceLocation;
+
 use parity_wasm::builder::module;
 use parity_wasm::elements::{Module, ValueType, Local, Instructions, Instruction, BlockType, GlobalEntry, GlobalType, InitExpr};
 use parity_wasm::builder::{FunctionDefinition, FunctionBuilder};
@@ -188,6 +190,7 @@ fn transform_lvalue_tee(
 fn call_func(
     name: &String,
     func_map: &HashMap<String, u32>,
+    loc: &SourceLocation,
     vi: &mut Vec<Instruction>,
     context: &mut Context,
 ) -> () {
@@ -195,7 +198,7 @@ fn call_func(
     if o_func_id.is_some() {
         vi.push(Instruction::Call(*o_func_id.unwrap()));
     } else {
-        context.errors.push(Error::FuncNotRecognised(name.clone()));
+        context.errors.push(Error::FuncNotRecognised(loc.clone(), name.clone()));
     };
 }
 
@@ -271,6 +274,7 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThan=> vi.push(Instruction::F64Lt),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::F64Le),
                                 BinaryOperator::Equal => vi.push(Instruction::F64Eq),
+                                BinaryOperator::NotEqual => vi.push(Instruction::F64Ne),
                                 _ => {
                                     context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (number ★ ? => boolean)")))
                                 }
@@ -309,6 +313,7 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThan=> vi.push(Instruction::I32LtS),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeS),
                                 BinaryOperator::Equal => vi.push(Instruction::I32Eq),
+                                BinaryOperator::NotEqual => vi.push(Instruction::I32Ne),
                                 _ => {
                                     context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (int ★ ? => boolean)")))
                                 }
@@ -347,6 +352,7 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThan=> vi.push(Instruction::I64LtS),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::I64LeS),
                                 BinaryOperator::Equal => vi.push(Instruction::I64Eq),
+                                BinaryOperator::NotEqual => vi.push(Instruction::I64Ne),
                                 _ => {
                                     context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (bigint ★ ? => boolean)")))
                                 }
@@ -358,9 +364,9 @@ fn transform_typed_expr(
                     }
                 },
 
-                Type::Ptr(_) => {
+                Type::Ptr => {
                     match typed_expr.r#type {
-                        Type::Ptr(_) => {
+                        Type::Ptr => {
                             match bo.op {
                                 BinaryOperator::Plus => vi.push(Instruction::I32Add),
                                 BinaryOperator::Minus => vi.push(Instruction::I32Sub),
@@ -370,7 +376,7 @@ fn transform_typed_expr(
                                 BinaryOperator::BitOr => vi.push(Instruction::I32Or),
                                 BinaryOperator::BitXor => vi.push(Instruction::I32Xor),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (ptr ★ ? => ptr)")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (__ptr ★ ? => __ptr)")))
                                 }
                             }
                         },
@@ -381,8 +387,9 @@ fn transform_typed_expr(
                                 BinaryOperator::LessThan=> vi.push(Instruction::I32LtU),
                                 BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeU),
                                 BinaryOperator::Equal => vi.push(Instruction::I32Eq),
+                                BinaryOperator::NotEqual => vi.push(Instruction::I32Ne),
                                 _ => {
-                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (ptr ★ ? => boolean)")))
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (__ptr ★ ? => boolean)")))
                                 }
                             }
                         },
@@ -399,8 +406,44 @@ fn transform_typed_expr(
                         BinaryOperator::LogicalAnd => vi.push(Instruction::I32And),
                         BinaryOperator::LogicalOr => vi.push(Instruction::I32Or),
                         BinaryOperator::Equal => vi.push(Instruction::I32Eq),
+                        BinaryOperator::NotEqual => vi.push(Instruction::I32Ne),
                         _ => {
                             context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (boolean ★ ? => boolean)")))
+                        }
+                    }
+                },
+
+                Type::SizeT => {
+                    match typed_expr.r#type {
+                        Type::SizeT | Type::Ptr => {
+                            match bo.op {
+                                BinaryOperator::Plus => vi.push(Instruction::I32Add),
+                                BinaryOperator::Minus => vi.push(Instruction::I32Sub),
+                                BinaryOperator::Multiply => vi.push(Instruction::I32Mul),
+                                BinaryOperator::Divide => vi.push(Instruction::I32DivU),
+                                BinaryOperator::BitAnd => vi.push(Instruction::I32And),
+                                BinaryOperator::BitOr => vi.push(Instruction::I32Or),
+                                BinaryOperator::BitXor => vi.push(Instruction::I32Xor),
+                                _ => {
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (__size_t ★ ? => __size_t | __ptr)")))
+                                }
+                            }
+                        },
+                        Type::Boolean => {
+                            match bo.op {
+                                BinaryOperator::GreaterThan => vi.push(Instruction::I32GtU),
+                                BinaryOperator::GreaterThanEqual => vi.push(Instruction::I32GeU),
+                                BinaryOperator::LessThan=> vi.push(Instruction::I32LtU),
+                                BinaryOperator::LessThanEqual => vi.push(Instruction::I32LeU),
+                                BinaryOperator::Equal => vi.push(Instruction::I32Eq),
+                                BinaryOperator::NotEqual => vi.push(Instruction::I32Ne),
+                                _ => {
+                                    context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (__size_t ★ ? => boolean)")))
+                                }
+                            }
+                        },
+                        _ => {
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("binary operator (__size_t ★ ? => ?)")))
                         }
                     }
                 },
@@ -416,6 +459,24 @@ fn transform_typed_expr(
 
             match uo.expr.r#type {
                 Type::Int => {
+                    match uo.op {
+                        UnaryOperator::BitNot => {
+                            vi.push(Instruction::I32Const(-1));
+                            vi.push(Instruction::I32Xor);
+                        },
+        
+                        UnaryOperator::Plus => {},
+                        UnaryOperator::Minus => {
+                            vi.push(Instruction::I32Const(-1));
+                            vi.push(Instruction::I32Mul);
+                        },
+                        _ => {
+                            context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from("unary operator")))
+                        }
+                    }
+                },
+
+                Type::SizeT => {
                     match uo.op {
                         UnaryOperator::BitNot => {
                             vi.push(Instruction::I32Const(-1));
@@ -528,7 +589,7 @@ fn transform_typed_expr(
                         }
                     },
 
-                    Type::Ptr(_) => {
+                    Type::Ptr | Type::SizeT => {
                         match op {
                             AssignmentOperator::MinusAssign => r_value_code.push(Instruction::I32Sub),
                             AssignmentOperator::PlusAssign => r_value_code.push(Instruction::I32Add),
@@ -557,7 +618,7 @@ fn transform_typed_expr(
                 vi.append(&mut transform_typed_expr(&arg, global_var_map, local_var_map, func_map, context, true));
             }
 
-            call_func(name, func_map, &mut vi, context);
+            call_func(name, func_map, &typed_expr.loc, &mut vi, context);
         },
 
         Expr::IntToNumber(p) => {
@@ -745,7 +806,7 @@ fn transform_typed_expr(
 
                     //push size, call malloc
                     vi.push(Instruction::I32Const(stml.size.try_into().unwrap()));
-                    call_func(&String::from("malloc"), func_map, &mut vi, context);
+                    call_func(&String::from("malloc"), func_map, &typed_expr.loc, &mut vi, context);
 
                     //set the local variable called __scratch_malloc (this should have been created previously) and set the malloc size 
                     let scratch_malloc_idx = local_var_map.get("__scratch_malloc").unwrap();
@@ -766,7 +827,28 @@ fn transform_typed_expr(
             }
         },
 
-        _ => { context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))); },
+        Expr::Null => {
+            vi.push(Instruction::I32Const(0));
+        },
+
+        Expr::SizeOf(t) => {
+            match t {
+                Type::UserStruct{name: struct_name} => {
+                    //first get the mem layout data
+                    let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
+                    let stml = match mem_layout_elem {
+                        UserMemLayout::Struct(stml) => {
+                            stml
+                        },
+                    };
+
+                    vi.push(Instruction::I32Const(stml.size.try_into().unwrap()));
+                },
+                _ => { context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("__sizeof on {}", t)))); }
+            }
+        },
+
+        _ => { context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("{:#?}", typed_expr.expr)))); },
     };
 
     if !consume_result && typed_expr.r#type != Type::RealVoid && !nop{

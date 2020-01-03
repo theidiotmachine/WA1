@@ -15,7 +15,6 @@ pub mod prelude {
     pub use super::get_unary_op_type;
     pub use super::get_binary_op_type_cast;
     pub use super::AbstractTypeDecl;
-    pub use super::PtrAlign;
     pub use super::StructType;
     pub use super::StructMember;
     pub use super::cast::prelude::*;
@@ -130,35 +129,15 @@ pub struct AbstractTypeDecl{
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum PtrAlign{
-    Align0, Align8, Align16, Align32, Align64
-}
-
-impl PtrAlign{
-    pub fn from_i32(i: i32) -> Option<PtrAlign> {
-        match i {
-            0 => Some(PtrAlign::Align0),
-            8 => Some(PtrAlign::Align8),
-            16 => Some(PtrAlign::Align16),
-            32 => Some(PtrAlign::Align32),
-            64 => Some(PtrAlign::Align64),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     /// unit type that actually manifests as nothing
     RealVoid,
     /// unit type that is created at run time
     FakeVoid,
-
     /// top type
     Unknown,
     /// bottom type
     Never,
-
     ///f64 number
     Number,
     ///string
@@ -173,36 +152,24 @@ pub enum Type {
     Boolean,
     ///Func
     Func{func_type: Box<FuncType>, type_args: Vec<Type>},
-
     ///Tuple
     Tuple(Vec<Type>),
-    
-    ///object
-    //Object,
-
     /// untyped object literal - can be cast to a matching struct or class
     ObjectLiteral(HashMap<String, Type>),
-
     /// boxed type
     Any,
-
-    /// Options
+    /// Options. This is built into the type system because I want a zero-cost abstraction of a null pointer.
     Option(Box<Type>),
     /// Option - some
     Some(Box<Type>),
-    /// Option - none
-    Null,
-
     /// user type
     UserClass{name: String, type_args: Vec<Type>},
     /// user struct type
     UserStruct{name: String},
-
     /// not yet known - will be filled in by the typer
     Undeclared,
     ///Unresolved type var
     VariableUsage(String),
-
     ///numeric literal - 'number'
     FloatLiteral(f64),
     //numeric literal - big int
@@ -211,10 +178,10 @@ pub enum Type {
     IntLiteral(i32),
     /// string literal
     StringLiteral(String),
-
     ///ptr - internal type. Param is alignment
-    Ptr(PtrAlign),
-
+    Ptr,
+    ///
+    SizeT,
     ///type literal
     TypeLiteral(Box<Type>),
 }
@@ -260,12 +227,12 @@ impl Display for Type {
             Type::Any => write!(f, "any"),
             Type::Option(inner) => write!(f, "Option<{}>", inner),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
-            Type::Null => write!(f, "null"),
             Type::UserClass{name, type_args: _} => write!(f, "{}", name),
             Type::UserStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "undeclared"),
             Type::VariableUsage(name) => write!(f, "{}", name),
-            Type::Ptr(p) => write!(f, "__ptr<{:#?}>", p),
+            Type::Ptr => write!(f, "__ptr"),
+            Type::SizeT => write!(f, "__size_t"),
             Type::FloatLiteral(n) => write!(f, "{}", n),
             Type::IntLiteral(n) => write!(f, "{}", n),
             Type::BigIntLiteral(n) => write!(f, "{}", n),
@@ -343,7 +310,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
         //assignment.
         OpType::AssignmentOpType => {
             //this is simple; either rhs can be cast to lhs or it can't
-            let type_cast = try_cast(rhs_type, lhs_type);
+            let type_cast = try_cast(rhs_type, lhs_type, true);
             let out_rhs_type = match &type_cast{
                 TypeCast::NotNeeded => lhs_type.clone(),
                 TypeCast::FreeWiden => lhs_type.clone(),
@@ -362,7 +329,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             let yes = types.iter().find(|t| *t == lhs_type).is_some();
             if yes {
                 //if it is, see if the rhs can be cast to the lhs
-                let type_cast = try_cast(rhs_type, lhs_type);
+                let type_cast = try_cast(rhs_type, lhs_type, true);
                 let out_rhs_type = match &type_cast{
                     TypeCast::NotNeeded => lhs_type.clone(),
                     TypeCast::FreeWiden => lhs_type.clone(),
@@ -381,7 +348,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
         //full equality (or inequality)
         OpType::EqualityOpType => {
             //try casting from one to the other. lhs to rhs first
-            let type_cast = try_cast(lhs_type, &rhs_type);
+            let type_cast = try_cast(lhs_type, &rhs_type, true);
             match &type_cast{
                 TypeCast::NotNeeded => 
                     Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
@@ -389,7 +356,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
                     Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
                 TypeCast::None => {
                     //now try going the other way
-                    let type_cast = try_cast(rhs_type, &lhs_type);
+                    let type_cast = try_cast(rhs_type, &lhs_type, true);
                     match &type_cast{
                         TypeCast::NotNeeded => 
                             Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),

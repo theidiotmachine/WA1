@@ -88,8 +88,8 @@ fn create_cast(want: &Type, got: &TypedExpr, cast: &TypeCast) -> Option<TypedExp
     }
 }
 
-fn try_create_cast(want: &Type, got: &TypedExpr) -> Option<TypedExpr> {
-    let type_cast = types::cast::try_cast(&got.r#type, want);
+fn try_create_cast(want: &Type, got: &TypedExpr, implicit: bool) -> Option<TypedExpr> {
+    let type_cast = types::cast::try_cast(&got.r#type, want, implicit);
     create_cast(want, got, &type_cast)
 }
 

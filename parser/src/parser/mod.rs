@@ -744,7 +744,7 @@ impl<'b> Parser<'b> {
         if var_type.is_undeclared() {
             var_type = init.r#type.clone();
         } else if var_type != init.r#type {
-            let o_cast_expr = try_create_cast(&var_type, &init);
+            let o_cast_expr = try_create_cast(&var_type, &init, true);
             match o_cast_expr {
                 Some(cast_expr) => { init = cast_expr; },
                 None => { 
@@ -1042,6 +1042,8 @@ impl<'b> Parser<'b> {
 
         assert_punct!(self, Punct::OpenBrace);
 
+        parser_context.type_map.insert(id.to_string(), UserType::Struct{struct_type: StructType{members: vec![]}, under_construction: true});
+
         loop {
             let lookahead_item = self.peek_next_item();
             loc.end = lookahead_item.location.end.clone();
@@ -1075,7 +1077,7 @@ impl<'b> Parser<'b> {
 
         self.context.pop_type_scope();
 
-        parser_context.type_map.insert(id.to_string(), UserType::Struct(StructType{members: members}));
+        parser_context.type_map.insert(id.to_string(), UserType::Struct{struct_type: StructType{members: members}, under_construction: false});
 
         Ok(TypedExpr{expr: Expr::StructDecl(id.to_string()), is_const: true, r#type: Type::RealVoid, loc: loc})
     }
@@ -1110,7 +1112,7 @@ impl<'b> Parser<'b> {
                         // return type checking
                         let expr_type = expr.r#type.clone();
                         if parser_func_context.func_return_type != expr.r#type {
-                            let o_cast = try_create_cast(&parser_func_context.func_return_type, &expr);
+                            let o_cast = try_create_cast(&parser_func_context.func_return_type, &expr, true);
                             match o_cast {
                                 None => { 
                                     Err(Error::TypeFailureReturn(parser_func_context.func_return_type.clone(), expr_type))
@@ -1178,7 +1180,7 @@ impl<'b> Parser<'b> {
         assert_punct!(self, Punct::OpenBrace);
 
         let scratch_malloc = String::from("__scratch_malloc");
-        let scratch_malloc_type = Type::Ptr(PtrAlign::Align0);
+        let scratch_malloc_type = Type::Ptr;
         self.context.add_var(&scratch_malloc, &scratch_malloc, &scratch_malloc_type, false);
         let vd = VariableDecl{
             internal_name: scratch_malloc.clone(), r#type: scratch_malloc_type, constant: false, init: None, closure_source: false, arg: false, orig_name: scratch_malloc
@@ -1193,7 +1195,12 @@ impl<'b> Parser<'b> {
             Type::UserStruct{name: struct_name} => {
                 let tm_entry = parser_context.type_map.get(struct_name).unwrap();
                 match tm_entry {
-                    UserType::Struct(st) => st.get_member_type_map(),
+                    UserType::Struct{struct_type, under_construction} => { 
+                        if *under_construction {
+                            parser_context.errors.push(Error::RecursiveTypeDefinition(loc.clone()));
+                        }
+                        struct_type.get_member_type_map()
+                    },
                     _ => unreachable!()
                 }
             }, 
@@ -1237,7 +1244,7 @@ impl<'b> Parser<'b> {
                             parser_context.errors.push(Error::ObjectHasNoMember(next_item.location, i.to_string().clone()));
                         },
                         Some(member_map_elem) => {
-                            let o_cast = try_create_cast(member_map_elem, &v);
+                            let o_cast = try_create_cast(member_map_elem, &v, true);
                             match o_cast {
                                 None => {
                                     parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, i.to_string().clone(), format!("{}", member_map_elem), format!("{}", v.r#type.clone())));
@@ -1340,7 +1347,7 @@ impl<'b> Parser<'b> {
             Type::UserStruct{name} => {
                 let tm_entry = parser_context.type_map.get(name).unwrap();
                 match tm_entry {
-                    UserType::Struct(st) => self.parse_struct_component(lhs, &st),
+                    UserType::Struct{struct_type: st, under_construction: _} => self.parse_struct_component(lhs, &st),
                     _ => unreachable!()
                 }
             },
@@ -1348,7 +1355,7 @@ impl<'b> Parser<'b> {
                 self.parse_int_component(lhs, parser_func_context, parser_context)
             },
             //FIXME64BIT
-            Type::Ptr(_) => {
+            Type::Ptr | Type::SizeT => {
                 self.parse_int_component(lhs, parser_func_context, parser_context)
             },
             _ => Err(Error::NoComponents(lhs.loc.clone()))
@@ -1455,8 +1462,33 @@ impl<'b> Parser<'b> {
             "__memoryGrow" => Some(self.parse_mem_grow(parser_func_context, parser_context)),
             //it's a 
             "__trap" => Some(self.parse_trap()),
+            "__sizeof" => Some(self.parse_sizeof(parser_func_context, parser_context)),
             _ => None
         }
+    }
+
+    /// Parse 'Some(x)'. Because options are built in at a fairly low level, this is a parser function, not a library function.
+    fn parse_some(&mut self, 
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> Res<TypedExpr>{
+        self.skip_next_item();
+        assert_punct!(self, Punct::OpenParen);
+        let inner = self.parse_expr(parser_func_context, parser_context);
+        assert_ok!(inner);
+        assert_punct!(self, Punct::CloseParen);
+        match inner.r#type {
+            Type::UserStruct{name: _} => {
+
+            },
+            _ => {
+                parser_context.errors.push(Error::NotYetImplemented(inner.loc, String::from("Options on anything other than a __struct")));
+            }
+        }
+
+        let inner_loc = inner.loc.clone();
+        let inner_type = inner.r#type.clone();
+        Ok(TypedExpr{expr: Expr::FreeTypeWiden(Box::new(inner)), r#type: Type::Option(Box::new(inner_type)), loc: inner_loc, is_const: true})
     }
 
     fn parse_ident_expr(&mut self,
@@ -1480,7 +1512,7 @@ impl<'b> Parser<'b> {
                         let o_type = self.parse_type_from_ident(&id, parser_context);
                         match o_type {
                             Ok(t) => 
-                                TypedExpr{expr: Expr::TypeLiteral(Box::new(t.clone())), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: next.location.clone()},
+                                TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: next.location.clone()},
                         
                             _ => {
                                 // peek to see if this is a function call. If it is, we resolve it later
@@ -1713,7 +1745,7 @@ impl<'b> Parser<'b> {
 
             Token::Null => {
                 self.skip_next_item();
-                return Ok(TypedExpr{expr:Expr::Null, r#type: Type::Null, is_const: true, loc: lookahead_item.location.clone()});
+                return Ok(TypedExpr{expr:Expr::Null, r#type: Type::Option(Box::new(Type::Never)), is_const: true, loc: lookahead_item.location.clone()});
             },
 
             Token::Template(_) => {
@@ -1735,11 +1767,12 @@ impl<'b> Parser<'b> {
                     },
                     Keyword::If => self.parse_if(parser_func_context, parser_context),
                     Keyword::Function => self.parse_named_function_decl(false, parser_func_context, parser_context),
+                    Keyword::Some => self.parse_some(parser_func_context, parser_context),
                     _ => {
                         self.skip_next_item();
                         let o_type = self.parse_type_from_keyword(&k, &lookahead_item.location, parser_context);
                         match o_type {
-                            Ok(t) => Ok(TypedExpr{expr: Expr::TypeLiteral(Box::new(t.clone())), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: lookahead_item.location.clone()}),
+                            Ok(t) => Ok(TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: lookahead_item.location.clone()}),
                             Err(_) => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "unexpected keyword")
                         }
                     },
@@ -1837,7 +1870,7 @@ impl<'b> Parser<'b> {
                     //as is just a straight cast; so 
                     match &rhs.r#type {
                         Type::TypeLiteral(t) => {
-                            let o_cast = try_create_cast(&t, lhs);
+                            let o_cast = try_create_cast(&t, lhs, false);
                             match o_cast {
                                 Some(c) => c,
                                 None => {

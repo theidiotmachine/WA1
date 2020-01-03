@@ -5,6 +5,6 @@ pub mod prelude {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UserType{
-    Struct(StructType),
+    Struct{struct_type: StructType, under_construction: bool},
     Class(ClassType)
 }

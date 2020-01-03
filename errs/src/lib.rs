@@ -12,7 +12,7 @@ pub enum Error {
     Other(String),
     NotYetImplemented(SourceLocation, String),
     VariableNotRecognised(SourceLocation, String),
-    FuncNotRecognised(String),
+    FuncNotRecognised(SourceLocation, String),
     TypeFailureUnaryOperator,
     TypeFailureBinaryOperator(SourceLocation, String, String),
     TypeFailureVariableCreation(SourceLocation, String, String),
@@ -35,6 +35,7 @@ pub enum Error {
     ObjectDuplicateMember(SourceLocation, String),
     ObjectMissingMember(SourceLocation, String),
     AsNeedsType(SourceLocation),
+    RecursiveTypeDefinition(SourceLocation),
 }
 
 impl Display for Error {
@@ -48,7 +49,7 @@ impl Display for Error {
             Error::Other(ref msg) => write!(f, "{}", msg),
             Error::NotYetImplemented(ref loc, ref msg) => write!(f, "ERROR {}: not yet implemented: {}", loc, msg),
             Error::VariableNotRecognised(ref loc, ref var_name) => write!(f, "ERROR {}: var not recognised: {}", loc, var_name),
-            Error::FuncNotRecognised(ref func_name) => write!(f, "Func not recognised: {}", func_name),
+            Error::FuncNotRecognised(ref loc, ref func_name) => write!(f, "ERROR {}: func not recognised: {}", loc, func_name),
             Error::TypeFailureUnaryOperator => write!(f, "Type failure unary operator"),
             Error::TypeFailureBinaryOperator(ref loc, ref lhs_type, ref rhs_type) => 
                 write!(f, "ERROR {}: can't make type of lhs ({}) and rhs ({}) of binary operator agree", loc, lhs_type, rhs_type),
@@ -72,6 +73,7 @@ impl Display for Error {
             Error::ObjectDuplicateMember(ref loc, ref m) => write!(f, "ERROR {}: object has multiple definitions for {}", loc, m),
             Error::ObjectMissingMember(ref loc, ref m) => write!(f, "ERROR {}: object requires member {}", loc, m),
             Error::AsNeedsType(ref loc) => write!(f, "ERROR {}: 'as' must have a type literal on its rhs", loc),
+            Error::RecursiveTypeDefinition(ref loc) => write!(f, "ERROR {}: recursive type definition not allowed", loc),
         }
     }
 }

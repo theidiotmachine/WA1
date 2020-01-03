@@ -47,7 +47,7 @@ impl<'a> Parser<'a> {
                 let arg_type = &arg_types[out.len()];
                 if *arg_type != expr.r#type {
                     let expr_type = expr.r#type.clone();
-                    let o_cast = try_create_cast(arg_type, &expr);
+                    let o_cast = try_create_cast(arg_type, &expr, true);
                     match o_cast {
                         None => parser_context.errors.push(Error::TypeFailure(expr.loc.clone(), arg_type.clone(), expr_type)),
                         Some(new_expr) => out.push(new_expr)

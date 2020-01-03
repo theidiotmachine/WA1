@@ -56,39 +56,31 @@ static ref COMPARISON_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Boolean},
     FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Boolean},
     FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align0), Type::Ptr(PtrAlign::Align0)], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8), Type::Ptr(PtrAlign::Align8)], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16), Type::Ptr(PtrAlign::Align16)], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32), Type::Ptr(PtrAlign::Align32)], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align64), Type::Ptr(PtrAlign::Align64)], out_type: Type::Boolean},
+    FuncType{in_types: vec![Type::Ptr, Type::Ptr], out_type: Type::Boolean},
+    FuncType{in_types: vec![Type::SizeT, Type::SizeT], out_type: Type::Boolean},
 ]);
 
 static ref MATHS_BIN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
     FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Number},
     FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align0), Type::Ptr(PtrAlign::Align0)], out_type: Type::Ptr(PtrAlign::Align0)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8), Type::Ptr(PtrAlign::Align8)], out_type: Type::Ptr(PtrAlign::Align8)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16), Type::Ptr(PtrAlign::Align16)], out_type: Type::Ptr(PtrAlign::Align16)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32), Type::Ptr(PtrAlign::Align32)], out_type: Type::Ptr(PtrAlign::Align32)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align64), Type::Ptr(PtrAlign::Align64)], out_type: Type::Ptr(PtrAlign::Align64)},
+    FuncType{in_types: vec![Type::Ptr, Type::Ptr], out_type: Type::Ptr},
+    FuncType{in_types: vec![Type::SizeT, Type::SizeT], out_type: Type::SizeT},
 ]);
 
 static ref MATHS_UN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int], out_type: Type::Int},
     FuncType{in_types: vec![Type::Number], out_type: Type::Number},
     FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align0)], out_type: Type::Ptr(PtrAlign::Align0)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align8)], out_type: Type::Ptr(PtrAlign::Align8)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align16)], out_type: Type::Ptr(PtrAlign::Align16)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align32)], out_type: Type::Ptr(PtrAlign::Align32)},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align64)], out_type: Type::Ptr(PtrAlign::Align64)},
+    FuncType{in_types: vec![Type::Ptr], out_type: Type::Ptr},
+    FuncType{in_types: vec![Type::SizeT], out_type: Type::SizeT},
 ]);
 
 static ref BIT_BIN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
     FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
-    FuncType{in_types: vec![Type::Ptr(PtrAlign::Align0), Type::Ptr(PtrAlign::Align0)], out_type: Type::Ptr(PtrAlign::Align0)},
+    FuncType{in_types: vec![Type::Ptr, Type::Ptr], out_type: Type::Ptr},
+    FuncType{in_types: vec![Type::SizeT, Type::SizeT], out_type: Type::SizeT},
 ]);
 
 static ref EQUALITY_OP: OpType = OpType::EqualityOpType;
@@ -105,24 +97,22 @@ static ref BOOL_UN_OP: OpType = OpType::SimpleOpType(vec![
 
 static ref BIT_UN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int], out_type: Type::Int},
-    FuncType{in_types: vec![Type::Number], out_type: Type::Number},
+    FuncType{in_types: vec![Type::SizeT], out_type: Type::SizeT},
+    FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt},
 ]);
 
 static ref MATHS_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
     Type::Int,
     Type::Number,
     Type::BigInt,
-    Type::Ptr(PtrAlign::Align0),
-    Type::Ptr(PtrAlign::Align8),
-    Type::Ptr(PtrAlign::Align16),
-    Type::Ptr(PtrAlign::Align32),
-    Type::Ptr(PtrAlign::Align64),
+    Type::Ptr,
+    Type::SizeT,
 ]);
-
 
 static ref BIT_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
     Type::Int,
     Type::BigInt,
+    Type::SizeT,
 ]);
 
 static ref ASSIGN_OP: OpType = OpType::AssignmentOpType;
@@ -351,7 +341,9 @@ pub enum Expr {
     /// constructor
     ConstructFromObjectLiteral(Type, Vec<ObjectLiteralElem>),
     ///type literal
-    TypeLiteral(Box<Type>),
+    TypeLiteral(Type),
+    ///__sizeof
+    SizeOf(Type),
 }
 
 #[derive(Debug, Clone, PartialEq)]

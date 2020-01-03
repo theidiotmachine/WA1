@@ -1215,7 +1215,10 @@ pub enum Keyword {
     Unknown,
     Int,
     Ptr,
-    Struct
+    SizeT,
+    Struct,
+    Option,
+    Some
 }
 
 impl Keyword {
@@ -1281,7 +1284,10 @@ impl Keyword {
             "undefined" => Keyword::Undefined,
             "unknown" => Keyword::Unknown,
             "__ptr" => Keyword::Ptr,
+            "__size_t" => Keyword::SizeT,
             "__struct" => Keyword::Struct,
+            "Option" => Keyword::Option,
+            "Some" => Keyword::Some,
             _ => return None,
         })
     }
@@ -1357,6 +1363,9 @@ impl Keyword {
             Keyword::Unknown => "unknown",
             Keyword::Ptr => "__ptr",
             Keyword::Struct => "__struct",
+            Keyword::Option => "Option",
+            Keyword::SizeT => "__size_t",
+            Keyword::Some => "Some",
         }
     }
 

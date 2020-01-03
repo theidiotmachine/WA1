@@ -1157,6 +1157,7 @@ dependencies = [
  "errs 0.1.0",
  "parity-wasm 0.41.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parser 0.5.2",
+ "ress 0.8.1",
  "types 0.1.0",
 ]
 

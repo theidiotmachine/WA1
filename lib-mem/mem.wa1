@@ -1,21 +1,12 @@
-/// The WA1 allocator
-__struct Header{
-    size: __ptr<0>;
-    next: __ptr<32>;
-    prev: __ptr<32>;
-    free: boolean;
-}
-
-const PAGE_SIZE: __ptr<0> = 65536;
+const PAGE_SIZE: int = 65536;
 
 //this is the pointer to the first available free address
-let memTop: __ptr<0> = __memorySize() * PAGE_SIZE;
+let memTop: __ptr = __memorySize() * PAGE_SIZE;
 
 //this is the pointer to the last available free address
-let memBottom: __ptr<0> = __memorySize() * PAGE_SIZE;
-
-//let's do the simplest malloc possible: sbrk
-function malloc(sz: __ptr<0>): __ptr<32> {
+let memBottom: __ptr = __memorySize() * PAGE_SIZE;
+/*
+function sbrk(sz: int): __ptr<0> {
     if(memTop + sz > memBottom) {
         const numPages = (sz / PAGE_SIZE) + 1;
         const r = __memoryGrow(0, numPages);
@@ -29,7 +20,342 @@ function malloc(sz: __ptr<0>): __ptr<32> {
     memTop += sz;
     out;
 }
+*/
+/*
+  This is a version (aka dlmalloc) of malloc/free/realloc written by
+  Doug Lea and released to the public domain, as explained at
+  http://creativecommons.org/publicdomain/zero/1.0/ Send questions,
+  comments, complaints, performance data, etc to dl@cs.oswego.edu
 
-function free(ptr: __ptr<32>): void {
+* This came from Version 2.8.6 Wed Aug 29 06:57:58 2012  Doug Lea
+  at ftp://gee.cs.oswego.edu/pub/misc/malloc.c
 
+* I ported this partly as a test of WA1 (it was a good one and found 
+  many bugs) and partly to have a production quality malloc. The 
+  original uses many macros. I do not have macros, so I used 
+  functions and consts. It will be slow, as a result.
+
+* WA1 Preprocessor values:
+WIN32: undefined
+DLMALLOC_EXPORT: ???
+MALLOC_ALIGNMENT: 8
+MSPACES: 0
+ONLY_MSPACES: 0
+USE_LOCKS: 0
+USE_SPIN_LOCKS: 0
+USE_RECURSIVE_LOCKS: 0
+LOCK_AT_FORK: 0
+FOOTERS: 0
+INSECURE: 0 (*)
+USE_DL_PREFIX: undefined
+MALLOC_INSPECT_ALL: undefined
+ABORT: __trap()
+PROCEED_ON_ERROR: 0
+DEBUG: undefined
+ABORT_ON_ASSERT_FAILURE: 1
+MALLOC_FAILURE_ACTION: no op
+HAVE_MORECORE: 1
+MORECORE: sbrk
+MORECORE_CONTIGUOUS: 1
+MORECORE_CANNOT_TRIM: 1 (*)
+NO_SEGMENT_TRAVERSAL: 0
+HAVE_MMAP: 0
+HAVE_MREMAP: 0
+MMAP_CLEARS: 0
+USE_BUILTIN_FFS: 1 (*)
+malloc_getpagesize: 64k
+USE_DEV_RANDOM: 0
+NO_MALLINFO: 0 (*)
+MALLINFO_FIELD_TYPE: __ptr<0>
+NO_MALLOC_STATS: 1 (*)
+REALLOC_ZERO_BYTES_FREES: undefined
+LACKS_*: ???
+DEFAULT_GRANULARITY: 64k
+DEFAULT_TRIM_THRESHOLD: 2M
+DEFAULT_MMAP_THRESHOLD: ???
+MAX_RELEASE_CHECK_RATE: MAX_SIZE_T (*)
+*/
+
+const MAX_SIZE_T: __size_t = 0xffffffff as __size_t;
+
+__struct mallinfo {
+    arena: __size_t;    /* non-mmapped space allocated from system */
+    ordblks: __size_t;  /* number of free chunks */
+    usmblks: __size_t;  /* maximum total allocated space */
+    uordblks: __size_t; /* total allocated space */
+    fordblks: __size_t; /* total free space */
+    keepcost: __size_t; /* releasable (via malloc_trim) space */
 }
+
+/* The byte and bit size of a size_t */
+//const SIZE_T_SIZE: __size_t = 4;
+//const SIZE_T_BITSIZE: __size_t = 32;
+
+/* Some constants coerced to size_t */
+/* Annoying but necessary to avoid errors on some platforms */
+//const SIZE_T_ZERO: __size_t =          0;
+//const SIZE_T_ONE: __ptr<0> =           1;
+//const SIZE_T_TWO: __ptr<0> =           2;
+//const SIZE_T_FOUR: __ptr<0> =          4;
+//const TWO_SIZE_T_SIZES: __ptr<0> =     8;
+//const FOUR_SIZE_T_SIZES: __ptr<0> =    16;
+//const SIX_SIZE_T_SIZES: __ptr<0> =     24;
+//const HALF_MAX_SIZE_T: __ptr<0> =      0xffffffff / 2;
+
+/* The bit mask value corresponding to MALLOC_ALIGNMENT */
+//manually inlined - const CHUNK_ALIGN_MASK: __size_t = 7;
+
+/* True if address a has acceptable alignment */
+function is_aligned(A: __ptr): boolean (A & 7) == 0;
+
+/* the number of bytes to offset an address to align it */
+function align_offset(A: __ptr): __ptr if((A & 7) == 0) 0 as __ptr; else (((8 as __ptr) - (A & 7)) & 7);
+
+/* MORECORE and MMAP must return MFAIL on failure */
+//#define MFAIL                ((void*)(MAX_SIZE_T))
+//#define CMFAIL               ((char*)(MFAIL)) /* defined for convenience */
+
+//#define CALL_MORECORE(S)    MORECORE_DEFAULT(S)
+
+/* MMAP stuff, all stubbed out */
+//#define USE_MMAP_BIT            (SIZE_T_ZERO)
+//#define MMAP(s)                 MFAIL
+//#define MUNMAP(a, s)            (-1)
+//#define DIRECT_MMAP(s)          MFAIL
+//#define CALL_DIRECT_MMAP(s)     DIRECT_MMAP(s)
+//#define CALL_MMAP(s)            MMAP(s)
+//#define CALL_MUNMAP(a, s)       MUNMAP((a), (s))
+//#define CALL_MREMAP(addr, osz, nsz, mv)     MFAIL
+
+/* mstate bit set if continguous morecore disabled or failed */
+//#define USE_NONCONTIGUOUS_BIT (4U)
+
+/* segment bit set in create_mspace_with_base */
+//#define EXTERN_BIT            (8U)
+
+/* LOCK stuff, all stubbed out */
+//#define USE_LOCK_BIT               (0U)
+//#define INITIAL_LOCK(l)            (0)
+//#define DESTROY_LOCK(l)            (0)
+//#define ACQUIRE_MALLOC_GLOBAL_LOCK()
+//#define RELEASE_MALLOC_GLOBAL_LOCK()
+
+/* -----------------------  Chunk representations ------------------------ */
+
+/*
+  (The following includes lightly edited explanations by Colin Plumb.)
+
+  The malloc_chunk declaration below is misleading (but accurate and
+  necessary).  It declares a "view" into memory allowing access to
+  necessary fields at known offsets from a given base.
+
+  Chunks of memory are maintained using a `boundary tag' method as
+  originally described by Knuth.  (See the paper by Paul Wilson
+  ftp://ftp.cs.utexas.edu/pub/garbage/allocsrv.ps for a survey of such
+  techniques.)  Sizes of free chunks are stored both in the front of
+  each chunk and at the end.  This makes consolidating fragmented
+  chunks into bigger chunks fast.  The head fields also hold bits
+  representing whether chunks are free or in use.
+
+  Here are some pictures to make it clearer.  They are "exploded" to
+  show that the state of a chunk can be thought of as extending from
+  the high 31 bits of the head field of its header through the
+  prev_foot and PINUSE_BIT bit of the following chunk header.
+
+  A chunk that's in use looks like:
+
+   chunk-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+           | Size of previous chunk (if P = 0)                             |
+           +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ |P|
+         | Size of this chunk                                         1| +-+
+   mem-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         |                                                               |
+         +-                                                             -+
+         |                                                               |
+         +-                                                             -+
+         |                                                               :
+         +-      size - sizeof(size_t) available payload bytes          -+
+         :                                                               |
+ chunk-> +-                                                             -+
+         |                                                               |
+         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ |1|
+       | Size of next chunk (may or may not be in use)               | +-+
+ mem-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+    And if it's free, it looks like this:
+
+   chunk-> +-                                                             -+
+           | User payload (must be in use, or we would have merged!)       |
+           +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ |P|
+         | Size of this chunk                                         0| +-+
+   mem-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         | Next pointer                                                  |
+         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         | Prev pointer                                                  |
+         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         |                                                               :
+         +-      size - sizeof(struct chunk) unused bytes               -+
+         :                                                               |
+ chunk-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+         | Size of this chunk                                            |
+         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ |0|
+       | Size of next chunk (must be in use, or we would have merged)| +-+
+ mem-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+       |                                                               :
+       +- User payload                                                -+
+       :                                                               |
+       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                                                                     |0|
+                                                                     +-+
+  Note that since we always merge adjacent free chunks, the chunks
+  adjacent to a free chunk must be in use.
+
+  Given a pointer to a chunk (which can be derived trivially from the
+  payload pointer) we can, in O(1) time, find out whether the adjacent
+  chunks are free, and if so, unlink them from the lists that they
+  are on and merge them with the current chunk.
+
+  Chunks always begin on even word boundaries, so the mem portion
+  (which is returned to the user) is also on an even word boundary, and
+  thus at least double-word aligned.
+
+  The P (PINUSE_BIT) bit, stored in the unused low-order bit of the
+  chunk size (which is always a multiple of two words), is an in-use
+  bit for the *previous* chunk.  If that bit is *clear*, then the
+  word before the current chunk size contains the previous chunk
+  size, and can be used to find the front of the previous chunk.
+  The very first chunk allocated always has this bit set, preventing
+  access to non-existent (or non-owned) memory. If pinuse is set for
+  any given chunk, then you CANNOT determine the size of the
+  previous chunk, and might even get a memory addressing fault when
+  trying to do so.
+
+  The C (CINUSE_BIT) bit, stored in the unused second-lowest bit of
+  the chunk size redundantly records whether the current chunk is
+  inuse (unless the chunk is mmapped). This redundancy enables usage
+  checks within free and realloc, and reduces indirection when freeing
+  and consolidating chunks.
+
+  Each freshly allocated chunk must have both cinuse and pinuse set.
+  That is, each allocated chunk borders either a previously allocated
+  and still in-use chunk, or the base of its memory arena. This is
+  ensured by making all allocations from the `lowest' part of any
+  found chunk.  Further, no free chunk physically borders another one,
+  so each free chunk is known to be preceded and followed by either
+  inuse chunks or the ends of memory.
+
+  Note that the `foot' of the current chunk is actually represented
+  as the prev_foot of the NEXT chunk. This makes it easier to
+  deal with alignments etc but can be very confusing when trying
+  to extend or adapt this code.
+
+  The exceptions to all this are
+
+     1. The special chunk `top' is the top-most available chunk (i.e.,
+        the one bordering the end of available memory). It is treated
+        specially.  Top is never included in any bin, is used only if
+        no other chunk is available, and is released back to the
+        system if it is very large (see M_TRIM_THRESHOLD).  In effect,
+        the top chunk is treated as larger (and thus less well
+        fitting) than any other available chunk.  The top chunk
+        doesn't update its trailing size field since there is no next
+        contiguous chunk that would have to index off it. However,
+        space is still allocated for it (TOP_FOOT_SIZE) to enable
+        separation or merging when space is extended.
+
+     3. Chunks allocated via mmap, have both cinuse and pinuse bits
+        cleared in their head fields.  Because they are allocated
+        one-by-one, each must carry its own prev_foot field, which is
+        also used to hold the offset this chunk has within its mmapped
+        region, which is needed to preserve alignment. Each mmapped
+        chunk is trailed by the first two fields of a fake next-chunk
+        for sake of usage checks.
+
+*/
+
+__struct malloc_chunk {
+  prev_foot: __size_t;  // Size of previous chunk (if free)
+  head: __size_t;       // Size and inuse bits
+  fd: Option<malloc_chunk>;         // double links -- used only if free. was struct malloc_chunk*
+  bk: Option<malloc_chunk>;
+}
+
+/*
+typedef struct malloc_chunk  mchunk;
+typedef struct malloc_chunk* mchunkptr;
+typedef struct malloc_chunk* sbinptr;  // The type of bins of chunks
+typedef unsigned int bindex_t;         // Described below 
+typedef unsigned int binmap_t;         // Described below 
+typedef unsigned int flag_t;           // The type of various bit flag sets
+*/
+
+const MCHUNK_SIZE         = __sizeof(malloc_chunk);
+//#define CHUNK_OVERHEAD      (SIZE_T_SIZE) = 4
+
+/* The smallest size we can malloc is an aligned minimal chunk */
+const MIN_CHUNK_SIZE: __size_t = ((MCHUNK_SIZE + (7 as __size_t)) & ~(7 as __size_t));
+
+/* conversion from malloc headers to user pointers, and back */
+function chunk2mem(p: malloc_chunk): __ptr (p as __ptr) + 8;
+function mem2chunk(mem: __ptr): malloc_chunk (mem - 8) as malloc_chunk;
+
+/* chunk associated with aligned address A */
+function align_as_chunk(A: __ptr): malloc_chunk  (A + align_offset(A+8)) as malloc_chunk;
+
+/* Bounds on request (not chunk) sizes. */
+/* WA1 - I kinda hard coded this based on what I know of JS. We will blow up before this anyway*/
+const MAX_REQUEST  = 1024*1024*1024;
+const MIN_REQUEST  = (MIN_CHUNK_SIZE - 4 - 1);
+
+/* pad request bytes into a usable size */
+function pad_request(req: __size_t): __size_t   ((req + 4 + 7) & ~7);
+
+/* pad request, checking for minimum (but not maximum) */
+function request2size(req: __size_t): __size_t if(req < MIN_REQUEST) MIN_CHUNK_SIZE; else pad_request(req);
+
+/* ------------------ Operations on head and foot fields ----------------- */
+
+/*
+  The head field of a chunk is or'ed with PINUSE_BIT when previous
+  adjacent chunk in use, and or'ed with CINUSE_BIT if this chunk is in
+  use, unless mmapped, in which case both bits are cleared.
+
+  FLAG4_BIT is not used by this malloc, but might be useful in extensions.
+*/
+
+//#define PINUSE_BIT          (SIZE_T_ONE) //1
+//#define CINUSE_BIT          (SIZE_T_TWO) //2
+//#define FLAG4_BIT           (SIZE_T_FOUR) //4
+//#define INUSE_BITS          (PINUSE_BIT|CINUSE_BIT) //3
+//#define FLAG_BITS           (PINUSE_BIT|CINUSE_BIT|FLAG4_BIT) //7
+
+/* Head value for fenceposts */
+//#define FENCEPOST_HEAD      (INUSE_BITS|SIZE_T_SIZE) //7
+
+/* extraction of fields from head words */
+/* WA1 - better get these guys inlined! */
+function cinuse(p: malloc_chunk): boolean           (p.head & 2) != 0;
+function pinuse(p: malloc_chunk): boolean           (p.head & 1) != 0;
+function flag4inuse(p: malloc_chunk): boolean       (p.head & 4) != 0;
+function is_inuse(p: malloc_chunk): boolean         (p.head & 3) != 1;
+//#define is_mmapped(p)       (((p)->head & INUSE_BITS) == 0)
+
+function chunksize(p: malloc_chunk): __size_t        (p.head & ~7);
+
+function clear_pinuse(p: malloc_chunk): void     p.head &= ~(1 as __size_t);
+function set_flag4(p: malloc_chunk): void        p.head |= (4 as __size_t);
+function clear_flag4(p: malloc_chunk): void      p.head &= ~(4 as __size_t);
+
+/* Treat space at ptr +/- offset as a chunk */
+/* WA1 - and this, children, is why our typesystem has a back door and an unsafe feature */
+function chunk_plus_offset(p: malloc_chunk, s: __size_t): malloc_chunk  ((p as __ptr) + s) as malloc_chunk; //((mchunkptr)(((char*)(p)) + (s)))
+function chunk_minus_offset(p: malloc_chunk, s: __size_t): malloc_chunk ((p as __ptr) - s) as malloc_chunk; //((mchunkptr)(((char*)(p)) - (s)))
+
+
+
+
+

@@ -29,7 +29,7 @@ impl<'a> Parser<'a> {
                         UserType::Class(_) => {
                             Ok(Type::UserClass{name: ident.to_string(), type_args})
                         },
-                        UserType::Struct(_) => {
+                        UserType::Struct{struct_type: _, under_construction: _} => {
                             Ok(Type::UserStruct{name: ident.to_string()})
                         }
                     }
@@ -62,22 +62,14 @@ impl<'a> Parser<'a> {
             //Keyword::Tuple => Ok(Type::Tuple),
             //Keyword::Object => Ok(Type::Object),
             Keyword::Any => Ok(Type::Any),
-            Keyword::Ptr => {
+            Keyword::Ptr => Ok(Type::Ptr),
+            Keyword::SizeT => Ok(Type::SizeT),
+            Keyword::Option => {
                 assert_punct!(self, Punct::LessThan);
                 let inner = self.parse_type(parser_context);
                 assert_ok!(inner);
                 assert_punct!(self, Punct::GreaterThan);
-                match inner {
-                    Type::IntLiteral(n) => { 
-                        let o_pa = PtrAlign::from_i32(n);
-                        match o_pa {
-                            Some(pa) => Ok(Type::Ptr(pa)),
-                            None => Err(Error::InvalidTypeName(loc.clone(), keyword.as_str().to_owned()))
-                        }
-                    },
-                    _ => Err(Error::InvalidTypeName(loc.clone(), keyword.as_str().to_owned()))        
-                }
-                
+                Ok(Type::Option(Box::new(inner)))
             },
             _ => Err(Error::InvalidTypeName(loc.clone(), keyword.as_str().to_owned()))
         }

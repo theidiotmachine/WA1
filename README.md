@@ -1,6 +1,10 @@
 # WA1
 
-This is the WebAssembly1 project. It needs a fancy name. At some point it will get that.
+WA1 is the working name for a language that compiles down to Web Assembly. It is an attempt at a powerful and fun language. 
+Although it has roots in TypeScript, it sheds a lot of the baggage that came from JavaScript, while borrowing concepts from other
+languages.
+
+Yes, it needs a fancy name. At some point it will get that.
 
 ## Building
 
@@ -127,6 +131,16 @@ Currently the following features are supported.
 let a = 0;
 ```
 * boolean
+* Option<T> - very, very limited at the moment. Uses null as the None (and I think the typing might be wrong);
+
+#### Casting
+
+As mentioned above, numeric types will autocast. If you need to manually invoke casting, the 'as' keyword is your friend.
+
+```
+//totally spurious example
+let a = 9 as number;
+```
 
 ### Control
 
@@ -135,15 +149,17 @@ let a = 0;
 * Local and global variables - type inference works here.
 * if, else, while, continue, break, return.
 
-### Super secret things, shhh
+### Unsafe mode
 
-* __ptr type - not yet finished. `__ptr<x>` means a pointer aligned to x bits (only supports 8, 16, 32 and 64). `__ptr<0>` is a general purpose usize type
+* __ptr type - not yet finished
 * intrinsics - wrap low level wasm calls
     * __memorySize() - `memory.size` instruction
     * __memoryGrow(0, numPages) - `memory.grow` instruction
     * __trap() - `unreachable` instruction
 * __struct type - works but you need the super secret `malloc` function for them to be useful. You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to create 
-    (this last uses malloc). A __struct is and will always be a raw pointer to memory, used for writing the allocator and other low level things.
+    (this last uses malloc). A __struct is and will always be a raw pointer to memory, used for writing the allocator and other low level things. This means that 
+    you can do '__ptr as your_struct_name_here'. This is unasafe.
+
 
 ## TODO
 
@@ -190,6 +206,7 @@ let a = 0;
 1. Inlining
     1. [ ] inline numeric constants?
     1. [ ] or full blown inlining, of which this is just a special case?
+        1. initially write a function that inlines code that contains no `return`s as an ast operation
 1. Purity
     1. [ ] Record (some? one?) of states pre expr
         * globally pure (no non-const global access)

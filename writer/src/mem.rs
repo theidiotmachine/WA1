@@ -52,7 +52,7 @@ pub fn generate_mem_layout_map(type_map: &HashMap<String, UserType>) -> HashMap<
     let mut out: HashMap<String, UserMemLayout> = HashMap::new();
     for t in type_map {
         match t.1 {
-            UserType::Struct(struct_type) => {
+            UserType::Struct{struct_type, under_construction: _} => {
                 out.insert(t.0.clone(), UserMemLayout::Struct(generate_struct_mem_layout(&struct_type)));
             },
             _ => panic!()
