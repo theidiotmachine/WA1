@@ -77,8 +77,8 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
         // you cast them from all sorts of things
         Type::Ptr => {
             match from {
-                Type::IntLiteral(_) => TypeCast::FreeWiden,
-                Type::Int => TypeCast::FreeWiden,
+                Type::IntLiteral(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::Int => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::UserStruct{name: _} => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::SizeT => TypeCast::FreeWiden,
                 _ => TypeCast::None,

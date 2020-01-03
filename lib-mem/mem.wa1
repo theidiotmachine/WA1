@@ -1,4 +1,4 @@
-const PAGE_SIZE: int = 65536;
+const PAGE_SIZE: __size_t = 65536 as __size_t;
 
 //this is the pointer to the first available free address
 let memTop: __ptr = __memorySize() * PAGE_SIZE;
@@ -106,10 +106,10 @@ __struct mallinfo {
 //manually inlined - const CHUNK_ALIGN_MASK: __size_t = 7;
 
 /* True if address a has acceptable alignment */
-function is_aligned(A: __ptr): boolean (A & 7) == 0;
+function is_aligned(A: __ptr): boolean (A & (7 as __size_t)) == (0 as __size_t);
 
 /* the number of bytes to offset an address to align it */
-function align_offset(A: __ptr): __ptr if((A & 7) == 0) 0 as __ptr; else (((8 as __ptr) - (A & 7)) & 7);
+function align_offset(A: __ptr): __ptr if((A & (7 as __size_t)) == (0 as __size_t)) 0 as __ptr; else (((8 as __ptr) - (A & (7 as __size_t))) & (7 as __size_t));
 
 /* MORECORE and MMAP must return MFAIL on failure */
 //#define MFAIL                ((void*)(MAX_SIZE_T))
@@ -297,22 +297,28 @@ const MCHUNK_SIZE         = __sizeof(malloc_chunk);
 //#define CHUNK_OVERHEAD      (SIZE_T_SIZE) = 4
 
 /* The smallest size we can malloc is an aligned minimal chunk */
+//#define MIN_CHUNK_SIZE ((MCHUNK_SIZE + CHUNK_ALIGN_MASK) & ~CHUNK_ALIGN_MASK)
 const MIN_CHUNK_SIZE: __size_t = ((MCHUNK_SIZE + (7 as __size_t)) & ~(7 as __size_t));
 
 /* conversion from malloc headers to user pointers, and back */
-function chunk2mem(p: malloc_chunk): __ptr (p as __ptr) + 8;
-function mem2chunk(mem: __ptr): malloc_chunk (mem - 8) as malloc_chunk;
+//#define chunk2mem(p)        ((void*)((char*)(p)       + TWO_SIZE_T_SIZES))
+function chunk2mem(p: malloc_chunk): __ptr (p as __ptr) + (8 as __size_t);
+//#define mem2chunk(mem)      ((mchunkptr)((char*)(mem) - TWO_SIZE_T_SIZES))
+function mem2chunk(mem: __ptr): malloc_chunk (mem - (8 as __size_t)) as malloc_chunk;
 
 /* chunk associated with aligned address A */
-function align_as_chunk(A: __ptr): malloc_chunk  (A + align_offset(A+8)) as malloc_chunk;
+//#define align_as_chunk(A)   (mchunkptr)((A) + align_offset(chunk2mem(A)))
+function align_as_chunk(A: __ptr): malloc_chunk  (A + align_offset(A+(8 as __size_t))) as malloc_chunk;
 
 /* Bounds on request (not chunk) sizes. */
 /* WA1 - I kinda hard coded this based on what I know of JS. We will blow up before this anyway*/
-const MAX_REQUEST  = 1024*1024*1024;
-const MIN_REQUEST  = (MIN_CHUNK_SIZE - 4 - 1);
+const MAX_REQUEST  = (1024*1024*1024) as __size_t;
+//#define MIN_REQUEST         (MIN_CHUNK_SIZE - CHUNK_OVERHEAD - SIZE_T_ONE)
+const MIN_REQUEST  = (MIN_CHUNK_SIZE - (5 as __size_t));
 
 /* pad request bytes into a usable size */
-function pad_request(req: __size_t): __size_t   ((req + 4 + 7) & ~7);
+//#define pad_request(req) (((req) + CHUNK_OVERHEAD + CHUNK_ALIGN_MASK) & ~CHUNK_ALIGN_MASK)
+function pad_request(req: __size_t): __size_t   ((req + (11 as __size_t)) & ~(7 as __size_t));
 
 /* pad request, checking for minimum (but not maximum) */
 function request2size(req: __size_t): __size_t if(req < MIN_REQUEST) MIN_CHUNK_SIZE; else pad_request(req);
@@ -338,13 +344,13 @@ function request2size(req: __size_t): __size_t if(req < MIN_REQUEST) MIN_CHUNK_S
 
 /* extraction of fields from head words */
 /* WA1 - better get these guys inlined! */
-function cinuse(p: malloc_chunk): boolean           (p.head & 2) != 0;
-function pinuse(p: malloc_chunk): boolean           (p.head & 1) != 0;
-function flag4inuse(p: malloc_chunk): boolean       (p.head & 4) != 0;
-function is_inuse(p: malloc_chunk): boolean         (p.head & 3) != 1;
+function cinuse(p: malloc_chunk): boolean           (p.head & (2 as __size_t)) != (0 as __size_t);
+function pinuse(p: malloc_chunk): boolean           (p.head & (1 as __size_t)) != (0 as __size_t);
+function flag4inuse(p: malloc_chunk): boolean       (p.head & (4 as __size_t)) != (0 as __size_t);
+function is_inuse(p: malloc_chunk): boolean         (p.head & (3 as __size_t)) != (1 as __size_t);
 //#define is_mmapped(p)       (((p)->head & INUSE_BITS) == 0)
 
-function chunksize(p: malloc_chunk): __size_t        (p.head & ~7);
+function chunksize(p: malloc_chunk): __size_t        (p.head & ~(7 as __size_t));
 
 function clear_pinuse(p: malloc_chunk): void     p.head &= ~(1 as __size_t);
 function set_flag4(p: malloc_chunk): void        p.head |= (4 as __size_t);
@@ -352,8 +358,17 @@ function clear_flag4(p: malloc_chunk): void      p.head &= ~(4 as __size_t);
 
 /* Treat space at ptr +/- offset as a chunk */
 /* WA1 - and this, children, is why our typesystem has a back door and an unsafe feature */
-function chunk_plus_offset(p: malloc_chunk, s: __size_t): malloc_chunk  ((p as __ptr) + s) as malloc_chunk; //((mchunkptr)(((char*)(p)) + (s)))
-function chunk_minus_offset(p: malloc_chunk, s: __size_t): malloc_chunk ((p as __ptr) - s) as malloc_chunk; //((mchunkptr)(((char*)(p)) - (s)))
+//#define chunk_plus_offset(p, s)  ((mchunkptr)(((char*)(p)) + (s)))
+function chunk_plus_offset(p: malloc_chunk, s: __size_t): malloc_chunk  ((p as __ptr) + s) as malloc_chunk;
+//#define chunk_minus_offset(p, s) ((mchunkptr)(((char*)(p)) - (s)))
+function chunk_minus_offset(p: malloc_chunk, s: __size_t): malloc_chunk ((p as __ptr) - s) as malloc_chunk;
+
+/* Ptr to next or previous physical malloc_chunk. */
+//#define next_chunk(p) ((mchunkptr)( ((char*)(p)) + ((p)->head & ~FLAG_BITS)))
+function next_chunk(p: malloc_chunk): malloc_chunk ((p as __ptr) + (p.head & ~(7 as __size_t))) as malloc_chunk;
+//#define prev_chunk(p) ((mchunkptr)( ((char*)(p)) - ((p)->prev_foot) ))
+function prev_chunk(p: malloc_chunk): malloc_chunk ((p as __ptr) - p.prev_foot) as malloc_chunk;
+
 
 
 
