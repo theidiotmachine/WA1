@@ -151,14 +151,15 @@ let a = 9 as number;
 
 ### Unsafe mode
 
-* __ptr type - not yet finished
+* `__ptr` type - not yet finished
+* `__size_t` type - pretty much the same as a `__ptr`, but makes some bit work a bit type safer
 * intrinsics - wrap low level wasm calls
-    * __memorySize() - `memory.size` instruction
-    * __memoryGrow(0, numPages) - `memory.grow` instruction
-    * __trap() - `unreachable` instruction
-* __struct type - works but you need the super secret `malloc` function for them to be useful. You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to create 
-    (this last uses malloc). A __struct is and will always be a raw pointer to memory, used for writing the allocator and other low level things. This means that 
-    you can do '__ptr as your_struct_name_here'. This is unasafe.
+    * `__memorySize()` - `memory.size` instruction
+    * `__memoryGrow(0, numPages)` - `memory.grow` instruction
+    * `__trap()` - `unreachable` instruction
+* `__struct` type - works but you need either the super secret `malloc` function for them to be useful, or cast from a `__ptr` (this is unsafe). 
+    You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to create 
+    (this last uses malloc). A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
 
 
 ## TODO
