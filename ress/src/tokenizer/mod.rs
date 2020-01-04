@@ -109,7 +109,7 @@ impl<'a> Tokenizer<'a> {
             4 if ident == b"else" => Some(RawToken::Keyword(Keyword::Else)),
             4 if ident == b"true" => Some(RawToken::Boolean(true)),
             4 if ident == b"null" => Some(RawToken::Null),
-            5 if ident == b"__ptr" => Some(RawToken::Keyword(Keyword::Ptr)),
+            5 if ident == b"__ptr" => Some(RawToken::Keyword(Keyword::UnsafePtr)),
             5 if ident == b"Array" => Some(RawToken::Keyword(Keyword::Array)),
             5 if ident == b"Tuple" => Some(RawToken::Keyword(Keyword::Tuple)),
             5 if ident == b"async" => Some(RawToken::Keyword(Keyword::Async)),
@@ -144,8 +144,8 @@ impl<'a> Tokenizer<'a> {
             7 if ident == b"package" => Some(RawToken::Keyword(Keyword::Package)),
             7 if ident == b"private" => Some(RawToken::Keyword(Keyword::Private)),
             7 if ident == b"unknown" => Some(RawToken::Keyword(Keyword::Unknown)),
-            8 if ident == b"__size_t" => Some(RawToken::Keyword(Keyword::SizeT)),
-            8 if ident == b"__struct" => Some(RawToken::Keyword(Keyword::Struct)),
+            8 if ident == b"__size_t" => Some(RawToken::Keyword(Keyword::UnsafeSizeT)),
+            8 if ident == b"__struct" => Some(RawToken::Keyword(Keyword::UnsafeStruct)),
             8 if ident == b"continue" => Some(RawToken::Keyword(Keyword::Continue)),
             8 if ident == b"debugger" => Some(RawToken::Keyword(Keyword::Debugger)),
             8 if ident == b"function" => Some(RawToken::Keyword(Keyword::Function)),
@@ -155,6 +155,8 @@ impl<'a> Tokenizer<'a> {
             10 if ident == b"instanceof" => Some(RawToken::Keyword(Keyword::InstanceOf)),
             10 if ident == b"implements" => Some(RawToken::Keyword(Keyword::Implements)),
             11 if ident == b"constructor" => Some(RawToken::Keyword(Keyword::Constructor)),
+            14 if ident == b"__static_array" => Some(RawToken::Keyword(Keyword::UnsafeStaticArray)),
+            
             _ => None,
         }
     }

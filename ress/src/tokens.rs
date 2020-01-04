@@ -1214,11 +1214,12 @@ pub enum Keyword {
     Undefined,
     Unknown,
     Int,
-    Ptr,
-    SizeT,
-    Struct,
+    UnsafePtr,
+    UnsafeSizeT,
+    UnsafeStruct,
     Option,
-    Some
+    Some,
+    UnsafeStaticArray,
 }
 
 impl Keyword {
@@ -1283,11 +1284,12 @@ impl Keyword {
             "Tuple" => Keyword::Tuple,
             "undefined" => Keyword::Undefined,
             "unknown" => Keyword::Unknown,
-            "__ptr" => Keyword::Ptr,
-            "__size_t" => Keyword::SizeT,
-            "__struct" => Keyword::Struct,
+            "__ptr" => Keyword::UnsafePtr,
+            "__size_t" => Keyword::UnsafeSizeT,
+            "__struct" => Keyword::UnsafeStruct,
             "Option" => Keyword::Option,
             "Some" => Keyword::Some,
+            "__static_array" => Keyword::UnsafeStaticArray,
             _ => return None,
         })
     }
@@ -1361,11 +1363,12 @@ impl Keyword {
             Keyword::Tuple => "Tuple",
             Keyword::Undefined => "undefined",
             Keyword::Unknown => "unknown",
-            Keyword::Ptr => "__ptr",
-            Keyword::Struct => "__struct",
+            Keyword::UnsafePtr => "__ptr",
+            Keyword::UnsafeStruct => "__struct",
             Keyword::Option => "Option",
-            Keyword::SizeT => "__size_t",
+            Keyword::UnsafeSizeT => "__size_t",
             Keyword::Some => "Some",
+            Keyword::UnsafeStaticArray => "__static_array",
         }
     }
 

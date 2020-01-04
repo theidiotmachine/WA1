@@ -30,7 +30,7 @@ impl<'a> Parser<'a> {
                             Ok(Type::UserClass{name: ident.to_string(), type_args})
                         },
                         UserType::Struct{struct_type: _, under_construction: _} => {
-                            Ok(Type::UserStruct{name: ident.to_string()})
+                            Ok(Type::UnsafeUserStruct{name: ident.to_string()})
                         }
                     }
                 }
@@ -57,13 +57,39 @@ impl<'a> Parser<'a> {
                 assert_punct!(self, Punct::GreaterThan);
                 Ok(Type::Array(Box::new(inner)))
             },
+            Keyword::UnsafeStaticArray => {
+                if !parser_context.is_unsafe {
+                    parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
+                }
+                assert_punct!(self, Punct::LessThan);
+                let inner = self.parse_type(parser_context);
+                assert_ok!(inner);
+                assert_punct!(self, Punct::Comma);
+                let sz_type = self.parse_type(parser_context);
+                assert_ok!(sz_type);
+                assert_punct!(self, Punct::GreaterThan);
+                match sz_type {
+                    Type::IntLiteral(sz) => Ok(Type::UnsafeStaticArray(Box::new(inner), sz)),
+                    _ => Err(Error::InvalidTypeName(loc.clone(), keyword.as_str().to_owned()))
+                }
+            },
             Keyword::BigInt => Ok(Type::BigInt),
             Keyword::Int => Ok(Type::Int),
             //Keyword::Tuple => Ok(Type::Tuple),
             //Keyword::Object => Ok(Type::Object),
             Keyword::Any => Ok(Type::Any),
-            Keyword::Ptr => Ok(Type::Ptr),
-            Keyword::SizeT => Ok(Type::SizeT),
+            Keyword::UnsafePtr => {
+                if !parser_context.is_unsafe {
+                    parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
+                }
+                Ok(Type::UnsafePtr)
+            },
+            Keyword::UnsafeSizeT => {
+                if !parser_context.is_unsafe {
+                    parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
+                }
+                Ok(Type::UnsafeSizeT)
+            },
             Keyword::Option => {
                 assert_punct!(self, Punct::LessThan);
                 let inner = self.parse_type(parser_context);

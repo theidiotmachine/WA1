@@ -119,7 +119,7 @@ fn transform_lvalue_get(
             vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
 
             match &inner_l_value.r#type {
-                Type::UserStruct{name: type_name} => {
+                Type::UnsafeUserStruct{name: type_name} => {
                     transform_struct_member_get(type_name, member_name, &mut vi, context);
                 },
                 _ => context.errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from(format!("expr{:#?}", l_value)))),
@@ -171,7 +171,7 @@ fn transform_lvalue_tee(
             vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
             vi.append(r_value_code);
             match &inner_l_value.r#type {
-                Type::UserStruct{name: type_name} => {
+                Type::UnsafeUserStruct{name: type_name} => {
                     transform_struct_member_set(type_name, member_name, &mut vi, context);
 
                     vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
@@ -364,9 +364,9 @@ fn transform_typed_expr(
                     }
                 },
 
-                Type::Ptr => {
+                Type::UnsafePtr => {
                     match typed_expr.r#type {
-                        Type::Ptr => {
+                        Type::UnsafePtr => {
                             match bo.op {
                                 BinaryOperator::Plus => vi.push(Instruction::I32Add),
                                 BinaryOperator::Minus => vi.push(Instruction::I32Sub),
@@ -413,9 +413,9 @@ fn transform_typed_expr(
                     }
                 },
 
-                Type::SizeT => {
+                Type::UnsafeSizeT => {
                     match typed_expr.r#type {
-                        Type::SizeT | Type::Ptr => {
+                        Type::UnsafeSizeT | Type::UnsafePtr => {
                             match bo.op {
                                 BinaryOperator::Plus => vi.push(Instruction::I32Add),
                                 BinaryOperator::Minus => vi.push(Instruction::I32Sub),
@@ -493,7 +493,7 @@ fn transform_typed_expr(
                     }
                 },
 
-                Type::SizeT => {
+                Type::UnsafeSizeT => {
                     match uo.op {
                         UnaryOperator::BitNot => {
                             vi.push(Instruction::I32Const(-1));
@@ -606,7 +606,7 @@ fn transform_typed_expr(
                         }
                     },
 
-                    Type::Ptr | Type::SizeT => {
+                    Type::UnsafePtr | Type::UnsafeSizeT => {
                         match op {
                             AssignmentOperator::MinusAssign => r_value_code.push(Instruction::I32Sub),
                             AssignmentOperator::PlusAssign => r_value_code.push(Instruction::I32Add),
@@ -803,7 +803,7 @@ fn transform_typed_expr(
             vi.append(& mut this_vi);
 
             match &lhs.r#type {
-                Type::UserStruct{name: type_name} => {
+                Type::UnsafeUserStruct{name: type_name} => {
                     transform_struct_member_get(type_name, member_name, &mut vi, context);
                 },
                 _ => context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))),
@@ -812,7 +812,7 @@ fn transform_typed_expr(
 
         Expr::ConstructFromObjectLiteral(new_type, oles) => {
             match new_type {
-                Type::UserStruct{name: struct_name} => {
+                Type::UnsafeUserStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
                     let stml = match mem_layout_elem {
@@ -850,7 +850,7 @@ fn transform_typed_expr(
 
         Expr::SizeOf(t) => {
             match t {
-                Type::UserStruct{name: struct_name} => {
+                Type::UnsafeUserStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
                     let stml = match mem_layout_elem {

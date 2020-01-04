@@ -56,31 +56,31 @@ static ref COMPARISON_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Boolean},
     FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Boolean},
     FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::Ptr, Type::Ptr], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::SizeT, Type::SizeT], out_type: Type::Boolean},
+    FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::Boolean},
+    FuncType{in_types: vec![Type::UnsafeSizeT, Type::UnsafeSizeT], out_type: Type::Boolean},
 ]);
 
 static ref MATHS_BIN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
     FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Number},
     FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
-    FuncType{in_types: vec![Type::Ptr, Type::Ptr], out_type: Type::Ptr},
-    FuncType{in_types: vec![Type::SizeT, Type::SizeT], out_type: Type::SizeT},
+    FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::UnsafePtr},
+    FuncType{in_types: vec![Type::UnsafeSizeT, Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
 ]);
 
 static ref MATHS_UN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int], out_type: Type::Int},
     FuncType{in_types: vec![Type::Number], out_type: Type::Number},
     FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt},
-    FuncType{in_types: vec![Type::Ptr], out_type: Type::Ptr},
-    FuncType{in_types: vec![Type::SizeT], out_type: Type::SizeT},
+    FuncType{in_types: vec![Type::UnsafePtr], out_type: Type::UnsafePtr},
+    FuncType{in_types: vec![Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
 ]);
 
 static ref BIT_BIN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
     FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
-    FuncType{in_types: vec![Type::Ptr, Type::Ptr], out_type: Type::Ptr},
-    FuncType{in_types: vec![Type::SizeT, Type::SizeT], out_type: Type::SizeT},
+    FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::UnsafePtr},
+    FuncType{in_types: vec![Type::UnsafeSizeT, Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
 ]);
 
 static ref EQUALITY_OP: OpType = OpType::EqualityOpType;
@@ -97,7 +97,7 @@ static ref BOOL_UN_OP: OpType = OpType::SimpleOpType(vec![
 
 static ref BIT_UN_OP: OpType = OpType::SimpleOpType(vec![
     FuncType{in_types: vec![Type::Int], out_type: Type::Int},
-    FuncType{in_types: vec![Type::SizeT], out_type: Type::SizeT},
+    FuncType{in_types: vec![Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
     FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt},
 ]);
 
@@ -105,14 +105,14 @@ static ref MATHS_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
     Type::Int,
     Type::Number,
     Type::BigInt,
-    Type::Ptr,
-    Type::SizeT,
+    Type::UnsafePtr,
+    Type::UnsafeSizeT,
 ]);
 
 static ref BIT_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
     Type::Int,
     Type::BigInt,
-    Type::SizeT,
+    Type::UnsafeSizeT,
 ]);
 
 static ref ASSIGN_OP: OpType = OpType::AssignmentOpType;

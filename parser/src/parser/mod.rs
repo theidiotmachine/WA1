@@ -818,7 +818,7 @@ impl<'b> Parser<'b> {
                         Err(e) => parser_context.errors.push(e)
                     };
                 },
-                Keyword::Struct => {
+                Keyword::UnsafeStruct => {
                     let struct_decl = self.parse_struct_decl(parser_context);
                     match struct_decl {
                         Ok(c) => init_body.push(c),
@@ -1030,6 +1030,9 @@ impl<'b> Parser<'b> {
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let mut loc = self.peek_next_location();
+        if !parser_context.is_unsafe {
+            parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
+        }
         self.skip_next_item();
 
         let next = assert_next!(self, "Expecting struct name");
@@ -1183,7 +1186,7 @@ impl<'b> Parser<'b> {
         assert_punct!(self, Punct::OpenBrace);
 
         let scratch_malloc = String::from("__scratch_malloc");
-        let scratch_malloc_type = Type::Ptr;
+        let scratch_malloc_type = Type::UnsafePtr;
         self.context.add_var(&scratch_malloc, &scratch_malloc, &scratch_malloc_type, false);
         let vd = VariableDecl{
             internal_name: scratch_malloc.clone(), r#type: scratch_malloc_type, constant: false, init: None, closure_source: false, arg: false, orig_name: scratch_malloc
@@ -1195,7 +1198,7 @@ impl<'b> Parser<'b> {
 
         //this is what we want
         let member_map: HashMap<String, Type> = match for_type {
-            Type::UserStruct{name: struct_name} => {
+            Type::UnsafeUserStruct{name: struct_name} => {
                 let tm_entry = parser_context.type_map.get(struct_name).unwrap();
                 match tm_entry {
                     UserType::Struct{struct_type, under_construction} => { 
@@ -1347,7 +1350,7 @@ impl<'b> Parser<'b> {
         let lhs_type = &lhs.r#type;
 
         match lhs_type {
-            Type::UserStruct{name} => {
+            Type::UnsafeUserStruct{name} => {
                 let tm_entry = parser_context.type_map.get(name).unwrap();
                 match tm_entry {
                     UserType::Struct{struct_type: st, under_construction: _} => self.parse_struct_component(lhs, &st),
@@ -1356,7 +1359,7 @@ impl<'b> Parser<'b> {
             },
             Type::Int | Type::IntLiteral(_)  => self.parse_int_component(lhs, parser_func_context, parser_context),
             //FIXME64BIT
-            Type::Ptr | Type::SizeT => self.parse_int_component(lhs, parser_func_context, parser_context),
+            Type::UnsafePtr | Type::UnsafeSizeT => self.parse_int_component(lhs, parser_func_context, parser_context),
             Type::Option(_) => self.parse_option_component(lhs, parser_func_context, parser_context),
             _ => Err(Error::NoComponents(lhs.loc.clone()))
         }
@@ -1465,30 +1468,6 @@ impl<'b> Parser<'b> {
             "__sizeof" => Some(self.parse_sizeof(parser_func_context, parser_context)),
             _ => None
         }
-    }
-
-    /// Parse 'Some(x)'. Because options are built in at a fairly low level, this is a parser function, not a library function.
-    fn parse_some(&mut self, 
-        parser_func_context: &mut ParserFuncContext,
-        parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr>{
-        self.skip_next_item();
-        assert_punct!(self, Punct::OpenParen);
-        let inner = self.parse_expr(parser_func_context, parser_context);
-        assert_ok!(inner);
-        assert_punct!(self, Punct::CloseParen);
-        match inner.r#type {
-            Type::UserStruct{name: _} => {
-
-            },
-            _ => {
-                parser_context.errors.push(Error::NotYetImplemented(inner.loc, String::from("Options on anything other than a __struct")));
-            }
-        }
-
-        let inner_loc = inner.loc.clone();
-        let inner_type = inner.r#type.clone();
-        Ok(TypedExpr{expr: Expr::FreeTypeWiden(Box::new(inner)), r#type: Type::Option(Box::new(inner_type)), loc: inner_loc, is_const: true})
     }
 
     fn parse_ident_expr(&mut self,

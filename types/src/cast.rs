@@ -75,17 +75,17 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
         },
         //we kind of don't care about ptrs. If you are messing with them you better know what you are doing, so we let
         // you cast them from all sorts of things
-        Type::Ptr => {
+        Type::UnsafePtr => {
             match from {
                 Type::IntLiteral(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::Int => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
-                Type::UserStruct{name: _} => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
-                Type::SizeT => TypeCast::FreeWiden,
+                Type::UnsafeUserStruct{name: _} => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafeSizeT => TypeCast::FreeWiden,
                 _ => TypeCast::None,
             }
         },
         //again, this is wrong, but
-        Type::SizeT => {
+        Type::UnsafeSizeT => {
             match from {
                 Type::IntLiteral(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::Int => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
@@ -107,9 +107,9 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
             }
         },
 
-        Type::UserStruct{name: _} => {
+        Type::UnsafeUserStruct{name: _} => {
             match from {
-                Type::Ptr => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafePtr => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 _ => TypeCast::None,
             }
         }

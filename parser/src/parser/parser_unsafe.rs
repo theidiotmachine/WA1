@@ -31,7 +31,7 @@ impl<'a> Parser<'a> {
         loc.end = loc_after.end.clone();
 
         assert_punct!(self, Punct::CloseParen);
-        Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemoryGrow(Box::new(expr))), is_const: true, r#type: Type::SizeT, loc: loc})
+        Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemoryGrow(Box::new(expr))), is_const: true, r#type: Type::UnsafeSizeT, loc: loc})
     }
 
     pub(crate) fn parse_mem_size(&mut self,
@@ -40,7 +40,7 @@ impl<'a> Parser<'a> {
     ) -> Res<TypedExpr> {
         let loc = self.peek_next_location();
         self.parse_empty_function_call_args(parser_func_context, parser_context);
-        Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemorySize), is_const: true, r#type: Type::SizeT, loc: loc})
+        Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemorySize), is_const: true, r#type: Type::UnsafeSizeT, loc: loc})
     }
 
     pub(crate) fn parse_trap(&mut self,
@@ -64,7 +64,7 @@ impl<'a> Parser<'a> {
         assert_ok!(expr);
         match expr.r#type {
             Type::TypeLiteral(t) => {
-                Ok(TypedExpr{expr: Expr::SizeOf((*t).clone()), is_const: true, r#type: Type::SizeT, loc: loc})
+                Ok(TypedExpr{expr: Expr::SizeOf((*t).clone()), is_const: true, r#type: Type::UnsafeSizeT, loc: loc})
             },
             _ => {Err(Error::NotYetImplemented(loc, String::from("__sizeof only works on __structs")))}
         }

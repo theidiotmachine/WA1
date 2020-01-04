@@ -36,6 +36,7 @@ pub enum Error {
     ObjectMissingMember(SourceLocation, String),
     AsNeedsType(SourceLocation),
     RecursiveTypeDefinition(SourceLocation),
+    UnsafeCodeNotAllowed(SourceLocation),
 }
 
 impl Display for Error {
@@ -74,6 +75,7 @@ impl Display for Error {
             Error::ObjectMissingMember(ref loc, ref m) => write!(f, "ERROR {}: object requires member {}", loc, m),
             Error::AsNeedsType(ref loc) => write!(f, "ERROR {}: 'as' must have a type literal on its rhs", loc),
             Error::RecursiveTypeDefinition(ref loc) => write!(f, "ERROR {}: recursive type definition not allowed", loc),
+            Error::UnsafeCodeNotAllowed(ref loc) => write!(f, "ERROR {}: unsafe code not allowed to be called without --unsafe", loc),
         }
     }
 }

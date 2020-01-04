@@ -165,7 +165,7 @@ pub enum Type {
     /// user type
     UserClass{name: String, type_args: Vec<Type>},
     /// user struct type
-    UserStruct{name: String},
+    UnsafeUserStruct{name: String},
     /// not yet known - will be filled in by the typer
     Undeclared,
     ///Unresolved type var
@@ -179,11 +179,13 @@ pub enum Type {
     /// string literal
     StringLiteral(String),
     ///ptr - internal type. Param is alignment
-    Ptr,
+    UnsafePtr,
     ///
-    SizeT,
+    UnsafeSizeT,
     ///type literal
     TypeLiteral(Box<Type>),
+    /// __static_array type
+    UnsafeStaticArray(Box<Type>, i32),
 }
 
 impl Type{
@@ -228,17 +230,18 @@ impl Display for Type {
             Type::Option(inner) => write!(f, "Option<{}>", inner),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
             Type::UserClass{name, type_args: _} => write!(f, "{}", name),
-            Type::UserStruct{name} => write!(f, "{}", name),
+            Type::UnsafeUserStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "undeclared"),
             Type::VariableUsage(name) => write!(f, "{}", name),
-            Type::Ptr => write!(f, "__ptr"),
-            Type::SizeT => write!(f, "__size_t"),
+            Type::UnsafePtr => write!(f, "__ptr"),
+            Type::UnsafeSizeT => write!(f, "__size_t"),
             Type::FloatLiteral(n) => write!(f, "{}", n),
             Type::IntLiteral(n) => write!(f, "{}", n),
             Type::BigIntLiteral(n) => write!(f, "{}", n),
             Type::StringLiteral(n) => write!(f, "\"{}\"", n),
             Type::ObjectLiteral(_) => write!(f, "{{}}"),
             Type::TypeLiteral(t) => write!(f, "type: {}", t),
+            Type::UnsafeStaticArray(t, s) => write!(f, "__static_array<{}, {}>", t, s),
         }
     }
 }

@@ -526,3 +526,208 @@ function leftmost_child(t: malloc_tree_chunk): Option<malloc_tree_chunk> {
   else 
     t.child_1;
 }
+
+/* ----------------------------- Segments -------------------------------- */
+
+/*
+  Each malloc space may include non-contiguous segments, held in a
+  list headed by an embedded malloc_segment record representing the
+  top-most space. Segments also include flags holding properties of
+  the space. Large chunks that are directly allocated by mmap are not
+  included in this list. They are instead independently created and
+  destroyed without otherwise keeping track of them.
+
+  Segment management mainly comes into play for spaces allocated by
+  MMAP.  Any call to MMAP might or might not return memory that is
+  adjacent to an existing segment.  MORECORE normally contiguously
+  extends the current space, so this space is almost always adjacent,
+  which is simpler and faster to deal with. (This is why MORECORE is
+  used preferentially to MMAP when both are available -- see
+  sys_alloc.)  When allocating using MMAP, we don't use any of the
+  hinting mechanisms (inconsistently) supported in various
+  implementations of unix mmap, or distinguish reserving from
+  committing memory. Instead, we just ask for space, and exploit
+  contiguity when we get it.  It is probably possible to do
+  better than this on some systems, but no general scheme seems
+  to be significantly better.
+
+  Management entails a simpler variant of the consolidation scheme
+  used for chunks to reduce fragmentation -- new adjacent memory is
+  normally prepended or appended to an existing segment. However,
+  there are limitations compared to chunk consolidation that mostly
+  reflect the fact that segment processing is relatively infrequent
+  (occurring only when getting memory from system) and that we
+  don't expect to have huge numbers of segments:
+
+  * Segments are not indexed, so traversal requires linear scans.  (It
+    would be possible to index these, but is not worth the extra
+    overhead and complexity for most programs on most platforms.)
+  * New segments are only appended to old ones when holding top-most
+    memory; if they cannot be prepended to others, they are held in
+    different segments.
+
+  Except for the top-most segment of an mstate, each segment record
+  is kept at the tail of its segment. Segments are added by pushing
+  segment records onto the list headed by &mstate.seg for the
+  containing mstate.
+
+  Segment flags control allocation/merge/deallocation policies:
+  * If EXTERN_BIT set, then we did not allocate this segment,
+    and so should not try to deallocate or merge with others.
+    (This currently holds only for the initial segment passed
+    into create_mspace_with_base.)
+  * If USE_MMAP_BIT set, the segment may be merged with
+    other surrounding mmapped segments and trimmed/de-allocated
+    using munmap.
+  * If neither bit is set, then the segment was obtained using
+    MORECORE so can be merged with surrounding MORECORE'd segments
+    and deallocated/trimmed using MORECORE with negative arguments.
+*/
+
+__struct malloc_segment {
+  base: __ptr;                    /* base address */
+  size: __size_t;                 /* allocated size */
+  next: Option<malloc_segment>;   /* ptr to next segment */
+  //sflags: __size_t;             /* mmap and extern flag WA1 - was a u32, but not used*/
+}
+
+//#define is_mmapped_segment(S)  ((S)->sflags & USE_MMAP_BIT) - false
+//#define is_extern_segment(S)   ((S)->sflags & EXTERN_BIT) - false
+
+/* ---------------------------- malloc_state ----------------------------- */
+
+/*
+   A malloc_state holds all of the bookkeeping for a space.
+   The main fields are:
+
+  Top
+    The topmost chunk of the currently active segment. Its size is
+    cached in topsize.  The actual size of topmost space is
+    topsize+TOP_FOOT_SIZE, which includes space reserved for adding
+    fenceposts and segment records if necessary when getting more
+    space from the system.  The size at which to autotrim top is
+    cached from mparams in trim_check, except that it is disabled if
+    an autotrim fails.
+
+  Designated victim (dv)
+    This is the preferred chunk for servicing small requests that
+    don't have exact fits.  It is normally the chunk split off most
+    recently to service another small request.  Its size is cached in
+    dvsize. The link fields of this chunk are not maintained since it
+    is not kept in a bin.
+
+  SmallBins
+    An array of bin headers for free chunks.  These bins hold chunks
+    with sizes less than MIN_LARGE_SIZE bytes. Each bin contains
+    chunks of all the same size, spaced 8 bytes apart.  To simplify
+    use in double-linked lists, each bin header acts as a malloc_chunk
+    pointing to the real first node, if it exists (else pointing to
+    itself).  This avoids special-casing for headers.  But to avoid
+    waste, we allocate only the fd/bk pointers of bins, and then use
+    repositioning tricks to treat these as the fields of a chunk.
+
+  TreeBins
+    Treebins are pointers to the roots of trees holding a range of
+    sizes. There are 2 equally spaced treebins for each power of two
+    from TREE_SHIFT to TREE_SHIFT+16. The last bin holds anything
+    larger.
+
+  Bin maps
+    There is one bit map for small bins ("smallmap") and one for
+    treebins ("treemap).  Each bin sets its bit when non-empty, and
+    clears the bit when empty.  Bit operations are then used to avoid
+    bin-by-bin searching -- nearly all "search" is done without ever
+    looking at bins that won't be selected.  The bit maps
+    conservatively use 32 bits per map word, even if on 64bit system.
+    For a good description of some of the bit-based techniques used
+    here, see Henry S. Warren Jr's book "Hacker's Delight" (and
+    supplement at http://hackersdelight.org/). Many of these are
+    intended to reduce the branchiness of paths through malloc etc, as
+    well as to reduce the number of memory locations read or written.
+
+  Segments
+    A list of segments headed by an embedded malloc_segment record
+    representing the initial space.
+
+  Address check support
+    The least_addr field is the least address ever obtained from
+    MORECORE or MMAP. Attempted frees and reallocs of any address less
+    than this are trapped (unless INSECURE is defined).
+
+  Magic tag
+    A cross-check field that should always hold same value as mparams.magic.
+
+  Max allowed footprint
+    The maximum allowed bytes to allocate from system (zero means no limit)
+
+  Flags
+    Bits recording whether to use MMAP, locks, or contiguous MORECORE
+
+  Statistics
+    Each space keeps track of current and maximum system memory
+    obtained via MORECORE or MMAP.
+
+  Trim support
+    Fields holding the amount of unused topmost memory that should trigger
+    trimming, and a counter to force periodic scanning to release unused
+    non-topmost segments.
+
+  Locking
+    If USE_LOCKS is defined, the "mutex" lock is acquired and released
+    around every public call using this mspace.
+
+  Extension support
+    A void* pointer and a size_t field that can be used to help implement
+    extensions to this malloc.
+*/
+
+/* Bin types, widths and sizes */
+//#define NSMALLBINS        (32U)
+//#define NTREEBINS         (32U)
+//#define SMALLBIN_SHIFT    (3U)
+//#define SMALLBIN_WIDTH    (SIZE_T_ONE << SMALLBIN_SHIFT) => 8
+//#define TREEBIN_SHIFT     (8U)
+//#define MIN_LARGE_SIZE    (SIZE_T_ONE << TREEBIN_SHIFT) => 256
+//#define MAX_SMALL_SIZE    (MIN_LARGE_SIZE - SIZE_T_ONE) => 255
+//#define MAX_SMALL_REQUEST (MAX_SMALL_SIZE - CHUNK_ALIGN_MASK - CHUNK_OVERHEAD) => 256 - 7 - 4 => 245
+
+__struct malloc_state {
+  smallmap:         __size_t; //was a u32
+  treemap:          __size_t; //was a u32
+  dvsize:           __size_t;
+  topsize:          __size_t;
+  least_addr:       __ptr; //was a char*
+  dv:               Option<malloc_chunk>;
+  top:              Option<malloc_chunk>;
+  trim_check:       __size_t;
+  release_checks:   __size_t;
+  magic:            __size_t;
+  smallbins:        __static_array<malloc_chunk, 66>; //mchunkptr  smallbins[(NSMALLBINS+1)*2];
+  treebins:         __static_array<malloc_tree_chunk, 32>; //tbinptr    treebins[NTREEBINS];
+  footprint:        __size_t;
+  max_footprint:    __size_t;
+  footprint_limit:  __size_t; /* zero means no limit */
+  mflags:           __size_t; //was a u32
+  seg:              Option<malloc_segment>;
+  extp:             __ptr;      /* Unused but available for extensions */
+  exts:             __size_t;
+}
+
+
+/* ------------- Global malloc_state and malloc_params ------------------- */
+
+/*
+  malloc_params holds global properties, including those that can be
+  dynamically set using mallopt. There is a single instance, mparams,
+  initialized in init_mparams. Note that the non-zeroness of "magic"
+  also serves as an initialization flag.
+*/
+
+__struct malloc_params {
+  magic:          __size_t;
+  page_size:      __size_t;
+  granularity:    __size_t;
+  mmap_threshold: __size_t;
+  trim_threshold: __size_t;
+  default_mflags: __size_t; // was a flag_t aka u32;
+}
