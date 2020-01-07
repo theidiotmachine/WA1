@@ -1455,7 +1455,7 @@ impl<'b> Parser<'b> {
             Type::Int | Type::IntLiteral(_)  => self.parse_int_component(lhs, parser_func_context, parser_context),
             //FIXME64BIT
             Type::UnsafePtr | Type::UnsafeSizeT => self.parse_int_component(lhs, parser_func_context, parser_context),
-            Type::Option(_) => self.parse_option_component(lhs, parser_func_context, parser_context),
+            Type::Option(_/*inner*/) => self.parse_option_component(lhs, /*&inner,*/ parser_func_context, parser_context),
             _ => Err(Error::NoComponents(lhs.loc.clone()))
         }
     }

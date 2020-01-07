@@ -110,6 +110,7 @@ function is_aligned(A: __ptr): boolean (A & (7 as __size_t)) == (0 as __size_t);
 
 /* the number of bytes to offset an address to align it */
 function align_offset(A: __ptr): __ptr if((A & (7 as __size_t)) == (0 as __size_t)) 0 as __ptr; else (((8 as __ptr) - (A & (7 as __size_t))) & (7 as __size_t));
+function align_offset_size_t(A: __size_t): __size_t if((A & (7 as __size_t)) == (0 as __size_t)) 0 as __size_t; else (((8 as __size_t) - (A & (7 as __size_t))) & (7 as __size_t));
 
 /* MORECORE and MMAP must return MFAIL on failure */
 //#define MFAIL                ((void*)(MAX_SIZE_T))
@@ -521,7 +522,7 @@ __struct malloc_tree_chunk {
 /* A little helper macro for trees */
 //#define leftmost_child(t) ((t)->child[0] != 0? (t)->child[0] : (t)->child[1])
 function leftmost_child(t: malloc_tree_chunk): Option<malloc_tree_chunk> {
-  if(t.child_0.isDefined())
+  if(t.child_0.isSome())
     t.child_0;
   else 
     t.child_1;
@@ -787,3 +788,43 @@ function is_initialized(m: malloc_state): boolean m.top != null;
 /* page-align a size */
 //#define page_align(S) (((S) + (mparams.page_size - SIZE_T_ONE)) & ~(mparams.page_size - SIZE_T_ONE))
 function page_align(s: __size_t): __size_t ((s + (mparams.page_size - (1 as __size_t))) & ~(mparams.page_size - (1 as __size_t)));
+
+/* granularity-align a size */
+//#define granularity_align(S)  (((S) + (mparams.granularity - SIZE_T_ONE)) & ~(mparams.granularity - SIZE_T_ONE))
+function granularity_align(s: __size_t): __size_t ((s + (mparams.granularity - (1 as __size_t))) & ~(mparams.granularity - (1 as __size_t)));
+
+/*
+  TOP_FOOT_SIZE is padding at the end of a segment, including space
+  that may be needed to place segment records and fenceposts when new
+  noncontiguous segments are added.
+*/
+//#define TOP_FOOT_SIZE (align_offset(chunk2mem(0))+pad_request(sizeof(struct malloc_segment))+MIN_CHUNK_SIZE);
+const TOP_FOOT_SIZE = align_offset_size_t(8 as __size_t) + pad_request(__sizeof(malloc_segment)) + MIN_CHUNK_SIZE;
+
+/* For sys_alloc, enough padding to ensure can malloc request on success */
+//#define SYS_ALLOC_PADDING (TOP_FOOT_SIZE + MALLOC_ALIGNMENT)
+const SYS_ALLOC_PADDING = TOP_FOOT_SIZE + (8 as __size_t);
+
+//#define is_page_aligned(S) (((size_t)(S) & (mparams.page_size - SIZE_T_ONE)) == 0)
+function is_page_aligned(s: __ptr): boolean ((s as __size_t) & (mparams.page_size - (1 as __size_t))) == (0 as __size_t);
+//#define is_granularity_aligned(S) (((size_t)(S) & (mparams.granularity - SIZE_T_ONE)) == 0)
+function is_granularity_aligned(s: __ptr): boolean ((s as __size_t) & (mparams.granularity - (1 as __size_t))) == (0 as __size_t);
+
+/*  True if segment S holds address A */
+//#define segment_holds(S, A) ((char*)(A) >= S->base && (char*)(A) < S->base + S->size)
+function segment_holds(s: malloc_segment, a: __ptr): boolean (a >= s.base && a < s.base + s.size);
+
+/* Return segment holding given address */
+/*
+function segment_holding(m: malloc_state, addr: __ptr): Option<malloc_segment> {
+  let o_sp: Option<malloc_segment> = m.seg;
+  while(true) {
+    let sp = o_sp.unwrap();
+    if (addr >= sp->base && addr < sp->base + sp->size)
+      return Some(sp);
+    o_sp = sp->next;
+    if (o_sp == null)
+      return null;
+  }
+}
+*/

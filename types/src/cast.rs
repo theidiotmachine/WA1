@@ -89,6 +89,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
             match from {
                 Type::IntLiteral(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::Int => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafePtr => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 _ => TypeCast::None,
             }
         },

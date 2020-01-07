@@ -209,6 +209,7 @@ let a = 9 as number;
     1. [ ] inline numeric constants?
     1. [ ] or full blown inlining, of which this is just a special case?
         1. initially write a function that inlines code that contains no `return`s as an ast operation
+        1. copy any non-variable exprs into local variables
 1. Purity
     1. [ ] Record (some? one?) of states pre expr
         * globally pure (no non-const global access)

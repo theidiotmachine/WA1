@@ -45,6 +45,7 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn parse_option_component(&mut self,
         lhs: &TypedExpr,
+        //inner_type: &Type,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
@@ -56,20 +57,47 @@ impl<'a> Parser<'a> {
         let loc = next_item.location;
 
         match component.as_ref() {
-            "isDefined" => {
+            "isSome" => {
                 self.parse_empty_function_call_args(parser_func_context, parser_context);
                 Ok(TypedExpr{
                     expr: Expr::BinaryOperator(BinaryOperatorApplication{lhs: Box::new(lhs.clone()), op: BinaryOperator::NotEqual, rhs: Box::new(Parser::create_null(&loc))}),
                     r#type: Type::Boolean, is_const: true, loc: loc.clone()
                 })
             },
-            "isEmpty" => {
+            "isNone" => {
                 self.parse_empty_function_call_args(parser_func_context, parser_context);
                 Ok(TypedExpr{
                     expr: Expr::BinaryOperator(BinaryOperatorApplication{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_null(&loc))}),
                     r#type: Type::Boolean, is_const: true, loc: loc.clone()
                 })
             },
+            /*
+            "unwrap" => {  
+                self.parse_empty_function_call_args(parser_func_context, parser_context);
+                let expr = Expr::IfThenElse(
+                    //if empty
+                    Box::new(TypedExpr{
+                        expr: Expr::BinaryOperator(BinaryOperatorApplication{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_null(&loc))}),
+                        r#type: Type::Boolean, is_const: true, loc: loc.clone()
+                    }),
+                    //then trap
+                    Box::new(TypedExpr{
+                        expr: Expr::Intrinsic(Intrinsic::Trap),
+                        r#type: Type::Never, is_const: true, loc: loc.clone()
+                    }),
+                    //else
+                    Box::new(TypedExpr{
+                        expr: Expr::FreeTypeWiden(Box::new(lhs.clone())),
+                        r#type: inner_type.clone(), is_const: true, loc: loc.clone()
+                    }),
+                );
+                
+                Ok(TypedExpr{
+                    expr: expr,
+                    r#type: inner_type.clone(), is_const: true, loc: loc.clone()
+                })
+            },
+            */
             _ => {
                 Err(Error::ObjectHasNoMember(next_item.location.clone(), component))
             }
