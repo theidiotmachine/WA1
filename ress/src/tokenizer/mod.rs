@@ -137,6 +137,7 @@ impl<'a> Tokenizer<'a> {
             6 if ident == b"import" => Some(RawToken::Keyword(Keyword::Import)),
             6 if ident == b"static" => Some(RawToken::Keyword(Keyword::Static)),
             6 if ident == b"public" => Some(RawToken::Keyword(Keyword::Public)),
+            7 if ident == b"__array" => Some(RawToken::Keyword(Keyword::UnsafeArray)),
             7 if ident == b"boolean" => Some(RawToken::Keyword(Keyword::Boolean)),
             7 if ident == b"default" => Some(RawToken::Keyword(Keyword::Default)),
             7 if ident == b"extends" => Some(RawToken::Keyword(Keyword::Extends)),
@@ -145,6 +146,7 @@ impl<'a> Tokenizer<'a> {
             7 if ident == b"private" => Some(RawToken::Keyword(Keyword::Private)),
             7 if ident == b"unknown" => Some(RawToken::Keyword(Keyword::Unknown)),
             8 if ident == b"__size_t" => Some(RawToken::Keyword(Keyword::UnsafeSizeT)),
+            8 if ident == b"__static" => Some(RawToken::Keyword(Keyword::UnsafeStatic)),
             8 if ident == b"__struct" => Some(RawToken::Keyword(Keyword::UnsafeStruct)),
             8 if ident == b"continue" => Some(RawToken::Keyword(Keyword::Continue)),
             8 if ident == b"debugger" => Some(RawToken::Keyword(Keyword::Debugger)),
@@ -155,7 +157,6 @@ impl<'a> Tokenizer<'a> {
             10 if ident == b"instanceof" => Some(RawToken::Keyword(Keyword::InstanceOf)),
             10 if ident == b"implements" => Some(RawToken::Keyword(Keyword::Implements)),
             11 if ident == b"constructor" => Some(RawToken::Keyword(Keyword::Constructor)),
-            14 if ident == b"__static_array" => Some(RawToken::Keyword(Keyword::UnsafeStaticArray)),
             
             _ => None,
         }
@@ -369,19 +370,7 @@ impl<'a> Tokenizer<'a> {
     }
     #[inline]
     fn greater_than(&mut self) -> Res<RawItem> {
-        if self.look_ahead_matches(">>=") {
-            self.stream.skip(3);
-            self.gen_punct(Punct::TripleGreaterThanEqual)
-        } else if self.look_ahead_matches(">>") {
-            self.stream.skip(2);
-            self.gen_punct(Punct::TripleGreaterThan)
-        } else if self.look_ahead_matches(">=") {
-            self.stream.skip(2);
-            self.gen_punct(Punct::DoubleGreaterThanEqual)
-        } else if self.look_ahead_byte_matches('>') {
-            self.stream.skip(1);
-            self.gen_punct(Punct::DoubleGreaterThan)
-        } else if self.look_ahead_byte_matches('=') {
+        if self.look_ahead_byte_matches('=') {
             self.stream.skip(1);
             self.gen_punct(Punct::GreaterThanEqual)
         } else {
@@ -390,15 +379,9 @@ impl<'a> Tokenizer<'a> {
     }
     #[inline]
     fn less_than(&mut self) -> Res<RawItem> {
-        if self.look_ahead_matches("<=") {
-            self.stream.skip(2);
-            self.gen_punct(Punct::DoubleLessThanEqual)
-        } else if self.look_ahead_byte_matches('=') {
+        if self.look_ahead_byte_matches('=') {
             self.stream.skip(1);
             self.gen_punct(Punct::LessThanEqual)
-        } else if self.look_ahead_byte_matches('<') {
-            self.stream.skip(1);
-            self.gen_punct(Punct::DoubleLessThan)
         } else if self.look_ahead_matches("!--") {
             self.stream.skip(3);
             self.html_comment()

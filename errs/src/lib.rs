@@ -16,7 +16,7 @@ pub enum Error {
     TypeFailureUnaryOperator,
     TypeFailureBinaryOperator(SourceLocation, String, String),
     TypeFailureVariableCreation(SourceLocation, String, String),
-    TypeFailureMemberCreation(SourceLocation, String, String, String),
+    TypeFailureMemberCreation(SourceLocation, String, Type, Type),
     TypeFailure(SourceLocation, Type, Type),
     NoValueReturned(SourceLocation),
     TypeFailureReturn(Type, Type),
@@ -30,13 +30,15 @@ pub enum Error {
     TypeFailureIf(SourceLocation, Type, Type),
     WhileMayNotReturn,
     NoComponents(SourceLocation),
-    CantConstructUsingObjectLiterall(SourceLocation, String),
+    CantConstructUsingObjectLiterall(SourceLocation, Type),
+    CantConstructUsingArrayLiterall(SourceLocation, Type),
     ObjectHasNoMember(SourceLocation, String),
     ObjectDuplicateMember(SourceLocation, String),
     ObjectMissingMember(SourceLocation, String),
     AsNeedsType(SourceLocation),
     RecursiveTypeDefinition(SourceLocation),
     UnsafeCodeNotAllowed(SourceLocation),
+    Dummy,
 }
 
 impl Display for Error {
@@ -70,12 +72,14 @@ impl Display for Error {
             Error::WhileMayNotReturn => write!(f, "while loops may not have a return value"),
             Error::NoComponents(ref loc) => write!(f, "ERROR {}: object has no components", loc),
             Error::CantConstructUsingObjectLiterall(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {} from an object literal", loc, t),
+            Error::CantConstructUsingArrayLiterall(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {} from an array literal", loc, t),
             Error::ObjectHasNoMember(ref loc, ref m) => write!(f, "ERROR {}: object has no member {}", loc, m),
             Error::ObjectDuplicateMember(ref loc, ref m) => write!(f, "ERROR {}: object has multiple definitions for {}", loc, m),
             Error::ObjectMissingMember(ref loc, ref m) => write!(f, "ERROR {}: object requires member {}", loc, m),
             Error::AsNeedsType(ref loc) => write!(f, "ERROR {}: 'as' must have a type literal on its rhs", loc),
             Error::RecursiveTypeDefinition(ref loc) => write!(f, "ERROR {}: recursive type definition not allowed", loc),
             Error::UnsafeCodeNotAllowed(ref loc) => write!(f, "ERROR {}: unsafe code not allowed to be called without --unsafe", loc),
+            Error::Dummy => write!(f, "ERROR: internal error",),
         }
     }
 }

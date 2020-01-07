@@ -36,13 +36,10 @@ pub enum BinaryOperator{
     Divide,
     StrictEqual,
     StrictNotEqual,
-    UnsignedRightShift,
     LogicalAnd,
     LogicalOr,
     Equal,
     NotEqual,
-    LeftShift,
-    RightShift,
     GreaterThanEqual,
     LessThanEqual,
     Exponent,
@@ -137,13 +134,10 @@ impl BinaryOperator{
             BinaryOperator::Divide => &MATHS_BIN_OP,
             BinaryOperator::StrictEqual => &EQUALITY_OP,
             BinaryOperator::StrictNotEqual => &EQUALITY_OP,
-            BinaryOperator::UnsignedRightShift => &MATHS_BIN_OP,
             BinaryOperator::LogicalAnd => &BOOL_BIN_OP,
             BinaryOperator::LogicalOr => &BOOL_BIN_OP,
             BinaryOperator::Equal => &EQUALITY_OP,
             BinaryOperator::NotEqual => &EQUALITY_OP,
-            BinaryOperator::LeftShift => &MATHS_BIN_OP,
-            BinaryOperator::RightShift => &MATHS_BIN_OP,
             BinaryOperator::GreaterThanEqual => &COMPARISON_OP,
             BinaryOperator::LessThanEqual => &COMPARISON_OP,
             BinaryOperator::Exponent => &MATHS_BIN_OP,
@@ -197,9 +191,6 @@ pub enum AssignmentOperator{
     MultiplyAssign,
     DivideAssign,
     ModAssign,
-    LeftShiftAssign,
-    RightShiftAssign,
-    UnsignedRightShiftAssign,
     BitAndAssign,
     BitXorAssign,
     BitOrAssign
@@ -215,9 +206,6 @@ impl AssignmentOperator{
             AssignmentOperator::MultiplyAssign => &MATHS_ASSIGN_MODIFY_OP,
             AssignmentOperator::DivideAssign => &MATHS_ASSIGN_MODIFY_OP,
             AssignmentOperator::ModAssign => &MATHS_ASSIGN_MODIFY_OP,
-            AssignmentOperator::LeftShiftAssign => &BIT_ASSIGN_MODIFY_OP,
-            AssignmentOperator::RightShiftAssign => &BIT_ASSIGN_MODIFY_OP,
-            AssignmentOperator::UnsignedRightShiftAssign => &BIT_ASSIGN_MODIFY_OP,
             AssignmentOperator::BitAndAssign => &BIT_ASSIGN_MODIFY_OP,
             AssignmentOperator::BitXorAssign => &BIT_ASSIGN_MODIFY_OP,
             AssignmentOperator::BitOrAssign => &BIT_ASSIGN_MODIFY_OP
@@ -338,8 +326,12 @@ pub enum Expr {
     NamedMember(Box<TypedExpr>, String),
     /// object literal
     ObjectLiteral(Vec<ObjectLiteralElem>),
-    /// constructor
+    /// constructor - dynamic
     ConstructFromObjectLiteral(Type, Vec<ObjectLiteralElem>),
+    /// constructor - static
+    ConstructStaticFromObjectLiteral(Type, Vec<ObjectLiteralElem>),
+    /// constructor - static
+    ConstructStaticFromArrayLiteral(Type, Vec<TypedExpr>),
     ///type literal
     TypeLiteral(Type),
     ///__sizeof

@@ -3,7 +3,7 @@ use ast::prelude::*;
 use ress::SourceLocation;
 
 use parity_wasm::builder::module;
-use parity_wasm::elements::{Module, ValueType, Local, Instructions, Instruction, BlockType, GlobalEntry, GlobalType, InitExpr};
+use parity_wasm::elements::{Module, ValueType, Local, Instructions, Instruction, BlockType, GlobalEntry, GlobalType, InitExpr, DataSegment};
 use parity_wasm::builder::{FunctionDefinition, FunctionBuilder};
 
 use std::collections::HashMap;
@@ -18,18 +18,9 @@ use crate::mem::*;
 struct Context{
     pub errors: Vec<Error>,
     pub mem_layout_map: HashMap<String, UserMemLayout>,
+    pub data_section: DataSection,
 }
 
-fn stupid_log2(x: u32) -> u32 {
-    //I am ashamed to say I have no idea how to do this properly in Rust
-    match x {
-        16 => 4,
-        8 => 3,
-        4 => 2,
-        2 => 1,
-        _ => panic!(),
-    }
-}
 
 fn get_ir_return_type(r#type: &Type) -> Option<ValueType> {
     match r#type {
@@ -84,6 +75,20 @@ fn transform_struct_member_set(
                 ValueType::F64 => vi.push(Instruction::F64Store(align, mem_layout_elem.offset)),
             }
         },
+    }
+}
+
+fn transform_array_member_set(
+    inner_value_type: &ValueType,
+    inner_value_type_size: u32,
+    idx: u32,
+    vi: &mut Vec<Instruction>,
+) -> () {
+    match inner_value_type {
+        ValueType::I32 => vi.push(Instruction::I32Store(inner_value_type_size, inner_value_type_size * idx)),
+        ValueType::I64 => vi.push(Instruction::I64Store(inner_value_type_size, inner_value_type_size * idx)),
+        ValueType::F32 => vi.push(Instruction::F32Store(inner_value_type_size, inner_value_type_size * idx)),
+        ValueType::F64 => vi.push(Instruction::F64Store(inner_value_type_size, inner_value_type_size * idx)),
     }
 }
 
@@ -844,6 +849,61 @@ fn transform_typed_expr(
             }
         },
 
+        Expr::ConstructStaticFromObjectLiteral(new_type, oles) => {
+            match new_type {
+                Type::UnsafeUserStruct{name: struct_name} => {
+                    //first get the mem layout data
+                    let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
+                    let stml = match mem_layout_elem {
+                        UserMemLayout::Struct(stml) => {
+                            stml
+                        },
+                    };
+
+                    let data_section_entry = context.data_section.allocate_new_data_section_entry(stml.size, stml.alignment);
+                    let addr = data_section_entry.addr as i32;
+
+                    //now set each member
+                    for ole in oles {
+                        //sets are, irritatingly, the address, the value, and then the instruction
+                        vi.push(Instruction::I32Const(addr));
+                        vi.append(&mut transform_typed_expr(&ole.value, global_var_map, local_var_map, func_map, context, true));
+                        transform_struct_member_set(&struct_name, &ole.name, &mut vi, context);
+                    }
+
+                    //now leave the return value, which is the pointer to the newly created thing
+                    vi.push(Instruction::I32Const(addr));
+                },
+                _ => unreachable!(),
+            }
+        },
+
+        Expr::ConstructStaticFromArrayLiteral(new_type, exprs) => {
+            match new_type {
+                Type::UnsafeArray(inner_type) => {
+                    let elem_value_type = get_ir_value_type(&inner_type);
+                    let elem_size = get_size_for_value_type(&elem_value_type);
+                    let full_size = elem_size * exprs.len() as u32;
+
+                    let data_section_entry = context.data_section.allocate_new_data_section_entry(full_size, elem_size);
+                    let addr = data_section_entry.addr as i32;
+
+                    let mut idx = 0;
+                    for expr in exprs {
+                        //sets are, irritatingly, the address, the value, and then the instruction
+                        vi.push(Instruction::I32Const(addr));
+                        vi.append(&mut transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context, true));
+                        transform_array_member_set(&elem_value_type, elem_size, idx, &mut vi);
+                        idx += 1;
+                    }
+
+                    //now leave the return value, which is the pointer to the newly created thing
+                    vi.push(Instruction::I32Const(addr));
+                },
+                _ => unreachable!(),
+            }
+        }
+
         Expr::Null => {
             vi.push(Instruction::I32Const(0));
         },
@@ -920,8 +980,6 @@ fn transform_func(func: &Func,
 pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
     let mut m = module();
 
-    m = m.memory().with_min(1).build();
-
     for g in program.globals {
         let vt = get_ir_value_type(&g.r#type);
         let instruction = match vt {
@@ -937,6 +995,7 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
     let mut context = Context{
         errors: vec![],
         mem_layout_map: generate_mem_layout_map(&program.type_map),
+        data_section: DataSection::new(),
     };
 
     for func in &program.funcs {
@@ -948,6 +1007,11 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
         }
     }
     errors.append(& mut context.errors);
+
+    m = m.memory().with_min(context.data_section.size).build();
+
+    m = m.with_data_segment(DataSegment::new(0, Some(InitExpr::new(vec![Instruction::I32Const(0), Instruction::End])), context.data_section.generate_data_section()));
+
     m.build()
 }
 

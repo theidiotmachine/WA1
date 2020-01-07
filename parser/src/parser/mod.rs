@@ -27,6 +27,7 @@ use crate::assert_next;
 use crate::assert_semicolon;
 use crate::try_create_cast;
 use crate::create_cast;
+use crate::Commitment;
 
 #[derive(Debug, Clone, PartialEq)]
 enum ScopedVar{
@@ -1071,8 +1072,8 @@ impl<'b> Parser<'b> {
                     self.skip_next_item();
                     assert_punct!(self, Punct::Colon);
                     let member_type = self.parse_type(parser_context);
-                    assert_semicolon!(self);
                     assert_ok!(member_type);
+                    assert_semicolon!(self);
                     members.push(StructMember{name: i.to_string(), r#type: member_type.clone()});
                 },
                 _ => {
@@ -1177,24 +1178,89 @@ impl<'b> Parser<'b> {
         }
     }
 
-    fn parse_object_literal_constructor(&mut self,
+    /// Parse an array literal into a Vec.
+    fn parse_array_literal_to_vec(&mut self,
         for_type: &Type,
+        loc_in: &SourceLocation,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
-        let mut loc = self.peek_next_location();
-        assert_punct!(self, Punct::OpenBrace);
+    ) -> Res<Vec<TypedExpr>> {
+        let mut loc = loc_in.clone();
 
-        let scratch_malloc = String::from("__scratch_malloc");
-        let scratch_malloc_type = Type::UnsafePtr;
-        self.context.add_var(&scratch_malloc, &scratch_malloc, &scratch_malloc_type, false);
-        let vd = VariableDecl{
-            internal_name: scratch_malloc.clone(), r#type: scratch_malloc_type, constant: false, init: None, closure_source: false, arg: false, orig_name: scratch_malloc
+        assert_punct!(self, Punct::OpenBracket);
+
+        let inner_type: &Type = match for_type{
+            Type::UnsafeArray(i) => {
+                &**i
+            },
+            _ => { 
+                parser_context.errors.push(Error::CantConstructUsingArrayLiterall(loc.clone(), for_type.clone()));
+                &Type::RealVoid
+            }
         };
-        let idx = parser_func_context.local_vars.len();
-        parser_func_context.local_vars.push(vd.clone());
-        parser_func_context.local_var_map.insert(vd.internal_name.clone(), idx as u32);
-        
+
+        let mut out: Vec<TypedExpr> = vec![];
+        let mut idx = 0;
+
+        loop {
+            let next_item = self.peek_next_item();
+            let token = next_item.token;
+
+            match token {
+                Token::Punct(p) => {
+                    match p {
+                        Punct::CloseBracket => {
+                            self.skip_next_item();
+                            loc.end = next_item.location.end.clone();
+                            break;
+                        },
+                        _ => {}
+                    }
+                },
+                _ => {}
+            }
+
+            let v = self.parse_expr(parser_func_context, parser_context);
+            assert_ok!(v);
+            let o_cast_expr = try_create_cast(inner_type, &v, true);
+            match o_cast_expr {
+                Some(cast_expr) => { out.push(cast_expr) },
+                None => { 
+                    parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, idx.to_string().clone(), inner_type.clone(), v.r#type.clone()));
+                }
+            }
+            idx += 1;
+            
+            let lookahead = self.peek_next_token();
+            match lookahead {
+                Token::Punct(p) => {
+                    match p {
+                        Punct::CloseBracket => {
+                        },
+                        Punct::Comma => {
+                            self.skip_next_item();
+                        },
+                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or ']'"),
+                    }
+                },
+                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or ']'"),
+            }
+        }
+
+        Ok(out)
+    }
+
+    /// Parse an object literal into a Vec that can be used by other parts of the parser.
+    /// It's a Vec rather than a HashMap because there may be order to the initialisation.
+    fn parse_object_literal_to_vec(&mut self,
+        for_type: &Type,
+        loc_in: &SourceLocation,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> Res<Vec<ObjectLiteralElem>> {
+        let mut loc = loc_in.clone();
+
+        assert_punct!(self, Punct::OpenBrace);
 
         //this is what we want
         let member_map: HashMap<String, Type> = match for_type {
@@ -1210,7 +1276,10 @@ impl<'b> Parser<'b> {
                     _ => unreachable!()
                 }
             }, 
-            _ => return Err(Error::CantConstructUsingObjectLiterall(loc.clone(), format!("{}", for_type)))
+            _ => {
+                parser_context.errors.push(Error::CantConstructUsingObjectLiterall(loc.clone(), for_type.clone()));
+                HashMap::new()
+            }
         };
 
         //this is what we got
@@ -1230,7 +1299,7 @@ impl<'b> Parser<'b> {
                             loc.end = next_item.location.end.clone();
                             break;
                         },
-                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
+                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or '}'"),
                     }
                 },
                 Token::Ident(i) => {
@@ -1253,7 +1322,7 @@ impl<'b> Parser<'b> {
                             let o_cast = try_create_cast(member_map_elem, &v, true);
                             match o_cast {
                                 None => {
-                                    parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, i.to_string().clone(), format!("{}", member_map_elem), format!("{}", v.r#type.clone())));
+                                    parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, i.to_string().clone(), member_map_elem.clone(), v.r#type.clone()));
                                 },
                                 Some(cast) => {
                                     out.push(ObjectLiteralElem{name: i.to_string(), value: cast});
@@ -1271,13 +1340,13 @@ impl<'b> Parser<'b> {
                                 Punct::Comma => {
                                     self.skip_next_item();
                                 },
-                                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
+                                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or '}'"),
                             }
                         },
-                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
+                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or '}'"),
                     }
                 },
-                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
+                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or '}'"),
             }
         }
         
@@ -1291,6 +1360,32 @@ impl<'b> Parser<'b> {
                 }
             }
         }
+
+        Ok(out)
+    }
+
+    /// This parses an object literal and uses it to construct something. As a side effect it
+    /// creates a variable called '__scratch_malloc' which is supposed to hold the call to malloc.
+    /// This is perhaps not brilliant
+    fn parse_object_literal_constructor(&mut self,
+        for_type: &Type,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> Res<TypedExpr> {
+        let loc = self.peek_next_location();
+        
+        let scratch_malloc = String::from("__scratch_malloc");
+        let scratch_malloc_type = Type::UnsafePtr;
+        self.context.add_var(&scratch_malloc, &scratch_malloc, &scratch_malloc_type, false);
+        let vd = VariableDecl{
+            internal_name: scratch_malloc.clone(), r#type: scratch_malloc_type, constant: false, init: None, closure_source: false, arg: false, orig_name: scratch_malloc
+        };
+        let idx = parser_func_context.local_vars.len();
+        parser_func_context.local_vars.push(vd.clone());
+        parser_func_context.local_var_map.insert(vd.internal_name.clone(), idx as u32);
+        
+        let out = self.parse_object_literal_to_vec(for_type, &loc, parser_func_context, parser_context);
+        assert_ok!(out);
 
         Ok(TypedExpr{expr: Expr::ConstructFromObjectLiteral(for_type.clone(), out), is_const: true, loc: loc, r#type: for_type.clone()})
     }
@@ -1488,9 +1583,9 @@ impl<'b> Parser<'b> {
                     },
                     None => { 
                         //might be a type literal
-                        let o_type = self.parse_type_from_ident(&id, parser_context);
+                        let o_type = self.parse_type_from_ident(&id, Commitment::Speculative, parser_context);
                         match o_type {
-                            Ok(t) => 
+                            Some(t) => 
                                 TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: next.location.clone()},
                         
                             _ => {
@@ -1740,6 +1835,7 @@ impl<'b> Parser<'b> {
             Token::Keyword(k) => {
                 match k {
                     Keyword::New => return self.parse_new(parser_func_context, parser_context),
+                    Keyword::UnsafeStatic => return self.parse_unsafe_static(parser_func_context, parser_context),
                     Keyword::Void => { 
                         self.skip_next_item();
                         return Ok(TypedExpr{expr:Expr::Void, r#type: Type::FakeVoid, is_const: true, loc: lookahead_item.location.clone()}); 
@@ -1792,13 +1888,10 @@ impl<'b> Parser<'b> {
                 Punct::ForwardSlash => Some(BinaryOperator::Divide),
                 Punct::TripleEqual => Some(BinaryOperator::StrictEqual),
                 Punct::BangDoubleEqual => Some(BinaryOperator::StrictNotEqual),
-                Punct::TripleGreaterThan => Some(BinaryOperator::UnsignedRightShift),
                 Punct::DoubleAmpersand => Some(BinaryOperator::LogicalAnd),
                 Punct::DoublePipe => Some(BinaryOperator::LogicalOr),
                 Punct::DoubleEqual => Some(BinaryOperator::Equal),
                 Punct::BangEqual => Some(BinaryOperator::NotEqual),
-                Punct::DoubleLessThan  => Some(BinaryOperator::LeftShift),
-                Punct::DoubleGreaterThan => Some(BinaryOperator::RightShift),
                 Punct::GreaterThanEqual => Some(BinaryOperator::GreaterThanEqual),
                 Punct::LessThanEqual => Some(BinaryOperator::LessThanEqual),
                 Punct::DoubleAsterisk => Some(BinaryOperator::Exponent),
@@ -1816,13 +1909,10 @@ impl<'b> Parser<'b> {
                 Punct::CaretEqual => Some(AssignmentOperator::BitXorAssign),
                 Punct::DashEqual => Some(AssignmentOperator::MinusAssign),
                 Punct::DoubleAsteriskEqual => Some(AssignmentOperator::ExponentAssign),
-                Punct::DoubleGreaterThanEqual => Some(AssignmentOperator::RightShiftAssign),
-                Punct::DoubleLessThanEqual => Some(AssignmentOperator::LeftShiftAssign),
                 Punct::ForwardSlashEqual => Some(AssignmentOperator::DivideAssign),
                 Punct::PercentEqual => Some(AssignmentOperator::ModAssign),
                 Punct::PipeEqual => Some(AssignmentOperator::BitOrAssign),
                 Punct::PlusEqual => Some(AssignmentOperator::PlusAssign),
-                Punct::TripleGreaterThanEqual => Some(AssignmentOperator::UnsignedRightShiftAssign),
                 Punct::Equal => Some(AssignmentOperator::Assign),
                 _ => None
             },

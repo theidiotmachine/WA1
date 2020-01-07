@@ -45,10 +45,11 @@ function assert(x: boolean): void {
     if(!x) __trap();
 }
 
+/*
 __struct Simple{
     a: int;
     b: int;
-}
+}*/
 
 function structTest(): void {
     /*

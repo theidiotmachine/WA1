@@ -702,8 +702,8 @@ __struct malloc_state {
   trim_check:       __size_t;
   release_checks:   __size_t;
   magic:            __size_t;
-  smallbins:        __static_array<malloc_chunk, 66>; //mchunkptr  smallbins[(NSMALLBINS+1)*2];
-  treebins:         __static_array<malloc_tree_chunk, 32>; //tbinptr    treebins[NTREEBINS];
+  smallbins:        __array<Option<malloc_chunk>>; //mchunkptr  smallbins[(NSMALLBINS+1)*2];
+  treebins:         __array<Option<malloc_tree_chunk>>; //tbinptr    treebins[NTREEBINS];
   footprint:        __size_t;
   max_footprint:    __size_t;
   footprint_limit:  __size_t; /* zero means no limit */
@@ -731,3 +731,59 @@ __struct malloc_params {
   trim_threshold: __size_t;
   default_mflags: __size_t; // was a flag_t aka u32;
 }
+
+const mparams: malloc_params = __static malloc_params {
+  magic: 0 as __size_t, 
+  page_size: 0 as __size_t, 
+  granularity: 0 as __size_t, 
+  mmap_threshold: 0 as __size_t, 
+  trim_threshold: 0 as __size_t, 
+  default_mflags: 0 as __size_t
+};
+
+/* Ensure mparams initialized */
+//function ensure_initialization(): void { (mparams.magic != (0 as __size_t)) || init_mparams(); }
+
+/* The global malloc_state used for all non-"mspace" calls */
+const gm: malloc_state = __static malloc_state{
+  smallmap:         (0 as __size_t),
+  treemap:          (0 as __size_t),
+  dvsize:           (0 as __size_t),
+  topsize:          (0 as __size_t),
+  least_addr:       (0 as __ptr),
+  dv:               null,
+  top:              null,
+  trim_check:       (0 as __size_t),
+  release_checks:   (0 as __size_t),
+  magic:            (0 as __size_t),
+  //66 lots of malloc_chunk...
+  smallbins:        __static __array<Option<malloc_chunk>> [
+    null, null, null, null, null, null, null, null, null, null, 
+    null, null, null, null, null, null, null, null, null, null, 
+    null, null, null, null, null, null, null, null, null, null, 
+    null, null, null, null, null, null, null, null, null, null, 
+    null, null, null, null, null, null, null, null, null, null, 
+    null, null, null, null, null, null, null, null, null, null, 
+    null, null, null, null, null, null
+  ],
+  treebins:         __static __array<Option<malloc_tree_chunk>>[
+      null, null, null, null, null, null, null, null, null, null, 
+      null, null, null, null, null, null, null, null, null, null, 
+      null, null, null, null, null, null, null, null, null, null, 
+      null, null
+  ],
+  footprint:        (0 as __size_t),
+  max_footprint:    (0 as __size_t),
+  footprint_limit:  (0 as __size_t),
+  mflags:           (0 as __size_t),
+  seg:              null,
+  extp:             (0 as __ptr),
+  exts:             (0 as __size_t),
+};
+//#define is_global(M)       ((M) == &_gm_)
+
+function is_initialized(m: malloc_state): boolean m.top != null;
+
+/* page-align a size */
+//#define page_align(S) (((S) + (mparams.page_size - SIZE_T_ONE)) & ~(mparams.page_size - SIZE_T_ONE))
+function page_align(s: __size_t): __size_t ((s + (mparams.page_size - (1 as __size_t))) & ~(mparams.page_size - (1 as __size_t)));

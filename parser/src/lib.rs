@@ -93,6 +93,12 @@ fn try_create_cast(want: &Type, got: &TypedExpr, implicit: bool) -> Option<Typed
     create_cast(want, got, &type_cast)
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Commitment{
+    Speculative,
+    Commited
+}
+
 #[derive(Debug)]
 struct ParserContext {
     pub globals: Vec<GlobalVariableDecl>,

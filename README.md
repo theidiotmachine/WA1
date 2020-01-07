@@ -198,6 +198,7 @@ let a = 9 as number;
     1. [ ] remove casts straight after consts, and just have the appropriately typed const inline
     1. [ ] == 0 is eqz
     1. [ ] globals that are init to a const should use the wasm global init mechansim
+    1. [ ] when calling __static, copy true data into the data section and drop the initializer expression
 1. Function calling
     1. [x] simple static function call
     1. [ ] functions as first class objects (but not closures)

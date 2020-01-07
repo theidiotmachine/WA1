@@ -184,8 +184,8 @@ pub enum Type {
     UnsafeSizeT,
     ///type literal
     TypeLiteral(Box<Type>),
-    /// __static_array type
-    UnsafeStaticArray(Box<Type>, i32),
+    /// __array type
+    UnsafeArray(Box<Type>),
 }
 
 impl Type{
@@ -241,7 +241,7 @@ impl Display for Type {
             Type::StringLiteral(n) => write!(f, "\"{}\"", n),
             Type::ObjectLiteral(_) => write!(f, "{{}}"),
             Type::TypeLiteral(t) => write!(f, "type: {}", t),
-            Type::UnsafeStaticArray(t, s) => write!(f, "__static_array<{}, {}>", t, s),
+            Type::UnsafeArray(t) => write!(f, "__array<{}>", t),
         }
     }
 }

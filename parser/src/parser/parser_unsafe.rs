@@ -69,4 +69,37 @@ impl<'a> Parser<'a> {
             _ => {Err(Error::NotYetImplemented(loc, String::from("__sizeof only works on __structs")))}
         }
     }
+
+    pub(crate) fn parse_unsafe_static(&mut self,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> Res<TypedExpr> {
+        let loc = self.peek_next_location();
+        
+        self.skip_next_item();
+
+        let type_to_construct = self.parse_type(parser_context);
+        assert_ok!(type_to_construct);
+
+        let lookahead_item = self.peek_next_item();
+        let lookahead = lookahead_item.token;
+        match lookahead {
+            Token::Punct(p) => {
+                match p {
+                    Punct::OpenBrace => {
+                        let out = self.parse_object_literal_to_vec(&type_to_construct, &loc, parser_func_context, parser_context);
+                        assert_ok!(out);
+                        Ok(TypedExpr{expr: Expr::ConstructStaticFromObjectLiteral(type_to_construct.clone(), out), is_const: true, loc: loc, r#type: type_to_construct.clone()})
+                    },
+                    Punct::OpenBracket => {
+                        let out = self.parse_array_literal_to_vec(&type_to_construct, &loc, parser_func_context, parser_context);
+                        assert_ok!(out);
+                        Ok(TypedExpr{expr: Expr::ConstructStaticFromArrayLiteral(type_to_construct.clone(), out), is_const: true, loc: loc, r#type: type_to_construct.clone()})
+                    },
+                    _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "{"),
+                }
+            },
+            _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "{"),
+        }
+    }
 }
