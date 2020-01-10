@@ -1,11 +1,13 @@
+use serde::{Serialize, Deserialize};
+
 pub mod expr;
 pub mod func;
 pub mod intrinsic;
 pub mod ast_types;
 
 use expr::GlobalVariableDecl;
-use func::Func;
-use ast_types::UserType;
+use func::{Func, FuncDecl};
+use ast_types::TypeDecl;
 use std::collections::HashMap;
 
 pub mod prelude {
@@ -31,5 +33,19 @@ pub struct Program {
     /// name to index map
     pub global_var_map: HashMap<String, u32>,
     pub func_map: HashMap<String, u32>,
-    pub type_map: HashMap<String, UserType>,
+    pub type_map: HashMap<String, TypeDecl>,
+}
+
+/// a exports decl. Not reallt part of the AST but very related
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Exports{
+    pub globals: Vec<GlobalVariableDecl>,
+    pub funcs: Vec<FuncDecl>,
+    pub types: Vec<TypeDecl>,
+}
+
+impl Exports{
+    pub fn new() -> Exports {
+        Exports{ globals: vec![], funcs: vec![], types: vec![] }
+    }
 }

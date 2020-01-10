@@ -1,3 +1,5 @@
+use serde::{Serialize, Deserialize};
+
 pub mod cast;
 use cast::get_type_casts_for_function_set;
 use cast::FuncCallTypeCast;
@@ -24,7 +26,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 
 // Type of a function.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FuncType{
     pub out_type: Type,
     pub in_types: Vec<Type>,
@@ -60,13 +62,13 @@ pub enum OpType{
     AsOpType,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Privacy{
     Public, Private, Protected
 }
 
 /// Data memeber of a class.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClassMember{
     pub name: String,
     pub r#type: Type,
@@ -74,20 +76,20 @@ pub struct ClassMember{
 }
 
 /// User-defined class type. Only contains members at the moment.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClassType{
     pub members: Vec<ClassMember>,
 }
 
 /// Data member of a struct.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StructMember{
     pub name: String,
     pub r#type: Type,
 }
 
 /// user-defined struct. 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StructType{
     pub members: Vec<StructMember>
 }
@@ -128,7 +130,7 @@ pub struct AbstractTypeDecl{
     pub out: AbstractTypeBody,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Type {
     /// unit type that actually manifests as nothing
     RealVoid,
@@ -165,7 +167,7 @@ pub enum Type {
     /// user type
     UserClass{name: String, type_args: Vec<Type>},
     /// user struct type
-    UnsafeUserStruct{name: String},
+    UnsafeStruct{name: String},
     /// not yet known - will be filled in by the typer
     Undeclared,
     ///Unresolved type var
@@ -230,7 +232,7 @@ impl Display for Type {
             Type::Option(inner) => write!(f, "Option<{}>", inner),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
             Type::UserClass{name, type_args: _} => write!(f, "{}", name),
-            Type::UnsafeUserStruct{name} => write!(f, "{}", name),
+            Type::UnsafeStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "undeclared"),
             Type::VariableUsage(name) => write!(f, "{}", name),
             Type::UnsafePtr => write!(f, "__ptr"),

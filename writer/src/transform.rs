@@ -1,6 +1,6 @@
 use ast::prelude::*;
 
-use ress::SourceLocation;
+use errs::prelude::*;
 
 use parity_wasm::builder::module;
 use parity_wasm::elements::{Module, ValueType, Local, Instructions, Instruction, BlockType, GlobalEntry, GlobalType, InitExpr, DataSegment};
@@ -124,7 +124,7 @@ fn transform_lvalue_get(
             vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
 
             match &inner_l_value.r#type {
-                Type::UnsafeUserStruct{name: type_name} => {
+                Type::UnsafeStruct{name: type_name} => {
                     transform_struct_member_get(type_name, member_name, &mut vi, context);
                 },
                 _ => context.errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from(format!("expr{:#?}", l_value)))),
@@ -176,7 +176,7 @@ fn transform_lvalue_tee(
             vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
             vi.append(r_value_code);
             match &inner_l_value.r#type {
-                Type::UnsafeUserStruct{name: type_name} => {
+                Type::UnsafeStruct{name: type_name} => {
                     transform_struct_member_set(type_name, member_name, &mut vi, context);
 
                     vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
@@ -808,7 +808,7 @@ fn transform_typed_expr(
             vi.append(& mut this_vi);
 
             match &lhs.r#type {
-                Type::UnsafeUserStruct{name: type_name} => {
+                Type::UnsafeStruct{name: type_name} => {
                     transform_struct_member_get(type_name, member_name, &mut vi, context);
                 },
                 _ => context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))),
@@ -817,7 +817,7 @@ fn transform_typed_expr(
 
         Expr::ConstructFromObjectLiteral(new_type, oles) => {
             match new_type {
-                Type::UnsafeUserStruct{name: struct_name} => {
+                Type::UnsafeStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
                     let stml = match mem_layout_elem {
@@ -851,7 +851,7 @@ fn transform_typed_expr(
 
         Expr::ConstructStaticFromObjectLiteral(new_type, oles) => {
             match new_type {
-                Type::UnsafeUserStruct{name: struct_name} => {
+                Type::UnsafeStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
                     let stml = match mem_layout_elem {
@@ -910,7 +910,7 @@ fn transform_typed_expr(
 
         Expr::SizeOf(t) => {
             match t {
-                Type::UnsafeUserStruct{name: struct_name} => {
+                Type::UnsafeStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
                     let stml = match mem_layout_elem {
@@ -943,9 +943,9 @@ fn transform_func(func: &Func,
 ) -> FunctionDefinition{
     let fb = FunctionBuilder::new();
     let sb = fb.signature();
-    let sb = sb.with_return_type(get_ir_return_type(&func.return_type));
+    let sb = sb.with_return_type(get_ir_return_type(&func.decl.return_type));
     let mut params: Vec<ValueType> = vec![];
-    for arg in &func.args {
+    for arg in &func.decl.args {
         params.push(get_ir_value_type(&arg.r#type));
     }
     let sb = sb.with_params(params);
@@ -960,7 +960,7 @@ fn transform_func(func: &Func,
     let fbb = fb.body();
     let fbb = fbb.with_locals(locals);
 
-    let consume_result = func.return_type != Type::RealVoid;
+    let consume_result = func.decl.return_type != Type::RealVoid;
     let mut vi = transform_typed_expr(&func.body, global_var_map, &func.local_var_map, func_map, context, consume_result);
         
     vi.push(Instruction::End);
@@ -968,7 +968,7 @@ fn transform_func(func: &Func,
 
     let fb = fbb.build();
 
-    let fb = if start_function.eq(&func.name) {
+    let fb = if start_function.eq(&func.decl.name) {
         fb.main()
     } else {
         fb
@@ -999,11 +999,11 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
     };
 
     for func in &program.funcs {
-        if !func.import {
+        if !func.decl.import {
             m.push_function(transform_func(func, &program.start, &program.global_var_map, &program.func_map, &mut context));
         }
-        if func.export {
-            m = m.export().field(&func.name).internal().func(*(program.func_map.get(&func.name).unwrap())).build();
+        if func.decl.export {
+            m = m.export().field(&func.decl.name).internal().func(*(program.func_map.get(&func.decl.name).unwrap())).build();
         }
     }
     errors.append(& mut context.errors);

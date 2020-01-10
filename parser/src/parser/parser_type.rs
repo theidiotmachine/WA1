@@ -6,6 +6,7 @@ use ress::prelude::*;
 use ast::prelude::*;
 use types::prelude::*;
 pub use errs::Error;
+use errs::prelude::*;
 use crate::assert_punct;
 use crate::assert_ok;
 use crate::assert_next;
@@ -36,11 +37,11 @@ impl<'a> Parser<'a> {
                 },
                 Some(user_type) => {
                     match user_type {
-                        UserType::Class(_) => {
+                        TypeDecl::Class{name: _, class_type: _, export: _} => {
                             Some(Type::UserClass{name: ident.to_string(), type_args})
                         },
-                        UserType::Struct{struct_type: _, under_construction: _} => {
-                            Some(Type::UnsafeUserStruct{name: ident.to_string()})
+                        TypeDecl::Struct{name: _, struct_type: _, under_construction: _, export: _} => {
+                            Some(Type::UnsafeStruct{name: ident.to_string()})
                         }
                     }
                 }

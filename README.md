@@ -227,6 +227,8 @@ let a = 9 as number;
 1. Structs, ptrs
     1. [x] structs - initial code
     1. [ ] union types are discriminated unions like Rust enums - yeah!
+        1. [ ] typescript lets us call members that are in all the types in the unions. This is very convenient, but hard here. Proposal: generate accessor functions for all
+            union members, route to the appropriate type, insert that. Not free, but not terrible either.
     1. [ ] option is union T | null
         1. [ ] means map over a union is well understood, I guess
     1. opt: booleans are 1 bit in structs, 32 bits on the heap?
@@ -247,10 +249,25 @@ let a = 9 as number;
 1. Numbers
     1. [x] there is an i32 type, an i64 type and an 164 type; the compiler auto promotes i32 to the other two types
     1. [ ] colors are a special type
-1. imports, exports
-    1. imports need to be rolled into the function index map
-    1. write a linker (!)
-    1. write an export format equiv to ts.d
+1. Imports and exports
+    1. syntax
+        1. [ ] import {*} as x from y => means will get everything from y as x.a, x.b
+        1. [ ] import {a} as x from y => means will get x.a 
+        1. [ ] import {*} from y => means will get y.a, y.b, etc
+        1. [ ] import {a} from y => means will get y.a
+    1. [ ] A stage 1 parser that will generate a list of file exports - globals, functions, types
+    1. [ ] A file format for that
+    1. [ ] When import commands are run, load that, pull the imports in
+1. Linker
+    1. [ ] object file format that contains
+        1. [ ] WASM or an AST
+            1. [ ] where the WASM is in PIC format - that is, static memory loads from a func that I can then patch
+        1. [ ] A dupe of the export format?
+        1. [ ] AST/WASM fragments to be inlined
+    1. [ ] linker that
+        1. [ ] loads object files
+        1. [ ] patches function calls and globals
+        1. [ ] patches memory - using GOT.mem
 1. tool chain
     1. [ ] npm 
     1. [ ] binaryen optimiser

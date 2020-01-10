@@ -7,6 +7,7 @@ use ress::prelude::*;
 use ast::prelude::*;
 use types::prelude::*;
 pub use errs::Error;
+use errs::prelude::*;
 use crate::assert_ident;
 use crate::assert_ok;
 use crate::assert_punct;
@@ -30,7 +31,7 @@ impl<'a> Parser<'a> {
         assert_ok!(inner);
         assert_punct!(self, Punct::CloseParen);
         match inner.r#type {
-            Type::UnsafeUserStruct{name: _} => {
+            Type::UnsafeStruct{name: _} => {
 
             },
             _ => {

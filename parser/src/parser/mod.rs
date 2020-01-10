@@ -6,6 +6,7 @@ use ast::prelude::*;
 use types::prelude::*;
 
 pub use errs::Error;
+use errs::prelude::*;
 
 use std::{mem::replace};
 
@@ -16,6 +17,7 @@ mod parser_int;
 mod parser_func;
 mod parser_type;
 mod parser_option;
+mod parser_phase_1;
 
 use crate::ParserContext;
 use crate::ParserFuncContext;
@@ -306,13 +308,15 @@ impl<'b> Parser<'b> {
         }
 
         let start_function = Func{ 
-            name: String::from("__start"), return_type: Type::RealVoid, args: vec![], export: false, import: false, 
-                body: TypedExpr{
-                    expr: Expr::Block(init_body),
-                    r#type: Type::RealVoid,
-                    is_const: true,
-                    loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))
-                },
+            decl: FuncDecl{
+                name: String::from("__start"), return_type: Type::RealVoid, args: vec![], export: false, import: false, 
+            },
+            body: TypedExpr{
+                expr: Expr::Block(init_body),
+                r#type: Type::RealVoid,
+                is_const: true,
+                loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))
+            },
             local_vars: vec![], closure: vec![], local_var_map: HashMap::new()
         };
 
@@ -325,8 +329,8 @@ impl<'b> Parser<'b> {
         }
     }
 
-    ///parse!
-    pub fn parse(&mut self, 
+    /// Produces a full parse.
+    pub fn parse_full(&mut self, 
         is_unsafe: bool,
     ) -> Result<Program, Vec<Error>> {
         let mut parser_context = ParserContext::new(is_unsafe);
@@ -569,34 +573,17 @@ impl<'b> Parser<'b> {
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr>{
         let mut parser_func_context_inner = ParserFuncContext::new();
+
+        let func_decl = self.parse_function_decl(export, parser_context);
+        assert_ok!(func_decl);
+
         let loc = self.peek_next_location();
-
-        self.expect_keyword(Keyword::Function)?;
-        let next = assert_next!(self, "Expecting function name");
-        let id = assert_ident!(next, "Expecting function name to be an identifier");
-
-        let next = self.peek_next_item();
-        let token = &next.token;
-        if token.matches_punct(Punct::LessThan) {
-            let type_args = self.parse_type_decl_args();
-            assert_ok!(type_args);
-            self.context.push_func_type_scope(&type_args);
-            parser_context.errors.push(Error::NotYetImplemented(next.location.clone(), String::from("generic functions")));
-        } else {
-            self.context.push_empty_func_type_scope();
-        }
 
         self.context.push_func_scope();
 
-        let arg_list = self.parse_function_decl_args(parser_context);
-        assert_ok!(arg_list);
+        self.register_params(&func_decl.args, &mut parser_func_context_inner);
 
-        self.register_params(&arg_list, &mut parser_func_context_inner);
-
-        assert_punct!(self, Punct::Colon);
-        let return_type = self.parse_type(parser_context);
-        assert_ok!(return_type);
-        parser_func_context_inner.func_return_type = return_type;
+        parser_func_context_inner.func_return_type = func_decl.return_type.clone();
 
         let old_in_iteration = self.context.in_iteration;
         self.context.in_iteration = false;
@@ -646,12 +633,12 @@ impl<'b> Parser<'b> {
         }
         
         let func = Func{
-            name: id.to_string(), return_type: parser_func_context_inner.func_return_type, args: arg_list, export, body: block, 
+            decl: func_decl,
             local_vars: parser_func_context_inner.local_vars, closure: parser_func_context_inner.closure, 
-            local_var_map: parser_func_context_inner.local_var_map, import: false
+            local_var_map: parser_func_context_inner.local_var_map, body: block, 
         };
 
-        let name = func.name.clone();
+        let name = func.decl.name.clone();
         let func_closure = func.closure.clone();
         // now we have a closure of an inner function, we need to capture it. So look at every element
         for cr in &func_closure {
@@ -666,10 +653,10 @@ impl<'b> Parser<'b> {
             }
         }
         let idx = parser_context.funcs.len();
-        parser_context.func_map.insert(func.name.clone(), idx as u32);
+        parser_context.func_map.insert(func.decl.name.clone(), idx as u32);
         let func_type = func.get_func_type();
         parser_context.funcs.push(func); 
-        Ok(TypedExpr{expr: Expr::FuncDecl(FuncDecl{name: name, closure: func_closure}), is_const: true, r#type: Type::Func{func_type: Box::new(func_type), type_args: vec![]}, loc: loc})
+        Ok(TypedExpr{expr: Expr::FuncDecl(FuncObjectCreation{name: name, closure: func_closure}), is_const: true, r#type: Type::Func{func_type: Box::new(func_type), type_args: vec![]}, loc: loc})
     }
 
     /// This is for parsing an export declaration. We require these to be in module root, 
@@ -705,6 +692,13 @@ impl<'b> Parser<'b> {
                         Err(e) => parser_context.errors.push(e)
                     };
                 },
+                Keyword::UnsafeStruct => {
+                    let struct_decl = self.parse_struct_decl(true, parser_context);
+                    match struct_decl {
+                        Ok(c) => init_body.push(c),
+                        Err(e) => parser_context.errors.push(e)
+                    };
+                }
                 _ => parser_context.errors.push(Error::Other("argh".to_string()))
             },
             _ => parser_context.errors.push(Error::Other("argh".to_string()))
@@ -778,7 +772,6 @@ impl<'b> Parser<'b> {
             
             Ok(TypedExpr{expr: Expr::GlobalVariableDecl(Box::new(decl)), is_const: constant, r#type: Type::RealVoid, loc: loc})
         }
-
     }
 
     /// The root of the module is parsed and will run in its 'start' function.
@@ -820,12 +813,12 @@ impl<'b> Parser<'b> {
                     };
                 },
                 Keyword::UnsafeStruct => {
-                    let struct_decl = self.parse_struct_decl(parser_context);
+                    let struct_decl = self.parse_struct_decl(false, parser_context);
                     match struct_decl {
                         Ok(c) => init_body.push(c),
                         Err(e) => parser_context.errors.push(e)
                     };
-                }
+                },
                 _ => { parser_context.errors.push(self.unexpected_token_error_raw(next.span, &next.location, "expecting valid statement")); self.skip_next_item(); }
             },
             _ => {
@@ -962,6 +955,7 @@ impl<'b> Parser<'b> {
     }
 
     fn parse_class_decl(&mut self,
+        export: bool,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let mut loc = self.peek_next_location();
@@ -1022,71 +1016,9 @@ impl<'b> Parser<'b> {
 
         self.context.pop_type_scope();
 
-        parser_context.type_map.insert(id.to_string(), UserType::Class(ClassType{members: members}));
+        parser_context.type_map.insert(id.to_string(), TypeDecl::Class{class_type: ClassType{members: members}, export, name: id.to_string()});
 
         Ok(TypedExpr{expr: Expr::ClassDecl(id.to_string()), is_const: true, r#type: Type::RealVoid, loc: loc})
-    }
-
-    fn parse_struct_decl(&mut self,    
-        parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
-        let mut loc = self.peek_next_location();
-        if !parser_context.is_unsafe {
-            parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
-        }
-        self.skip_next_item();
-
-        let next = assert_next!(self, "Expecting struct name");
-        let id = assert_ident!(next, "Expecting struct name to be an identifier");
-
-        if parser_context.type_map.contains_key(&id.to_string()) {
-            parser_context.errors.push(Error::DuplicateTypeName(id.to_string()))
-        }
-
-        self.context.push_empty_func_type_scope();
-
-        let mut members: Vec<StructMember> = vec![];
-
-        assert_punct!(self, Punct::OpenBrace);
-
-        parser_context.type_map.insert(id.to_string(), UserType::Struct{struct_type: StructType{members: vec![]}, under_construction: true});
-
-        loop {
-            let lookahead_item = self.peek_next_item();
-            loc.end = lookahead_item.location.end.clone();
-            let lookahead = lookahead_item.token;
-         
-            match lookahead {
-                Token::Punct(ref p) => {
-                    match p {
-                        Punct::CloseBrace => {
-                            self.skip_next_item();
-                            break;
-                        },
-                        _ => {
-                            return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "expecting '}'")
-                        }
-                    }
-                },
-                Token::Ident(ref i) => {
-                    self.skip_next_item();
-                    assert_punct!(self, Punct::Colon);
-                    let member_type = self.parse_type(parser_context);
-                    assert_ok!(member_type);
-                    assert_semicolon!(self);
-                    members.push(StructMember{name: i.to_string(), r#type: member_type.clone()});
-                },
-                _ => {
-                    return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "expecting '}' or member")
-                }
-            }
-        }
-
-        self.context.pop_type_scope();
-
-        parser_context.type_map.insert(id.to_string(), UserType::Struct{struct_type: StructType{members: members}, under_construction: false});
-
-        Ok(TypedExpr{expr: Expr::StructDecl(id.to_string()), is_const: true, r#type: Type::RealVoid, loc: loc})
     }
 
     /// a statement is something you can't assign to (like break or a variable declaration) or a true expr.
@@ -1137,7 +1069,7 @@ impl<'b> Parser<'b> {
                 },
                 
                 Keyword::Class => {
-                    self.parse_class_decl(parser_context)
+                    self.parse_class_decl(false, parser_context)
                 },
 
                 Keyword::Break => {
@@ -1264,10 +1196,10 @@ impl<'b> Parser<'b> {
 
         //this is what we want
         let member_map: HashMap<String, Type> = match for_type {
-            Type::UnsafeUserStruct{name: struct_name} => {
+            Type::UnsafeStruct{name: struct_name} => {
                 let tm_entry = parser_context.type_map.get(struct_name).unwrap();
                 match tm_entry {
-                    UserType::Struct{struct_type, under_construction} => { 
+                    TypeDecl::Struct{struct_type, under_construction, export: _, name: _} => { 
                         if *under_construction {
                             parser_context.errors.push(Error::RecursiveTypeDefinition(loc.clone()));
                         }
@@ -1445,10 +1377,10 @@ impl<'b> Parser<'b> {
         let lhs_type = &lhs.r#type;
 
         match lhs_type {
-            Type::UnsafeUserStruct{name} => {
+            Type::UnsafeStruct{name} => {
                 let tm_entry = parser_context.type_map.get(name).unwrap();
                 match tm_entry {
-                    UserType::Struct{struct_type: st, under_construction: _} => self.parse_struct_component(lhs, &st),
+                    TypeDecl::Struct{struct_type: st, under_construction: _, export: _, name: _} => self.parse_struct_component(lhs, &st),
                     _ => unreachable!()
                 }
             },
@@ -1607,7 +1539,7 @@ impl<'b> Parser<'b> {
                                                     let arg_types = parser_context.funcs[func_id as usize].get_arg_types();
                                                     let args = self.parse_function_call_args(&arg_types, parser_func_context, parser_context);
                                                     assert_ok!(args);
-                                                    let func_return_type = parser_context.funcs[func_id as usize].return_type.clone();
+                                                    let func_return_type = parser_context.funcs[func_id as usize].decl.return_type.clone();
                                                     let loc = SourceLocation::new(next.location.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(next.location.end.clone()));
                                                     TypedExpr{expr: Expr::StaticFuncCall(id.to_string().clone(), args), r#type: func_return_type, is_const: true, loc: loc}
                                                 },
@@ -2121,7 +2053,7 @@ mod test {
         }";
 
         let mut parser = Parser::new(add).unwrap();
-        let script = parser.parse(false).unwrap();
+        let script = parser.parse_full(false).unwrap();
         println!("{:#?}", script);
     }
 }

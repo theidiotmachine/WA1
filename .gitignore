@@ -1,3 +1,4 @@
 target/*
 *.wasm
+*.wa1e
 .vscode/

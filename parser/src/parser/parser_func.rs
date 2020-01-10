@@ -10,6 +10,8 @@ pub use errs::Error;
 
 use crate::assert_ok;
 use crate::try_create_cast;
+use crate::assert_next;
+use crate::{assert_ident, assert_punct};
 
 impl<'a> Parser<'a> {
     /// If we are expecting a no arg function, call this.
@@ -92,5 +94,36 @@ impl<'a> Parser<'a> {
                 _ => return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "need expr or comma")
             }
         }
+    }
+
+    pub(crate) fn parse_function_decl(&mut self,
+        export: bool,
+        parser_context: &mut ParserContext,
+    ) -> Res<FuncDecl> {
+        self.expect_keyword(Keyword::Function)?;
+        let next = assert_next!(self, "Expecting function name");
+        let id = assert_ident!(next, "Expecting function name to be an identifier");
+
+        let next = self.peek_next_item();
+        let token = &next.token;
+        if token.matches_punct(Punct::LessThan) {
+            let type_args = self.parse_type_decl_args();
+            assert_ok!(type_args);
+            self.context.push_func_type_scope(&type_args);
+            parser_context.errors.push(Error::NotYetImplemented(next.location.clone(), String::from("generic functions")));
+        } else {
+            self.context.push_empty_func_type_scope();
+        }
+
+        let arg_list = self.parse_function_decl_args(parser_context);
+        assert_ok!(arg_list);
+
+        assert_punct!(self, Punct::Colon);
+        let return_type = self.parse_type(parser_context);
+        assert_ok!(return_type);
+
+        Ok(FuncDecl{
+            name: id.to_string(), return_type: return_type.clone(), args: arg_list, export, import: false, 
+        })
     }
 }

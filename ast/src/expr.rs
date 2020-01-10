@@ -1,7 +1,9 @@
+use serde::{Serialize, Deserialize};
+
 use types::*;
-use crate::func::FuncDecl;
+use crate::func::FuncObjectCreation;
 use crate::intrinsic::Intrinsic;
-use ress::SourceLocation;
+use errs::prelude::*;
 
 pub mod prelude {
     pub use super::Expr;
@@ -21,7 +23,7 @@ pub mod prelude {
 
 use lazy_static;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum BinaryOperator{
     Dot,
     GreaterThan,
@@ -148,14 +150,14 @@ impl BinaryOperator{
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BinaryOperatorApplication{
     pub lhs: Box<TypedExpr>,
     pub rhs: Box<TypedExpr>, 
     pub op: BinaryOperator,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum UnaryOperator{
     LogicalNot,
     BitNot,
@@ -182,7 +184,7 @@ impl UnaryOperator{
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AssignmentOperator{
     Assign,
     PlusAssign,
@@ -213,14 +215,14 @@ impl AssignmentOperator{
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UnaryOperatorApplication {
     pub expr: Box<TypedExpr>,
     pub op: UnaryOperator,
 }
 
 /// Variable decl
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VariableDecl {
     pub internal_name: String,
     pub orig_name: String,
@@ -232,7 +234,7 @@ pub struct VariableDecl {
 }
 
 /// Variable decl
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GlobalVariableDecl {
     pub name: String,
     pub r#type: Type,
@@ -241,21 +243,21 @@ pub struct GlobalVariableDecl {
     pub export: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClosureRef {
     pub internal_name: String,
     pub r#type: Type,
     pub constant: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ObjectLiteralElem{
     pub name: String,
     pub value: TypedExpr,
 }
 
 /// Something that returns something. This is really an RValue.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Expr {
     /// A binary operator
     BinaryOperator(BinaryOperatorApplication),
@@ -300,8 +302,7 @@ pub enum Expr {
     /// if-then-else
     IfThenElse(Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>),
     /// a function declaration. This might compile to a closure creation, a function pointer, or a no op 
-    /// this is wrong - in JS this is an expression
-    FuncDecl(FuncDecl),
+    FuncDecl(FuncObjectCreation),
     /// variable declaration
     VariableDecl(Box<VariableDecl>),
     /// global variable declaration. Only appears in the __start function.
@@ -338,7 +339,7 @@ pub enum Expr {
     SizeOf(Type),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TypedExpr{
     pub expr: Expr,
     pub r#type: Type,
@@ -392,7 +393,7 @@ impl TypedExpr{
 }
 
 /// An l value expression
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum LValueExpr{
     //Assign a global variable
     GlobalVariableAssign(String),
@@ -407,7 +408,7 @@ pub enum LValueExpr{
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TypedLValueExpr{
     pub expr: LValueExpr,
     pub r#type: Type,

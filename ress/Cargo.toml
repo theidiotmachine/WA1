@@ -13,3 +13,4 @@ edition = "2018"
 [dependencies]
 log = "0.4"
 types = { path = "../types"}
+errs = { path = "../errs"}

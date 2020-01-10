@@ -7,8 +7,7 @@ use ress::prelude::*;
 use ast::prelude::*;
 use types::prelude::*;
 pub use errs::Error;
-use crate::assert_punct;
-use crate::assert_ok;
+use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident};
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_mem_grow(&mut self,    
@@ -101,5 +100,68 @@ impl<'a> Parser<'a> {
             },
             _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "{"),
         }
+    }
+
+    pub (crate) fn parse_struct_decl(&mut self,    
+        export: bool,
+        parser_context: &mut ParserContext,
+    ) -> Res<TypedExpr> {
+        let mut loc = self.peek_next_location();
+        if !parser_context.is_unsafe {
+            parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
+        }
+        self.skip_next_item();
+
+        let next = assert_next!(self, "Expecting struct name");
+        let id = assert_ident!(next, "Expecting struct name to be an identifier");
+
+        if parser_context.type_map.contains_key(&id.to_string()) {
+            parser_context.errors.push(Error::DuplicateTypeName(id.to_string()))
+        }
+
+        self.context.push_empty_func_type_scope();
+
+        let mut members: Vec<StructMember> = vec![];
+
+        assert_punct!(self, Punct::OpenBrace);
+
+        parser_context.type_map.insert(id.to_string(), TypeDecl::Struct{struct_type: StructType{members: vec![]}, under_construction: true, export: export, name: id.to_string()});
+
+        loop {
+            let lookahead_item = self.peek_next_item();
+            loc.end = lookahead_item.location.end.clone();
+            let lookahead = lookahead_item.token;
+         
+            match lookahead {
+                Token::Punct(ref p) => {
+                    match p {
+                        Punct::CloseBrace => {
+                            self.skip_next_item();
+                            break;
+                        },
+                        _ => {
+                            return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "expecting '}'")
+                        }
+                    }
+                },
+                Token::Ident(ref i) => {
+                    self.skip_next_item();
+                    assert_punct!(self, Punct::Colon);
+                    let member_type = self.parse_type(parser_context);
+                    assert_ok!(member_type);
+                    assert_semicolon!(self);
+                    members.push(StructMember{name: i.to_string(), r#type: member_type.clone()});
+                },
+                _ => {
+                    return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "expecting '}' or member")
+                }
+            }
+        }
+
+        self.context.pop_type_scope();
+
+        parser_context.type_map.insert(id.to_string(), TypeDecl::Struct{struct_type: StructType{members: members}, under_construction: false, export: export, name: id.to_string()});
+
+        Ok(TypedExpr{expr: Expr::StructDecl(id.to_string()), is_const: true, r#type: Type::RealVoid, loc: loc})
     }
 }

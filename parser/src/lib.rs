@@ -106,7 +106,7 @@ struct ParserContext {
     pub funcs: Vec<Func>,
     pub func_map: HashMap<String, u32>,
     pub errors: Vec<Error>,
-    pub type_map: HashMap<String, UserType>,
+    pub type_map: HashMap<String, TypeDecl>,
     pub is_unsafe: bool,
 }
 
@@ -152,3 +152,4 @@ pub struct Line {
 
 /// The result type for the Parser operations
 type Res<T> = Result<T, Error>;
+

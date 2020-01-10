@@ -1,6 +1,10 @@
-use ress::{Position, SourceLocation};
 use std::fmt::{Display, Formatter, Result};
 use types::Type;
+pub mod source_location;
+pub mod prelude {
+    pub use super::source_location::prelude::*;
+}
+use source_location::{SourceLocation, Position};
 
 #[derive(Debug, Clone)]
 pub enum Error {
