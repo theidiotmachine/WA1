@@ -552,19 +552,6 @@ version = "0.2.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "linker"
-version = "0.0.1"
-dependencies = [
- "ast 0.4.0",
- "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "errs 0.1.0",
- "ress 0.8.1",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_json 1.0.44 (registry+https://github.com/rust-lang/crates.io-index)",
- "types 0.1.0",
-]
-
-[[package]]
 name = "log"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"

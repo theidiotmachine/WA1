@@ -43,6 +43,7 @@ pub enum Error {
     RecursiveTypeDefinition(SourceLocation),
     UnsafeCodeNotAllowed(SourceLocation),
     Dummy,
+    CompileFailed(String),
 }
 
 impl Display for Error {
@@ -84,6 +85,7 @@ impl Display for Error {
             Error::RecursiveTypeDefinition(ref loc) => write!(f, "ERROR {}: recursive type definition not allowed", loc),
             Error::UnsafeCodeNotAllowed(ref loc) => write!(f, "ERROR {}: unsafe code not allowed to be called without --unsafe", loc),
             Error::Dummy => write!(f, "ERROR: internal error",),
+            Error::CompileFailed(ref err) => write!(f, "ERROR: could not compile because {}", err),
         }
     }
 }
