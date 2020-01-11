@@ -108,10 +108,11 @@ struct ParserContext {
     pub errors: Vec<Error>,
     pub type_map: HashMap<String, TypeDecl>,
     pub is_unsafe: bool,
+    pub is_pic: bool,
 }
 
 impl ParserContext {
-    fn new(is_unsafe: bool) -> ParserContext {
+    fn new(is_unsafe: bool, is_pic: bool) -> ParserContext {
         ParserContext{
             globals: vec![],
             funcs: vec![],
@@ -120,6 +121,7 @@ impl ParserContext {
             func_map: HashMap::new(),
             type_map: HashMap::new(),
             is_unsafe: is_unsafe,
+            is_pic: is_pic,
         }
     }
 }

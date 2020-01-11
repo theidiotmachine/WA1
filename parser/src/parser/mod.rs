@@ -332,8 +332,9 @@ impl<'b> Parser<'b> {
     /// Produces a full parse.
     pub fn parse_full(&mut self, 
         is_unsafe: bool,
+        is_pic: bool,
     ) -> Result<Program, Vec<Error>> {
-        let mut parser_context = ParserContext::new(is_unsafe);
+        let mut parser_context = ParserContext::new(is_unsafe, is_pic);
         self.parse_internal(&mut parser_context);
         if parser_context.errors.is_empty() {
             Ok(Program{start: String::from("__start"), globals: parser_context.globals, 
@@ -2053,7 +2054,7 @@ mod test {
         }";
 
         let mut parser = Parser::new(add).unwrap();
-        let script = parser.parse_full(false).unwrap();
+        let script = parser.parse_full(false, false).unwrap();
         println!("{:#?}", script);
     }
 }

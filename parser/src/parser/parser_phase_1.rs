@@ -101,7 +101,7 @@ impl<'a> Parser<'a> {
     pub fn parse_phase_1(&mut self, 
         is_unsafe: bool
     ) -> Exports {
-        let mut parser_context = ParserContext::new(is_unsafe);
+        let mut parser_context = ParserContext::new(is_unsafe, true);
         loop {
             if self.look_ahead.token.is_eof() {
                 break;

@@ -1,0 +1,19 @@
+[package]
+name = "object-file"
+version = "0.0.1"
+authors = ["theidiotmachine <dinsdt@googlemail.com>"]
+description = "WA1 object file"
+license = "MIT"
+readme = "./README.md"
+keywords = []
+categories = []
+edition = "2018"
+
+[dependencies]
+ress = { path = "../ress" }
+ast = { path = "../ast" }
+errs = { path = "../errs" }
+types = {path = "../types"}
+serde = "1.0.104"
+serde_json = "1.0"
+parity-wasm = "0.41"

@@ -21,8 +21,8 @@ pub mod prelude {
 #[macro_use]
 extern crate lazy_static;
 
-/// a fully parsed 'program'. A set of globals (with initialisations)
-#[derive(PartialEq, Debug)]
+/// The AST of a fully parsed program. 
+#[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Program {
     ///global variables
     pub globals: Vec<GlobalVariableDecl>,
@@ -36,7 +36,7 @@ pub struct Program {
     pub type_map: HashMap<String, TypeDecl>,
 }
 
-/// a exports decl. Not reallt part of the AST but very related
+/// The things exported from a compilation unit. Not reallY part of the AST but very related.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Exports{
     pub globals: Vec<GlobalVariableDecl>,

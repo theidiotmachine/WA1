@@ -22,7 +22,7 @@ pub struct FuncArg {
 }
 
 /// Function definition
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Func {
     pub decl: FuncDecl,
     /// if import is true, this will be a nop?

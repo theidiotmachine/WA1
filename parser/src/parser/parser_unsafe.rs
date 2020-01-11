@@ -74,7 +74,14 @@ impl<'a> Parser<'a> {
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let loc = self.peek_next_location();
-        
+        if !parser_context.is_unsafe {
+            parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
+        }
+
+        if parser_context.is_pic {
+            parser_context.errors.push(Error::NotYetImplemented(loc.clone(), String::from("__static in pic")));
+        }
+
         self.skip_next_item();
 
         let type_to_construct = self.parse_type(parser_context);
