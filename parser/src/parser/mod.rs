@@ -729,7 +729,7 @@ impl<'b> Parser<'b> {
                 }
             };
             let exports = importer.import(&id_string);
-            let exports = filter_impoorts(&exports, &imports);
+            let exports = filter_impoorts(&exports.unwrap(), &imports);
             for g in &exports.globals {
                 let import_name = format!("{}.{}", namespace, g.name);
                 let idx = parser_context.globals.len();

@@ -131,5 +131,9 @@ impl DataSection {
             }
         ]}
     }
+
+    pub fn has_data(&self) -> bool {
+        self.entries.len() > 1
+    }
 }
 

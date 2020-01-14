@@ -194,7 +194,7 @@ pub enum Commitment{
 }
 
 pub trait Importer{
-    fn import(&mut self, path_name: &String) -> Exports;
+    fn import(&mut self, path_name: &String) -> Option<Exports>;
 }
 
 #[derive(Debug)]

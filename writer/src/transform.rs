@@ -1030,9 +1030,10 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
     }
     errors.append(& mut context.errors);
 
-    m = m.memory().with_min(context.data_section.size).build();
-
-    m = m.with_data_segment(DataSegment::new(0, Some(InitExpr::new(vec![Instruction::I32Const(0), Instruction::End])), context.data_section.generate_data_section()));
+    if context.data_section.has_data() {
+        m = m.memory().with_min(context.data_section.size).build();
+        m = m.with_data_segment(DataSegment::new(0, Some(InitExpr::new(vec![Instruction::I32Const(0), Instruction::End])), context.data_section.generate_data_section()));
+    }
 
     m.build()
 }
