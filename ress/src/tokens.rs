@@ -875,8 +875,11 @@ pub enum Punct {
     Hash,
     LessThan,
     LessThanEqual,
+    /// A '{' 
     OpenBrace,
+    /// A '[' 
     OpenBracket,
+    /// A '(' 
     OpenParen,
     Percent,
     PercentEqual,
@@ -1148,6 +1151,7 @@ pub enum Keyword {
     Export,
     Finally,
     For,
+    From,
     Function,
     If,
     Implements,
@@ -1218,6 +1222,7 @@ impl Keyword {
             "finally" => Keyword::Finally,
             "for" => Keyword::For,
             "function" => Keyword::Function,
+            "from" => Keyword::From,
             "if" => Keyword::If,
             "int" => Keyword::Int,
             "instanceof" => Keyword::InstanceOf,
@@ -1300,6 +1305,7 @@ impl Keyword {
             Keyword::Export => "export",
             Keyword::Finally => "finally",
             Keyword::For => "for",
+            Keyword::From => "from",
             Keyword::Function => "function",
             Keyword::If => "if",
             Keyword::In => "in",

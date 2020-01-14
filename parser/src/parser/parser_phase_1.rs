@@ -6,16 +6,10 @@ use std::collections::HashMap;
 
 use ress::prelude::*;
 use ast::prelude::*;
-use types::prelude::*;
 pub use errs::Error;
-use errs::prelude::*;
 
 macro_rules! should_be_ok {
     ($e:ident) => (if $e.is_err() { return; }; let $e = $e.unwrap();)
-}
-
-fn fake_typed_expr(return_type: &Type) -> TypedExpr {
-    TypedExpr{expr: Expr::Block(vec![]), r#type: return_type.clone(), is_const: true, loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))}
 }
 
 fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
@@ -78,10 +72,9 @@ impl<'a> Parser<'a> {
     ) -> () {
         let decl = self.parse_function_decl(true, parser_context);
         should_be_ok!(decl);
-        let return_type = decl.return_type.clone();
         let func = Func{
             decl: decl, local_vars: vec![], closure: vec![], 
-            local_var_map: HashMap::new(), body: fake_typed_expr(&return_type), 
+            local_var_map: HashMap::new(), body: None, 
         };
 
         let idx = parser_context.funcs.len();

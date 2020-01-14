@@ -1,6 +1,9 @@
 extern crate clap;
 use clap::{Arg, App, SubCommand, ArgMatches};
-use std::fs;
+use std::{fs, env};
+use std::path::PathBuf;
+use ast::Exports;
+
 extern crate parser;
 use parser::*;
 extern crate writer;
@@ -9,17 +12,51 @@ extern crate errs;
 pub use errs::Error;
 pub use errs::pretty_print_errs;
 
+struct FileImporter{
+    pub current_path: PathBuf,
+    pub input_path: PathBuf,
+}
+
+impl FileImporter {
+    fn new(input: &String) -> FileImporter {
+        let e_path = env::current_dir();
+        let path = match e_path {
+            Err(err) => {
+                println!("Internal error - {}.", err);
+                panic!();
+            },
+            Ok(path) => path
+        };
+        let input_path = PathBuf::from(input);
+        let o_parent = input_path.parent();
+        match o_parent {
+            Some(parent) => FileImporter{current_path: path, input_path: parent.to_owned()},
+            None => FileImporter{current_path: path, input_path: PathBuf::new()},
+        }
+    }
+}
+
+impl Importer for FileImporter {
+    fn import(&mut self, path_name: &String) -> Exports {
+        let mut import_path = self.current_path.clone().join(self.input_path.clone()).join(path_name);
+        import_path.set_extension("wa1");
+        let input_contents = fs::read_to_string(import_path.clone()).expect(format!("Couldn't read {}", import_path.to_string_lossy()).as_str());
+        let mut parser = Parser::new(input_contents.as_str()).unwrap();
+        parser.parse_phase_1(true)
+    }
+}
+
 fn simple_parse(matches: &ArgMatches) -> i32 {
     let input = matches.value_of("INPUT").unwrap();
     let default_output = input.replace("wa1", "wasm");
     let output = matches.value_of("OUTPUT").unwrap_or(default_output.as_str());
     println!("Parsing {} to {}", &input, &output);
     let is_unsafe = matches.is_present("unsafe");
-
+    
     let input_contents = fs::read_to_string(input).expect(format!("Couldn't read {}", input).as_str());
 
     let mut parser = Parser::new(input_contents.as_str()).unwrap();
-    let o_script = parser.parse_full(is_unsafe, false);
+    let o_script = parser.parse_full(is_unsafe, false, &mut FileImporter::new(&(input.to_owned())));
     match o_script {
         Err(errs) => {
             println!("Parse failed.");
@@ -50,13 +87,11 @@ fn pic_parse(matches: &ArgMatches) -> i32 {
     let output = matches.value_of("OUTPUT").unwrap_or(default_output.as_str());
     println!("Parsing {} to {}", &input, &output);
     let is_unsafe = matches.is_present("unsafe");
-
+    
     let input_contents = fs::read_to_string(input).expect(format!("Couldn't read {}", input).as_str());
 
     let mut parser = Parser::new(input_contents.as_str()).unwrap();
-    let o_script = parser.parse_full(is_unsafe, true);
-    let mut parser = Parser::new(input_contents.as_str()).unwrap();
-    let exports = parser.parse_phase_1(is_unsafe);
+    let o_script = parser.parse_full(is_unsafe, true, &mut FileImporter::new(&(input.to_owned())));
     
     match o_script {
         Err(errs) => {

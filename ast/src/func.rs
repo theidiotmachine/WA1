@@ -25,8 +25,8 @@ pub struct FuncArg {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Func {
     pub decl: FuncDecl,
-    /// if import is true, this will be a nop?
-    pub body: TypedExpr,
+    /// Function body. None if imported.
+    pub body: Option<TypedExpr>,
     pub local_vars: Vec<VariableDecl>,
     pub closure: Vec<ClosureRef>,
     pub local_var_map: HashMap<String, u32>,

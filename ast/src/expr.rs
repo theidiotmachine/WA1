@@ -239,8 +239,9 @@ pub struct GlobalVariableDecl {
     pub name: String,
     pub r#type: Type,
     pub constant: bool,
-    pub init: TypedExpr,
+    pub init: Option<TypedExpr>,
     pub export: bool,
+    pub import: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

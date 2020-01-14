@@ -17,7 +17,7 @@ cargo build
 in the root. To run, you need to pass the compiler some arguments.
 
 ```
-cargo run -- wa1/src/one.wa1 -o=out.wasm
+cargo run -- simple-parse wa1/src/one.wa1 -o=out.wasm
 ```
 
 will parse `wa1/src/one.ws` and generate `out.wasm` in the root.
@@ -161,6 +161,9 @@ let a = 9 as number;
     You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to create 
     (this last uses malloc). A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
 
+### Under contruction 
+
+* Linker - currently building import keywords. This will generate WASM imports today, which is quite nice
 
 ## TODO
 
@@ -253,11 +256,11 @@ let a = 9 as number;
     1. syntax
         1. [ ] import {*} as x from y => means will get everything from y as x.a, x.b
         1. [ ] import {a} as x from y => means will get x.a 
-        1. [ ] import {*} from y => means will get y.a, y.b, etc
+        1. [x] import {*} from y => means will get y.a, y.b, etc
         1. [ ] import {a} from y => means will get y.a
     1. [ ] A stage 1 parser that will generate a list of file exports - globals, functions, types
     1. [ ] A file format for that
-    1. [ ] When import commands are run, load that, pull the imports in
+    1. [x] When import commands are run, load that, pull the imports in
 1. Linker
     1. [ ] object file format that contains
         1. [ ] WASM or an AST

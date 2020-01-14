@@ -102,6 +102,7 @@ impl<'a> Tokenizer<'a> {
             3 if ident == b"let" => Some(RawToken::Keyword(Keyword::Let)),
             4 if ident == b"Some" => Some(RawToken::Keyword(Keyword::Some)),
             4 if ident == b"case" => Some(RawToken::Keyword(Keyword::Case)),
+            4 if ident == b"from" => Some(RawToken::Keyword(Keyword::From)),
             4 if ident == b"this" => Some(RawToken::Keyword(Keyword::This)),
             4 if ident == b"void" => Some(RawToken::Keyword(Keyword::Void)),
             4 if ident == b"with" => Some(RawToken::Keyword(Keyword::With)),

@@ -741,11 +741,16 @@ fn transform_typed_expr(
 
         Expr::GlobalVariableDecl(v) => {
             //first,  run the init expression
-            let mut this_vi = transform_typed_expr(&v.init, global_var_map, local_var_map, func_map, context, true);
-            vi.append(& mut this_vi);
-            //then set the variable
-            let idx = global_var_map.get(&v.name).unwrap();
-            vi.push(Instruction::SetGlobal(*idx));
+            match &v.init {
+                Some(expr) => {
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context, true);
+                    vi.append(& mut this_vi);
+                    //then set the variable
+                    let idx = global_var_map.get(&v.name).unwrap();
+                    vi.push(Instruction::SetGlobal(*idx));
+                },
+                _ => {}
+            }
         },
 
         Expr::Block(b) => {
@@ -961,7 +966,10 @@ fn transform_func(func: &Func,
     let fbb = fbb.with_locals(locals);
 
     let consume_result = func.decl.return_type != Type::RealVoid;
-    let mut vi = transform_typed_expr(&func.body, global_var_map, &func.local_var_map, func_map, context, consume_result);
+    let mut vi = match &func.body {
+        Some(body) => transform_typed_expr(body, global_var_map, &func.local_var_map, func_map, context, consume_result),
+        _ => panic!()
+    };
         
     vi.push(Instruction::End);
     let fbb = fbb.with_instructions(Instructions::new(vi));
@@ -981,15 +989,22 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
     let mut m = module();
 
     for g in program.globals {
-        let vt = get_ir_value_type(&g.r#type);
-        let instruction = match vt {
-            ValueType::F32 => Instruction::F32Const(0),
-            ValueType::F64 => Instruction::F64Const(0),
-            ValueType::I32 => Instruction::I32Const(0),
-            ValueType::I64 => Instruction::I64Const(0),
-        };
+        if !g.import {
+            let vt = get_ir_value_type(&g.r#type);
+            let instruction = match vt {
+                ValueType::F32 => Instruction::F32Const(0),
+                ValueType::F64 => Instruction::F64Const(0),
+                ValueType::I32 => Instruction::I32Const(0),
+                ValueType::I64 => Instruction::I64Const(0),
+            };
 
-        m = m.with_global(GlobalEntry::new(GlobalType::new(vt, true), InitExpr::new(vec![instruction, Instruction::End])));
+            m = m.with_global(GlobalEntry::new(GlobalType::new(vt, true), InitExpr::new(vec![instruction, Instruction::End])));
+        } else {
+            let bits: Vec<&str> = g.name.as_str().split(".").collect();
+            let module = bits[0];
+            let field = bits[1];
+            m = m.import().field(field).module(module).external().global(get_ir_value_type(&g.r#type), true).build();
+        }
     }
 
     let mut context = Context{
@@ -998,13 +1013,20 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
         data_section: DataSection::new(),
     };
 
+    let mut idx = 0;
     for func in &program.funcs {
         if !func.decl.import {
             m.push_function(transform_func(func, &program.start, &program.global_var_map, &program.func_map, &mut context));
+        } else {
+            let bits: Vec<&str> = func.decl.name.as_str().split(".").collect();
+            let module = bits[0];
+            let field = bits[1];
+            m = m.import().field(field).module(module).external().func(idx).build();
         }
         if func.decl.export {
             m = m.export().field(&func.decl.name).internal().func(*(program.func_map.get(&func.decl.name).unwrap())).build();
         }
+        idx += 1;
     }
     errors.append(& mut context.errors);
 

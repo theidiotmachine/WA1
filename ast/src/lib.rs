@@ -16,6 +16,7 @@ pub mod prelude {
     pub use super::intrinsic::prelude::*;
     pub use super::ast_types::prelude::*;
     pub use super::Program;
+    pub use super::Exports;
 }
 
 #[macro_use]
@@ -37,7 +38,7 @@ pub struct Program {
 }
 
 /// The things exported from a compilation unit. Not reallY part of the AST but very related.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Exports{
     pub globals: Vec<GlobalVariableDecl>,
     pub funcs: Vec<FuncDecl>,
