@@ -985,10 +985,10 @@ fn transform_func(func: &Func,
     fb.build()
 }
 
-pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
+pub fn transform(program: &Program, errors: &mut Vec<Error>) -> Module {
     let mut m = module();
 
-    for g in program.globals {
+    for g in &program.globals {
         if !g.import {
             let vt = get_ir_value_type(&g.r#type);
             let instruction = match vt {

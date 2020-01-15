@@ -10,7 +10,7 @@ pub struct SourceFile {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct BuildConfig{
-    pub entry_point: PathBuf,
+    pub entry_point: SourceFile,
     pub source_files: Vec<SourceFile>,
     pub src_path: PathBuf,
     pub out_path: PathBuf,

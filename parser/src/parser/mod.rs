@@ -728,8 +728,15 @@ impl<'b> Parser<'b> {
                     namespace.to_string_lossy().into_owned()
                 }
             };
-            let exports = importer.import(&id_string);
-            let exports = filter_impoorts(&exports.unwrap(), &imports);
+            let o_exports = importer.import(&id_string);
+            let exports = match o_exports {
+                Some(exports) => exports,
+                None => {
+                    parser_context.push_err(Error::ImportFailed(next.location, String::from("could not read file")));
+                    Exports::new()
+                }
+            };
+            let exports = filter_impoorts(&exports, &imports);
             for g in &exports.globals {
                 let import_name = format!("{}.{}", namespace, g.name);
                 let idx = parser_context.globals.len();
@@ -2198,8 +2205,8 @@ mod test {
     }
 
     impl Importer for DummyImporter{
-        fn import(&mut self, _: &String) -> Exports {
-            Exports::new()
+        fn import(&mut self, _: &String) -> Option<Exports> {
+            Some(Exports::new())
         }
     }
 
