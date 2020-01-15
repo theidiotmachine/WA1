@@ -1028,6 +1028,7 @@ dependencies = [
  "ast 0.4.0",
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "errs 0.1.0",
+ "parity-wasm 0.41.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parser 0.5.2",
  "ress 0.8.1",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
