@@ -92,9 +92,10 @@ impl<'a> Parser<'a> {
 
     /// Phase 1 parse. Produces the file outline, to be used by the import code
     pub fn parse_phase_1(&mut self, 
-        is_unsafe: bool
+        is_unsafe: bool,
+        file_name: &String,
     ) -> Exports {
-        let mut parser_context = ParserContext::new(is_unsafe, true);
+        let mut parser_context = ParserContext::new(is_unsafe, true, file_name);
         loop {
             if self.look_ahead.token.is_eof() {
                 break;

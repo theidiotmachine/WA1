@@ -9,7 +9,7 @@ use types::prelude::*;
 use std::collections::HashMap;
 use ast::prelude::*;
 pub use errs::Error;
-use ast::Exports;
+use ast::Imports;
 
 /// assert that something from an inner call was ok. Usage `let sthing = self.parse_sthing(); assert_ok!(sthing);`
 #[macro_export]
@@ -194,7 +194,7 @@ pub enum Commitment{
 }
 
 pub trait Importer{
-    fn import(&mut self, path_name: &String) -> Option<Exports>;
+    fn import(&mut self, import_path_name: &String, from_path_name: &String) -> Result<Imports, String>;
 }
 
 #[derive(Debug)]
@@ -208,10 +208,11 @@ struct ParserContext {
     pub import_namespace_map: HashMap<String, String>,
     pub is_unsafe: bool,
     pub is_pic: bool,
+    pub file_name: String,
 }
 
 impl ParserContext {
-    fn new(is_unsafe: bool, is_pic: bool) -> ParserContext {
+    fn new(is_unsafe: bool, is_pic: bool, file_name: &String) -> ParserContext {
         ParserContext{
             globals: vec![],
             funcs: vec![],
@@ -222,6 +223,7 @@ impl ParserContext {
             import_namespace_map: HashMap::new(),
             is_unsafe: is_unsafe,
             is_pic: is_pic,
+            file_name: file_name.clone()
         }
     }
 

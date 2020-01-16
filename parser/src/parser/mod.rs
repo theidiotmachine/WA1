@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 extern crate ress;
 extern crate log;
 
@@ -233,15 +231,15 @@ impl<> Default for Context<> {
     }
 }
 
-enum Imports{
+enum ImportFilter{
     All,
     Named(Vec<String>)
 }
 
-fn filter_impoorts(exports: &Exports, imports: &Imports) -> Exports {
+fn filter_impoorts(exports: &Exports, imports: &ImportFilter) -> Exports {
     match imports {
-        Imports::All => (exports.clone()),
-        Imports::Named(_) => {panic!()}
+        ImportFilter::All => (exports.clone()),
+        ImportFilter::Named(_) => {panic!()}
     }
 }
             
@@ -347,8 +345,9 @@ impl<'b> Parser<'b> {
         is_unsafe: bool,
         is_pic: bool,
         importer: &mut dyn Importer,
+        file_name: &String,
     ) -> Result<Program, Vec<Error>> {
-        let mut parser_context = ParserContext::new(is_unsafe, is_pic);
+        let mut parser_context = ParserContext::new(is_unsafe, is_pic, file_name);
         self.parse_internal(&mut parser_context, importer);
         if parser_context.errors.is_empty() {
             Ok(Program{start: String::from("__start"), globals: parser_context.globals, 
@@ -682,28 +681,28 @@ impl<'b> Parser<'b> {
         expect_punct!(self, parser_context, Punct::OpenBrace);
         let next = self.peek_next_item();
         self.skip_next_item();
-        let imports: Imports = match &next.token {
+        let import_filter: ImportFilter = match &next.token {
             Token::Punct(p) => {
                 if *p == Punct::Asterisk {
-                    Imports::All
+                    ImportFilter::All
                 } else {
                     parser_context.push_err(Error::UnexpectedToken(
                         next.location.clone(),
                         format!("Expected '*' or ident; found {:?}", next.token),
                     ));
-                    Imports::Named(vec![])
+                    ImportFilter::Named(vec![])
                 }
             },
             Token::Ident(_) => {
                 parser_context.push_err(Error::NotYetImplemented(next.location.clone(), String::from("Individual imports")));
-                Imports::Named(vec![])
+                ImportFilter::Named(vec![])
             },
             _ => {
                 parser_context.push_err(Error::UnexpectedToken(
                     next.location.clone(),
                     format!("Expected '*' or ident; found {:?}", next.token),
                 ));
-                Imports::Named(vec![])
+                ImportFilter::Named(vec![])
             }
         };
         expect_punct!(self, parser_context, Punct::CloseBrace);
@@ -715,28 +714,17 @@ impl<'b> Parser<'b> {
         let next = expect_next!(self, parser_context);
         let id_string = expect_string_literal!(next, parser_context, "Expecting path name to import");
         if id_string.starts_with(".") {
-            //it's an import from this project
-            let mut path = PathBuf::from(&id_string);
-            path.set_extension("wa1");
-            let o_namespace = path.file_stem();
-            let namespace = match o_namespace {
-                None => {
-                    parser_context.push_err(Error::ImportFailed(next.location.clone(), String::from("can't extract file from path")));
-                    String::from("???")
-                },
-                Some(namespace) => {
-                    namespace.to_string_lossy().into_owned()
+            let r_imports = importer.import(&id_string, &(parser_context.file_name));
+            let imports = match r_imports {
+                Ok(imports) => imports,
+                Err(e) => {
+                    parser_context.push_err(Error::ImportFailed(next.location.clone(), e));
+                    return None;
                 }
             };
-            let o_exports = importer.import(&id_string);
-            let exports = match o_exports {
-                Some(exports) => exports,
-                None => {
-                    parser_context.push_err(Error::ImportFailed(next.location, String::from("could not read file")));
-                    Exports::new()
-                }
-            };
-            let exports = filter_impoorts(&exports, &imports);
+            let exports = imports.exports;
+            let exports = filter_impoorts(&exports, &import_filter);
+            let namespace = imports.stub_name;
             for g in &exports.globals {
                 let import_name = format!("{}.{}", namespace, g.name);
                 let idx = parser_context.globals.len();
@@ -755,7 +743,7 @@ impl<'b> Parser<'b> {
                         body: None, local_vars: vec![], closure: vec![], local_var_map: HashMap::new()
                     }); 
             }
-            parser_context.import_namespace_map.insert(namespace.clone(), namespace.clone());
+            parser_context.import_namespace_map.insert(namespace.clone(), imports.unique_name.clone());
         } else {
             //it's an import from an external file
             parser_context.push_err(Error::NotYetImplemented(next.location.clone(), String::from("Import external projects")));
@@ -2205,8 +2193,8 @@ mod test {
     }
 
     impl Importer for DummyImporter{
-        fn import(&mut self, _: &String) -> Option<Exports> {
-            Some(Exports::new())
+        fn import(&mut self, _: &String, _: &String) -> Result<Imports, String> {
+            Ok(Imports{exports: Exports::new(), stub_name: String::from(""), unique_name: String::from("")})
         }
     }
 
@@ -2218,7 +2206,7 @@ mod test {
         }";
 
         let mut parser = Parser::new(add).unwrap();
-        let script = parser.parse_full(false, false, & mut DummyImporter{}).unwrap();
+        let script = parser.parse_full(false, false, & mut DummyImporter{}, &String::from("")).unwrap();
         println!("{:#?}", script);
     }
 }

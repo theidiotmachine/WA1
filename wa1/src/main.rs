@@ -1,8 +1,9 @@
 extern crate clap;
 use clap::{Arg, App, SubCommand, ArgMatches};
 use std::{fs};
-use std::path::PathBuf;
-use ast::{Exports, Program};
+use std::path::{PathBuf, Component};
+use ast::{Exports, Program, Imports};
+
 
 extern crate parser;
 use parser::*;
@@ -24,44 +25,81 @@ struct CachingImporter{
     pub out_path: PathBuf,
 }
 
+fn canon(file_path: &PathBuf, import_path: &PathBuf) -> String {
+    let init = file_path.clone().join(import_path.clone());
+    let mut out_stack: Vec<String> = vec![];
+    for c in init.components() {
+        match c {
+            Component::CurDir => {},
+            Component::ParentDir => {
+                out_stack.pop();
+            },
+            Component::Normal(s) => {
+                out_stack.push(s.to_string_lossy().to_string());
+            },
+            Component::Prefix(_) => {},
+            Component::RootDir => {}
+        }
+    }
+
+    out_stack.join("/")
+}
+
 impl Importer for CachingImporter {
-    fn import(&mut self, path_name: &String) -> Option<Exports> {
-        let mut import_path = self.config_path.clone().join(self.src_path.clone()).join(path_name.clone());
+    fn import(&mut self, import_path_name: &String, file_name: &String) -> Result<Imports, String> {
+        let file_name_path = PathBuf::from(file_name);
+        let o_file_path = file_name_path.parent();
+        let file_path = match o_file_path{
+            Some(file_path) => file_path.to_owned(),
+            None => PathBuf::new()
+        };
+
+        let mut import_path = self.config_path.clone().join(self.src_path.clone()).join(file_path.clone()).join(import_path_name.clone());
         import_path.set_extension("wa1");
 
-        let mut output_path = self.config_path.clone().join(self.out_path.clone()).join(path_name.clone());
+        let o_stub_name = import_path.file_stem();
+        let stub_name = match o_stub_name {
+            None => return Err(String::from("Can't parse import name")),
+            Some(stub_name) => stub_name.to_string_lossy().to_string()
+        };
+
+        let unique_name = canon(&(file_path.to_owned()), &PathBuf::from(import_path_name));
+
+        let mut output_path = self.config_path.clone().join(self.out_path.clone()).join(file_path.clone()).join(import_path_name.clone());
         output_path.set_extension("wsbe");
 
         let r_output_metadata = output_path.metadata();
         match r_output_metadata {
-            Err(_) => {
+            Err(e) => {
                 let o_exports = parse_exports(&import_path, false);
                 match o_exports {
                     Some(exports) => {
                         write_exports(&output_path, &exports);
-                        Some(exports)
+                        Ok(Imports{exports, stub_name: stub_name, unique_name})
                     },
-                    None => None 
+                    None => Err(e.to_string()) 
                 }
             },
             Ok(output_metadata) => {
                 let r_input_metadata = import_path.metadata();
                 match r_input_metadata {
-                    Err(_) => {
-                        None
-                    },  
+                    Err(e) => Err(e.to_string()),
                     Ok(input_metadata) => {
                         if input_metadata.modified().unwrap() > output_metadata.modified().unwrap() {
                             let o_exports = parse_exports(&import_path, false);
                             match o_exports {
                                 Some(exports) => {
                                     write_exports(&output_path, &exports);
-                                    Some(exports)
+                                    Ok(Imports{exports, stub_name: stub_name, unique_name})
                                 },
-                                None => None 
+                                None => Err(String::from("Failed to parse"))
                             }
                         } else {
-                            Some(read_exports(&output_path))
+                            let r_exports = read_exports(&output_path);
+                            match r_exports {
+                                Ok(exports) => Ok(Imports{exports, stub_name: stub_name, unique_name}),
+                                Err(e) => Err(e) 
+                            }
                         }
                     }
                 }
@@ -78,7 +116,7 @@ fn build_simple(matches: &ArgMatches) -> i32 {
     let is_unsafe = matches.is_present("unsafe");
     let mut importer = CachingImporter{config_path: PathBuf::new(), src_path: PathBuf::new(), out_path: PathBuf::new()};
             
-    compile_if_changed(&output, &PathBuf::from(input), is_unsafe, false, &mut importer)
+    compile_if_changed(&output, &PathBuf::from(input), &PathBuf::from(input), is_unsafe, false, &mut importer)
 }
 
 fn parse_exports(input: &PathBuf, is_unsafe: bool) -> Option<Exports> {
@@ -86,7 +124,7 @@ fn parse_exports(input: &PathBuf, is_unsafe: bool) -> Option<Exports> {
     match r_input_contents{
         Ok(input_contents) => {
             let mut parser = Parser::new(input_contents.as_str()).unwrap();
-            Some(parser.parse_phase_1(is_unsafe))
+            Some(parser.parse_phase_1(is_unsafe, &(input.to_string_lossy().to_string())))
         },
         Err(err) => {
             println!("ERROR: {}", err);
@@ -118,19 +156,27 @@ fn write_exports(output: &PathBuf, exports: &Exports) -> i32 {
     }
 }
 
-fn read_exports(exports_file: &PathBuf) -> Exports {
-    let input_contents = fs::read_to_string(exports_file).expect(format!("Couldn't read {}", exports_file.to_string_lossy()).as_str());
-    let exports: Exports = serde_json::from_str(&input_contents).unwrap();
-    exports
+fn read_exports(exports_file: &PathBuf) -> Result<Exports, String> {
+    let r_input_contents = fs::read_to_string(exports_file);
+    match r_input_contents{
+        Err(e) => Err(e.to_string()),
+        Ok(input_contents) => {
+            let r_exports = serde_json::from_str::<Exports>(&input_contents);
+            match r_exports {
+                Err(e) => Err(e.to_string()),
+                Ok(exports) => Ok(exports)
+            }
+        }
+    }
 }
 
 
-fn parse(sf_full_path: &PathBuf, is_unsafe: bool, is_pic: bool, importer: &mut dyn Importer) -> Option<Program> {
+fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, is_pic: bool, importer: &mut dyn Importer) -> Option<Program> {
     let r_input_contents = fs::read_to_string(sf_full_path.clone());
     match r_input_contents {
         Ok(input_contents) => {
             let mut parser = Parser::new(input_contents.as_str()).unwrap();
-            let o_script = parser.parse_full(is_unsafe, is_pic, importer);
+            let o_script = parser.parse_full(is_unsafe, is_pic, importer, &(sf_name.to_string_lossy().to_string()));
             match o_script {
                 Err(errs) => {
                     println!("Parse failed.");
@@ -172,7 +218,7 @@ fn write_wasm(of_full_path: &PathBuf, module: Module) -> i32 {
     }
 }
 
-fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, is_unsafe: bool, is_pic: bool, importer: &mut dyn Importer) -> i32 {
+fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, is_pic: bool, importer: &mut dyn Importer) -> i32 {
     let of_full_path_string = of_full_path.to_string_lossy();
     let sf_full_path_string = sf_full_path.to_string_lossy();
     println!("Parsing {} to {}", &sf_full_path_string, &of_full_path_string);
@@ -180,7 +226,7 @@ fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, is_unsafe:
     let r_output_metadata = of_full_path.metadata();
     match r_output_metadata {
         Err(_) => {
-            let o_program = parse(sf_full_path, is_unsafe, is_pic, importer);
+            let o_program = parse(sf_full_path, sf_name, is_unsafe, is_pic, importer);
             match o_program {
                 None => 1,
                 Some(program) => {
@@ -201,7 +247,7 @@ fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, is_unsafe:
                 },
                 Ok(input_metadata) => {
                     if input_metadata.modified().unwrap() > output_metadata.modified().unwrap() {
-                        let o_program = parse(sf_full_path, is_unsafe, is_pic, importer);
+                        let o_program = parse(sf_full_path, sf_name, is_unsafe, is_pic, importer);
                         match o_program {
                             None => 1,
                             Some(program) => {
@@ -244,22 +290,23 @@ fn build(matches: &ArgMatches) -> i32 {
                 let sf_full_path = config_path.clone().join(build_config.src_path.clone()).join(sf.file_name.clone());
                 let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(sf.file_name.clone());
                 of_full_path.set_extension("wasm");
-                let this_out = compile_if_changed(&of_full_path, &sf_full_path, sf.is_unsafe, true, &mut importer);
+                let this_out = compile_if_changed(&of_full_path, &sf_full_path, &sf.file_name, sf.is_unsafe, true, &mut importer);
                 if this_out != 0 {
                     out = this_out;
                 }
             }
 
             let epf_full_path = config_path.clone().join(build_config.src_path.clone()).join(build_config.entry_point.file_name.clone());
-            let of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.out_file_name.clone());
-            let this_out = compile_if_changed(&of_full_path, &epf_full_path, build_config.entry_point.is_unsafe, true, &mut importer);
+            let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.entry_point.file_name.clone());
+            of_full_path.set_extension("wasm");
+                
+            let this_out = compile_if_changed(&of_full_path, &epf_full_path, &build_config.entry_point.file_name, build_config.entry_point.is_unsafe, true, &mut importer);
             if this_out != 0 {
                 out = this_out;
             }
             out
         }
     }
-    
 }
 
 fn main() {

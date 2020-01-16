@@ -17,6 +17,7 @@ pub mod prelude {
     pub use super::ast_types::prelude::*;
     pub use super::Program;
     pub use super::Exports;
+    pub use super::Imports;
 }
 
 #[macro_use]
@@ -43,6 +44,13 @@ pub struct Exports{
     pub globals: Vec<GlobalVariableDecl>,
     pub funcs: Vec<FuncDecl>,
     pub types: Vec<TypeDecl>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Imports{
+    pub exports: Exports,
+    pub unique_name: String,
+    pub stub_name: String
 }
 
 impl Exports{
