@@ -17,7 +17,7 @@ pub use errs::pretty_print_errs;
 pub mod build_config;
 use build_config::BuildConfig;
 use parity_wasm::elements::{Module};
-use parity_wasm::elements::serialize_to_file;
+use parity_wasm::elements::{serialize_to_file/*, deserialize_file*/};
 
 struct CachingImporter{
     pub config_path: PathBuf,
@@ -218,6 +218,21 @@ fn write_wasm(of_full_path: &PathBuf, module: Module) -> i32 {
     }
 }
 
+/*
+fn read_wasm(wf_full_path: &PathBuf) -> Option<Module> {
+    let r_module = deserialize_file(wf_full_path);
+    match r_module {
+        Err(e) => {
+            println!("ERROR: {}", e);
+            None
+        },
+        Ok(module) => {
+            Some(module)
+        }
+    }
+}
+*/
+
 fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, is_pic: bool, importer: &mut dyn Importer) -> i32 {
     let of_full_path_string = of_full_path.to_string_lossy();
     let sf_full_path_string = sf_full_path.to_string_lossy();
@@ -264,8 +279,7 @@ fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, sf_name: &
                 }                
             }
         }
-    }
-                
+    }       
 }
 
 fn build(matches: &ArgMatches) -> i32 {
@@ -286,7 +300,9 @@ fn build(matches: &ArgMatches) -> i32 {
             };
             let mut importer = CachingImporter{config_path: config_path.clone(), src_path: build_config.src_path.clone(), out_path: build_config.out_path.clone()};
             let mut out = 0;
-            for sf in build_config.source_files {
+
+            //first, build the files
+            for sf in &build_config.source_files {
                 let sf_full_path = config_path.clone().join(build_config.src_path.clone()).join(sf.file_name.clone());
                 let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(sf.file_name.clone());
                 of_full_path.set_extension("wasm");
@@ -296,18 +312,45 @@ fn build(matches: &ArgMatches) -> i32 {
                 }
             }
 
+            //and now build the entry point file
             let epf_full_path = config_path.clone().join(build_config.src_path.clone()).join(build_config.entry_point.file_name.clone());
             let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.entry_point.file_name.clone());
             of_full_path.set_extension("wasm");
-                
             let this_out = compile_if_changed(&of_full_path, &epf_full_path, &build_config.entry_point.file_name, build_config.entry_point.is_unsafe, true, &mut importer);
             if this_out != 0 {
                 out = this_out;
             }
+
+            /*
+            if out == 0 {
+                //let's link!
+                
+                //load the entry point wasm
+                let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.out_file_name.clone());
+                of_full_path.set_extension("wasm");
+                let mut linked_module = read_wasm(&of_full_path).unwrap();
+                let mut linked_module_type_section = linked_module.type_section_mut().unwrap();
+                let mut linked_module_types = linked_module_type_section.types();   
+
+                for sf in &build_config.source_files {
+                    let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(sf.file_name.clone());
+                    of_full_path.set_extension("wasm");
+                    let of_module = read_wasm(&of_full_path).unwrap();
+                    let of_module_type_section = of_module.type_section().unwrap();
+                    let of_module_types = of_module_type_section.types();
+                    for t in of_module_types {
+                        //linked_module_types.p
+                    }
+                    
+                }
+            }*/
+
             out
         }
     }
 }
+
+
 
 fn main() {
     let matches = App::new("wa1")
