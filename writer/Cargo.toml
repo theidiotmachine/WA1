@@ -11,5 +11,4 @@ ast = { path = "../ast" }
 parser = { path = "../parser" }
 errs = { path = "../errs" }
 types = { path = "../types" }
-ress = { path = "../ress" }
 parity-wasm = "0.41"

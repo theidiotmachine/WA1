@@ -1,6 +1,6 @@
 use ast::prelude::*;
 
-use ress::SourceLocation;
+use errs::prelude::*;
 
 use parity_wasm::builder::module;
 use parity_wasm::elements::{Module, ValueType, Local, Instructions, Instruction, BlockType, GlobalEntry, GlobalType, InitExpr, DataSegment};
@@ -124,7 +124,7 @@ fn transform_lvalue_get(
             vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
 
             match &inner_l_value.r#type {
-                Type::UnsafeUserStruct{name: type_name} => {
+                Type::UnsafeStruct{name: type_name} => {
                     transform_struct_member_get(type_name, member_name, &mut vi, context);
                 },
                 _ => context.errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from(format!("expr{:#?}", l_value)))),
@@ -176,7 +176,7 @@ fn transform_lvalue_tee(
             vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
             vi.append(r_value_code);
             match &inner_l_value.r#type {
-                Type::UnsafeUserStruct{name: type_name} => {
+                Type::UnsafeStruct{name: type_name} => {
                     transform_struct_member_set(type_name, member_name, &mut vi, context);
 
                     vi.append(&mut transform_lvalue_get(inner_l_value, global_var_map, local_var_map, context));
@@ -741,11 +741,16 @@ fn transform_typed_expr(
 
         Expr::GlobalVariableDecl(v) => {
             //first,  run the init expression
-            let mut this_vi = transform_typed_expr(&v.init, global_var_map, local_var_map, func_map, context, true);
-            vi.append(& mut this_vi);
-            //then set the variable
-            let idx = global_var_map.get(&v.name).unwrap();
-            vi.push(Instruction::SetGlobal(*idx));
+            match &v.init {
+                Some(expr) => {
+                    let mut this_vi = transform_typed_expr(&expr, global_var_map, local_var_map, func_map, context, true);
+                    vi.append(& mut this_vi);
+                    //then set the variable
+                    let idx = global_var_map.get(&v.name).unwrap();
+                    vi.push(Instruction::SetGlobal(*idx));
+                },
+                _ => {}
+            }
         },
 
         Expr::Block(b) => {
@@ -808,7 +813,7 @@ fn transform_typed_expr(
             vi.append(& mut this_vi);
 
             match &lhs.r#type {
-                Type::UnsafeUserStruct{name: type_name} => {
+                Type::UnsafeStruct{name: type_name} => {
                     transform_struct_member_get(type_name, member_name, &mut vi, context);
                 },
                 _ => context.errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))),
@@ -817,7 +822,7 @@ fn transform_typed_expr(
 
         Expr::ConstructFromObjectLiteral(new_type, oles) => {
             match new_type {
-                Type::UnsafeUserStruct{name: struct_name} => {
+                Type::UnsafeStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
                     let stml = match mem_layout_elem {
@@ -851,7 +856,7 @@ fn transform_typed_expr(
 
         Expr::ConstructStaticFromObjectLiteral(new_type, oles) => {
             match new_type {
-                Type::UnsafeUserStruct{name: struct_name} => {
+                Type::UnsafeStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
                     let stml = match mem_layout_elem {
@@ -910,7 +915,7 @@ fn transform_typed_expr(
 
         Expr::SizeOf(t) => {
             match t {
-                Type::UnsafeUserStruct{name: struct_name} => {
+                Type::UnsafeStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
                     let stml = match mem_layout_elem {
@@ -943,9 +948,9 @@ fn transform_func(func: &Func,
 ) -> FunctionDefinition{
     let fb = FunctionBuilder::new();
     let sb = fb.signature();
-    let sb = sb.with_return_type(get_ir_return_type(&func.return_type));
+    let sb = sb.with_return_type(get_ir_return_type(&func.decl.return_type));
     let mut params: Vec<ValueType> = vec![];
-    for arg in &func.args {
+    for arg in &func.decl.args {
         params.push(get_ir_value_type(&arg.r#type));
     }
     let sb = sb.with_params(params);
@@ -960,15 +965,18 @@ fn transform_func(func: &Func,
     let fbb = fb.body();
     let fbb = fbb.with_locals(locals);
 
-    let consume_result = func.return_type != Type::RealVoid;
-    let mut vi = transform_typed_expr(&func.body, global_var_map, &func.local_var_map, func_map, context, consume_result);
+    let consume_result = func.decl.return_type != Type::RealVoid;
+    let mut vi = match &func.body {
+        Some(body) => transform_typed_expr(body, global_var_map, &func.local_var_map, func_map, context, consume_result),
+        _ => panic!()
+    };
         
     vi.push(Instruction::End);
     let fbb = fbb.with_instructions(Instructions::new(vi));
 
     let fb = fbb.build();
 
-    let fb = if start_function.eq(&func.name) {
+    let fb = if start_function.eq(&func.decl.name) {
         fb.main()
     } else {
         fb
@@ -977,19 +985,26 @@ fn transform_func(func: &Func,
     fb.build()
 }
 
-pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
+pub fn transform(program: &Program, errors: &mut Vec<Error>) -> Module {
     let mut m = module();
 
-    for g in program.globals {
-        let vt = get_ir_value_type(&g.r#type);
-        let instruction = match vt {
-            ValueType::F32 => Instruction::F32Const(0),
-            ValueType::F64 => Instruction::F64Const(0),
-            ValueType::I32 => Instruction::I32Const(0),
-            ValueType::I64 => Instruction::I64Const(0),
-        };
+    for g in &program.globals {
+        if !g.import {
+            let vt = get_ir_value_type(&g.r#type);
+            let instruction = match vt {
+                ValueType::F32 => Instruction::F32Const(0),
+                ValueType::F64 => Instruction::F64Const(0),
+                ValueType::I32 => Instruction::I32Const(0),
+                ValueType::I64 => Instruction::I64Const(0),
+            };
 
-        m = m.with_global(GlobalEntry::new(GlobalType::new(vt, true), InitExpr::new(vec![instruction, Instruction::End])));
+            m = m.with_global(GlobalEntry::new(GlobalType::new(vt, true), InitExpr::new(vec![instruction, Instruction::End])));
+        } else {
+            let bits: Vec<&str> = g.name.as_str().split(".").collect();
+            let module = bits[0];
+            let field = bits[1];
+            m = m.import().field(field).module(module).external().global(get_ir_value_type(&g.r#type), true).build();
+        }
     }
 
     let mut context = Context{
@@ -998,19 +1013,27 @@ pub fn transform(program: Program, errors: &mut Vec<Error>) -> Module {
         data_section: DataSection::new(),
     };
 
+    let mut idx = 0;
     for func in &program.funcs {
-        if !func.import {
+        if !func.decl.import {
             m.push_function(transform_func(func, &program.start, &program.global_var_map, &program.func_map, &mut context));
+        } else {
+            let bits: Vec<&str> = func.decl.name.as_str().split(".").collect();
+            let module = bits[0];
+            let field = bits[1];
+            m = m.import().field(field).module(module).external().func(idx).build();
         }
-        if func.export {
-            m = m.export().field(&func.name).internal().func(*(program.func_map.get(&func.name).unwrap())).build();
+        if func.decl.export {
+            m = m.export().field(&func.decl.name).internal().func(*(program.func_map.get(&func.decl.name).unwrap())).build();
         }
+        idx += 1;
     }
     errors.append(& mut context.errors);
 
-    m = m.memory().with_min(context.data_section.size).build();
-
-    m = m.with_data_segment(DataSegment::new(0, Some(InitExpr::new(vec![Instruction::I32Const(0), Instruction::End])), context.data_section.generate_data_section()));
+    if context.data_section.has_data() {
+        m = m.memory().with_min(context.data_section.size).build();
+        m = m.with_data_segment(DataSegment::new(0, Some(InitExpr::new(vec![Instruction::I32Const(0), Instruction::End])), context.data_section.generate_data_section()));
+    }
 
     m.build()
 }

@@ -1,6 +1,10 @@
-use ress::{Position, SourceLocation};
 use std::fmt::{Display, Formatter, Result};
 use types::Type;
+pub mod source_location;
+pub mod prelude {
+    pub use super::source_location::prelude::*;
+}
+use source_location::{SourceLocation, Position};
 
 #[derive(Debug, Clone)]
 pub enum Error {
@@ -39,6 +43,8 @@ pub enum Error {
     RecursiveTypeDefinition(SourceLocation),
     UnsafeCodeNotAllowed(SourceLocation),
     Dummy,
+    CompileFailed(String),
+    ImportFailed(SourceLocation, String),
 }
 
 impl Display for Error {
@@ -51,8 +57,8 @@ impl Display for Error {
             Error::InvalidType(ref loc) => write!(f, "Invalid type, {}", loc),
             Error::Other(ref msg) => write!(f, "{}", msg),
             Error::NotYetImplemented(ref loc, ref msg) => write!(f, "ERROR {}: not yet implemented: {}", loc, msg),
-            Error::VariableNotRecognised(ref loc, ref var_name) => write!(f, "ERROR {}: var not recognised: {}", loc, var_name),
-            Error::FuncNotRecognised(ref loc, ref func_name) => write!(f, "ERROR {}: func not recognised: {}", loc, func_name),
+            Error::VariableNotRecognised(ref loc, ref var_name) => write!(f, "ERROR {}: identifier not recognised: {}", loc, var_name),
+            Error::FuncNotRecognised(ref loc, ref func_name) => write!(f, "ERROR {}: function not recognised: {}", loc, func_name),
             Error::TypeFailureUnaryOperator => write!(f, "Type failure unary operator"),
             Error::TypeFailureBinaryOperator(ref loc, ref lhs_type, ref rhs_type) => 
                 write!(f, "ERROR {}: can't make type of lhs ({}) and rhs ({}) of binary operator agree", loc, lhs_type, rhs_type),
@@ -80,6 +86,8 @@ impl Display for Error {
             Error::RecursiveTypeDefinition(ref loc) => write!(f, "ERROR {}: recursive type definition not allowed", loc),
             Error::UnsafeCodeNotAllowed(ref loc) => write!(f, "ERROR {}: unsafe code not allowed to be called without --unsafe", loc),
             Error::Dummy => write!(f, "ERROR: internal error",),
+            Error::CompileFailed(ref err) => write!(f, "ERROR: could not compile because {}", err),
+            Error::ImportFailed(ref loc, ref mes) => write!(f, "ERROR {}: import failed because {}", loc, mes),
         }
     }
 }

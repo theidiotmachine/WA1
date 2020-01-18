@@ -7,4 +7,5 @@ members = [
     "ast",
     "writer",
     "errs",
+    "object-file"
 ]

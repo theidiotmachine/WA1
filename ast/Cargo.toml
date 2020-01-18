@@ -12,6 +12,7 @@ categories = ["parsing", "text-processing", "web-programming"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ress = { path = "../ress" }
 types = {path="../types"}
+errs = {path="../errs"}
 lazy_static = "1.4.0"
+serde = "1.0.104"

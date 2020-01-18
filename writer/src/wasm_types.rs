@@ -13,11 +13,11 @@ pub(crate) fn get_ir_value_type(r#type: &Type) -> ValueType {
         //FIXME64BIT
         Type::UnsafePtr => ValueType::I32,
         Type::UnsafeSizeT => ValueType::I32,
-        Type::UnsafeUserStruct{name: _} => ValueType::I32,
+        Type::UnsafeStruct{name: _} => ValueType::I32,
         Type::UnsafeArray(_) => ValueType::I32,
         Type::Option(inner_type) => {
             match **inner_type {
-                Type::UnsafeUserStruct{name: _} => ValueType::I32,
+                Type::UnsafeStruct{name: _} => ValueType::I32,
                 Type::Never => ValueType::I32,
                 _ => panic!()                
             }

@@ -6,6 +6,7 @@ use ast::prelude::*;
 use types::prelude::*;
 
 pub use errs::Error;
+use errs::prelude::*;
 
 use std::{mem::replace};
 
@@ -16,18 +17,16 @@ mod parser_int;
 mod parser_func;
 mod parser_type;
 mod parser_option;
+mod parser_phase_1;
 
 use crate::ParserContext;
 use crate::ParserFuncContext;
 use crate::Res;
-use crate::assert_punct;
-use crate::assert_ok;
-use crate::assert_ident;
-use crate::assert_next;
-use crate::assert_semicolon;
+use crate::{assert_punct, assert_ok,assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_string_literal, expect_keyword};
 use crate::try_create_cast;
 use crate::create_cast;
 use crate::Commitment;
+use crate::Importer;
 
 #[derive(Debug, Clone, PartialEq)]
 enum ScopedVar{
@@ -232,6 +231,19 @@ impl<> Default for Context<> {
     }
 }
 
+enum ImportFilter{
+    All,
+    Named(Vec<String>)
+}
+
+fn filter_impoorts(exports: &Exports, imports: &ImportFilter) -> Exports {
+    match imports {
+        ImportFilter::All => (exports.clone()),
+        ImportFilter::Named(_) => {panic!()}
+    }
+}
+            
+
 /// This is the primary interface that you would interact with.
 pub struct Parser<'a>
 {
@@ -291,7 +303,8 @@ impl<'b> Parser<'b> {
     /// consume a parser context, populate it
     fn parse_internal(
         &mut self, 
-        parser_context: &mut ParserContext
+        parser_context: &mut ParserContext,
+        importer: &mut dyn Importer,
     ) {
         let mut init_body = vec![];
         
@@ -301,18 +314,20 @@ impl<'b> Parser<'b> {
             if self.look_ahead.token.is_eof() {
                 break;
             } else {
-                self.parse_global_statement(&mut init_body, &mut fake_parser_func_context, parser_context);
+                self.parse_global_statement(&mut init_body, &mut fake_parser_func_context, parser_context, importer);
             }
         }
 
         let start_function = Func{ 
-            name: String::from("__start"), return_type: Type::RealVoid, args: vec![], export: false, import: false, 
-                body: TypedExpr{
-                    expr: Expr::Block(init_body),
-                    r#type: Type::RealVoid,
-                    is_const: true,
-                    loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))
-                },
+            decl: FuncDecl{
+                name: String::from("__start"), return_type: Type::RealVoid, args: vec![], export: false, import: false, 
+            },
+            body: Some(TypedExpr{
+                expr: Expr::Block(init_body),
+                r#type: Type::RealVoid,
+                is_const: true,
+                loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))
+            }),
             local_vars: vec![], closure: vec![], local_var_map: HashMap::new()
         };
 
@@ -325,12 +340,15 @@ impl<'b> Parser<'b> {
         }
     }
 
-    ///parse!
-    pub fn parse(&mut self, 
+    /// Produces a full parse.
+    pub fn parse_full(&mut self, 
         is_unsafe: bool,
+        is_pic: bool,
+        importer: &mut dyn Importer,
+        file_name: &String,
     ) -> Result<Program, Vec<Error>> {
-        let mut parser_context = ParserContext::new(is_unsafe);
-        self.parse_internal(&mut parser_context);
+        let mut parser_context = ParserContext::new(is_unsafe, is_pic, file_name);
+        self.parse_internal(&mut parser_context, importer);
         if parser_context.errors.is_empty() {
             Ok(Program{start: String::from("__start"), globals: parser_context.globals, 
                 funcs: parser_context.funcs, global_var_map: parser_context.global_var_map, func_map: parser_context.func_map, type_map: parser_context.type_map
@@ -569,34 +587,17 @@ impl<'b> Parser<'b> {
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr>{
         let mut parser_func_context_inner = ParserFuncContext::new();
+
+        let func_decl = self.parse_function_decl(export, parser_context);
+        assert_ok!(func_decl);
+
         let loc = self.peek_next_location();
-
-        self.expect_keyword(Keyword::Function)?;
-        let next = assert_next!(self, "Expecting function name");
-        let id = assert_ident!(next, "Expecting function name to be an identifier");
-
-        let next = self.peek_next_item();
-        let token = &next.token;
-        if token.matches_punct(Punct::LessThan) {
-            let type_args = self.parse_type_decl_args();
-            assert_ok!(type_args);
-            self.context.push_func_type_scope(&type_args);
-            parser_context.errors.push(Error::NotYetImplemented(next.location.clone(), String::from("generic functions")));
-        } else {
-            self.context.push_empty_func_type_scope();
-        }
 
         self.context.push_func_scope();
 
-        let arg_list = self.parse_function_decl_args(parser_context);
-        assert_ok!(arg_list);
+        self.register_params(&func_decl.args, &mut parser_func_context_inner);
 
-        self.register_params(&arg_list, &mut parser_func_context_inner);
-
-        assert_punct!(self, Punct::Colon);
-        let return_type = self.parse_type(parser_context);
-        assert_ok!(return_type);
-        parser_func_context_inner.func_return_type = return_type;
+        parser_func_context_inner.func_return_type = func_decl.return_type.clone();
 
         let old_in_iteration = self.context.in_iteration;
         self.context.in_iteration = false;
@@ -646,12 +647,12 @@ impl<'b> Parser<'b> {
         }
         
         let func = Func{
-            name: id.to_string(), return_type: parser_func_context_inner.func_return_type, args: arg_list, export, body: block, 
+            decl: func_decl,
             local_vars: parser_func_context_inner.local_vars, closure: parser_func_context_inner.closure, 
-            local_var_map: parser_func_context_inner.local_var_map, import: false
+            local_var_map: parser_func_context_inner.local_var_map, body: Some(block), 
         };
 
-        let name = func.name.clone();
+        let name = func.decl.name.clone();
         let func_closure = func.closure.clone();
         // now we have a closure of an inner function, we need to capture it. So look at every element
         for cr in &func_closure {
@@ -666,10 +667,89 @@ impl<'b> Parser<'b> {
             }
         }
         let idx = parser_context.funcs.len();
-        parser_context.func_map.insert(func.name.clone(), idx as u32);
+        parser_context.func_map.insert(func.decl.name.clone(), idx as u32);
         let func_type = func.get_func_type();
         parser_context.funcs.push(func); 
-        Ok(TypedExpr{expr: Expr::FuncDecl(FuncDecl{name: name, closure: func_closure}), is_const: true, r#type: Type::Func{func_type: Box::new(func_type), type_args: vec![]}, loc: loc})
+        Ok(TypedExpr{expr: Expr::FuncDecl(FuncObjectCreation{name: name, closure: func_closure}), is_const: true, r#type: Type::Func{func_type: Box::new(func_type), type_args: vec![]}, loc: loc})
+    }
+
+    fn parse_import_decl(&mut self,
+        parser_context: &mut ParserContext,
+        importer: &mut dyn Importer,
+    ) ->Option<()> {
+        self.skip_next_item();
+        expect_punct!(self, parser_context, Punct::OpenBrace);
+        let next = self.peek_next_item();
+        self.skip_next_item();
+        let import_filter: ImportFilter = match &next.token {
+            Token::Punct(p) => {
+                if *p == Punct::Asterisk {
+                    ImportFilter::All
+                } else {
+                    parser_context.push_err(Error::UnexpectedToken(
+                        next.location.clone(),
+                        format!("Expected '*' or ident; found {:?}", next.token),
+                    ));
+                    ImportFilter::Named(vec![])
+                }
+            },
+            Token::Ident(_) => {
+                parser_context.push_err(Error::NotYetImplemented(next.location.clone(), String::from("Individual imports")));
+                ImportFilter::Named(vec![])
+            },
+            _ => {
+                parser_context.push_err(Error::UnexpectedToken(
+                    next.location.clone(),
+                    format!("Expected '*' or ident; found {:?}", next.token),
+                ));
+                ImportFilter::Named(vec![])
+            }
+        };
+        expect_punct!(self, parser_context, Punct::CloseBrace);
+
+        //peek for 'as'?
+
+        expect_keyword!(self, parser_context, Keyword::From);
+
+        let next = expect_next!(self, parser_context);
+        let id_string = expect_string_literal!(next, parser_context, "Expecting path name to import");
+        if id_string.starts_with(".") {
+            let r_imports = importer.import(&id_string, &(parser_context.file_name));
+            let imports = match r_imports {
+                Ok(imports) => imports,
+                Err(e) => {
+                    parser_context.push_err(Error::ImportFailed(next.location.clone(), e));
+                    return None;
+                }
+            };
+            let exports = imports.exports;
+            let exports = filter_impoorts(&exports, &import_filter);
+            let namespace = imports.stub_name;
+            for g in &exports.globals {
+                let import_name = format!("{}.{}", namespace, g.name);
+                let idx = parser_context.globals.len();
+                let decl = GlobalVariableDecl{name: import_name.clone(), r#type: g.r#type.clone(), constant: g.constant, init: None, export: false, import: true};
+                parser_context.globals.push(decl.clone());
+                parser_context.global_var_map.insert(import_name, idx as u32);
+            }
+
+            for f in &exports.funcs {
+                let import_name = format!("{}.{}", namespace, f.name);
+                let idx = parser_context.funcs.len();
+                parser_context.func_map.insert(import_name.clone(), idx as u32);
+                parser_context.funcs.push(
+                    Func{
+                        decl: FuncDecl{name: import_name.clone(), return_type: f.return_type.clone(), args: f.args.clone(), export: false, import: true},
+                        body: None, local_vars: vec![], closure: vec![], local_var_map: HashMap::new()
+                    }); 
+            }
+            parser_context.import_namespace_map.insert(namespace.clone(), imports.unique_name.clone());
+        } else {
+            //it's an import from an external file
+            parser_context.push_err(Error::NotYetImplemented(next.location.clone(), String::from("Import external projects")));
+        }
+
+        Some(())
     }
 
     /// This is for parsing an export declaration. We require these to be in module root, 
@@ -705,6 +785,13 @@ impl<'b> Parser<'b> {
                         Err(e) => parser_context.errors.push(e)
                     };
                 },
+                Keyword::UnsafeStruct => {
+                    let struct_decl = self.parse_struct_decl(true, parser_context);
+                    match struct_decl {
+                        Ok(c) => init_body.push(c),
+                        Err(e) => parser_context.errors.push(e)
+                    };
+                }
                 _ => parser_context.errors.push(Error::Other("argh".to_string()))
             },
             _ => parser_context.errors.push(Error::Other("argh".to_string()))
@@ -772,13 +859,12 @@ impl<'b> Parser<'b> {
             Ok(TypedExpr{expr: Expr::VariableDecl(Box::new(vd)), is_const: constant, r#type: Type::RealVoid, loc: loc})
         } else {
             let idx = parser_context.globals.len();
-            let decl = GlobalVariableDecl{name: name.clone(), r#type: var_type, constant, init, export};
+            let decl = GlobalVariableDecl{name: name.clone(), r#type: var_type, constant, init: Some(init), export, import: false};
             parser_context.globals.push(decl.clone());
             parser_context.global_var_map.insert(name.clone(), idx as u32);
             
             Ok(TypedExpr{expr: Expr::GlobalVariableDecl(Box::new(decl)), is_const: constant, r#type: Type::RealVoid, loc: loc})
         }
-
     }
 
     /// The root of the module is parsed and will run in its 'start' function.
@@ -789,11 +875,13 @@ impl<'b> Parser<'b> {
         init_body: &mut Vec<TypedExpr>,
         fake_parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
+        importer: &mut dyn Importer,
     ) {
         let next = self.peek_next_item();
         let token = &next.token;
         match &token {
             Token::Keyword(ref k) => match k {
+                Keyword::Import => {self.parse_import_decl(parser_context, importer);},
                 Keyword::Export => self.parse_export_decl(init_body, fake_parser_func_context, parser_context),
                 Keyword::Function => {
                     let func = self.parse_named_function_decl(false, fake_parser_func_context, parser_context);
@@ -820,12 +908,12 @@ impl<'b> Parser<'b> {
                     };
                 },
                 Keyword::UnsafeStruct => {
-                    let struct_decl = self.parse_struct_decl(parser_context);
+                    let struct_decl = self.parse_struct_decl(false, parser_context);
                     match struct_decl {
                         Ok(c) => init_body.push(c),
                         Err(e) => parser_context.errors.push(e)
                     };
-                }
+                },
                 _ => { parser_context.errors.push(self.unexpected_token_error_raw(next.span, &next.location, "expecting valid statement")); self.skip_next_item(); }
             },
             _ => {
@@ -962,6 +1050,7 @@ impl<'b> Parser<'b> {
     }
 
     fn parse_class_decl(&mut self,
+        export: bool,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let mut loc = self.peek_next_location();
@@ -1022,74 +1111,12 @@ impl<'b> Parser<'b> {
 
         self.context.pop_type_scope();
 
-        parser_context.type_map.insert(id.to_string(), UserType::Class(ClassType{members: members}));
+        parser_context.type_map.insert(id.to_string(), TypeDecl::Class{class_type: ClassType{members: members}, export, name: id.to_string()});
 
         Ok(TypedExpr{expr: Expr::ClassDecl(id.to_string()), is_const: true, r#type: Type::RealVoid, loc: loc})
     }
 
-    fn parse_struct_decl(&mut self,    
-        parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
-        let mut loc = self.peek_next_location();
-        if !parser_context.is_unsafe {
-            parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
-        }
-        self.skip_next_item();
-
-        let next = assert_next!(self, "Expecting struct name");
-        let id = assert_ident!(next, "Expecting struct name to be an identifier");
-
-        if parser_context.type_map.contains_key(&id.to_string()) {
-            parser_context.errors.push(Error::DuplicateTypeName(id.to_string()))
-        }
-
-        self.context.push_empty_func_type_scope();
-
-        let mut members: Vec<StructMember> = vec![];
-
-        assert_punct!(self, Punct::OpenBrace);
-
-        parser_context.type_map.insert(id.to_string(), UserType::Struct{struct_type: StructType{members: vec![]}, under_construction: true});
-
-        loop {
-            let lookahead_item = self.peek_next_item();
-            loc.end = lookahead_item.location.end.clone();
-            let lookahead = lookahead_item.token;
-         
-            match lookahead {
-                Token::Punct(ref p) => {
-                    match p {
-                        Punct::CloseBrace => {
-                            self.skip_next_item();
-                            break;
-                        },
-                        _ => {
-                            return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "expecting '}'")
-                        }
-                    }
-                },
-                Token::Ident(ref i) => {
-                    self.skip_next_item();
-                    assert_punct!(self, Punct::Colon);
-                    let member_type = self.parse_type(parser_context);
-                    assert_ok!(member_type);
-                    assert_semicolon!(self);
-                    members.push(StructMember{name: i.to_string(), r#type: member_type.clone()});
-                },
-                _ => {
-                    return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "expecting '}' or member")
-                }
-            }
-        }
-
-        self.context.pop_type_scope();
-
-        parser_context.type_map.insert(id.to_string(), UserType::Struct{struct_type: StructType{members: members}, under_construction: false});
-
-        Ok(TypedExpr{expr: Expr::StructDecl(id.to_string()), is_const: true, r#type: Type::RealVoid, loc: loc})
-    }
-
-    /// a statement is something you can't assign to (like break or a variable declaration) or a true expr.
+    /// A statement is something you can't assign to (like break or a variable declaration) or a true expr.
     fn parse_statement(&mut self, 
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
@@ -1137,7 +1164,7 @@ impl<'b> Parser<'b> {
                 },
                 
                 Keyword::Class => {
-                    self.parse_class_decl(parser_context)
+                    self.parse_class_decl(false, parser_context)
                 },
 
                 Keyword::Break => {
@@ -1264,10 +1291,10 @@ impl<'b> Parser<'b> {
 
         //this is what we want
         let member_map: HashMap<String, Type> = match for_type {
-            Type::UnsafeUserStruct{name: struct_name} => {
+            Type::UnsafeStruct{name: struct_name} => {
                 let tm_entry = parser_context.type_map.get(struct_name).unwrap();
                 match tm_entry {
-                    UserType::Struct{struct_type, under_construction} => { 
+                    TypeDecl::Struct{struct_type, under_construction, export: _, name: _} => { 
                         if *under_construction {
                             parser_context.errors.push(Error::RecursiveTypeDefinition(loc.clone()));
                         }
@@ -1445,10 +1472,10 @@ impl<'b> Parser<'b> {
         let lhs_type = &lhs.r#type;
 
         match lhs_type {
-            Type::UnsafeUserStruct{name} => {
+            Type::UnsafeStruct{name} => {
                 let tm_entry = parser_context.type_map.get(name).unwrap();
                 match tm_entry {
-                    UserType::Struct{struct_type: st, under_construction: _} => self.parse_struct_component(lhs, &st),
+                    TypeDecl::Struct{struct_type: st, under_construction: _, export: _, name: _} => self.parse_struct_component(lhs, &st),
                     _ => unreachable!()
                 }
             },
@@ -1565,12 +1592,61 @@ impl<'b> Parser<'b> {
         }
     }
 
+    fn parse_number(&mut self, 
+        n: &Number<&'b str>,
+        loc: &SourceLocation,
+    ) -> TypedExpr {
+        self.skip_next_item();
+        match n.kind() {
+            NumberKind::Hex => {
+                if n.str_len() > 10 {
+                    let number = n.parse_i64();
+                    TypedExpr{expr: Expr::BigIntLiteral(number.unwrap()), r#type: Type::BigInt, is_const: true, loc: loc.clone()}
+                } else {
+                    let number = n.parse_i32();
+                    TypedExpr{expr: Expr::IntLiteral(number.unwrap()), r#type: Type::Int, is_const: true, loc: loc.clone()}
+                }
+            },
+            NumberKind::DecI => {
+                let number_i64 = n.parse_i64().unwrap();
+                if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
+                    TypedExpr{expr: Expr::BigIntLiteral(number_i64), r#type: Type::BigInt, is_const: true, loc: loc.clone()}
+                } else {
+                    let number_i32 = n.parse_i32().unwrap();
+                    TypedExpr{expr: Expr::IntLiteral(number_i32), r#type: Type::Int, is_const: true, loc: loc.clone()}
+                }
+            },
+            NumberKind::Bin => {
+                if n.str_len() > 34 {
+                    let number = n.parse_i64();
+                    TypedExpr{expr: Expr::BigIntLiteral(number.unwrap()), r#type: Type::BigInt, is_const: true, loc: loc.clone()}
+                } else {
+                    let number = n.parse_i32();
+                    TypedExpr{expr: Expr::IntLiteral(number.unwrap()), r#type: Type::Int, is_const: true, loc: loc.clone()}
+                }
+            },
+            NumberKind::Oct => {
+                if n.str_len() > 18 {
+                    let number = n.parse_i64();
+                    TypedExpr{expr: Expr::BigIntLiteral(number.unwrap()), r#type: Type::BigInt, is_const: true, loc: loc.clone()}
+                } else {
+                    let number = n.parse_i32();
+                    TypedExpr{expr: Expr::IntLiteral(number.unwrap()), r#type: Type::Int, is_const: true, loc: loc.clone()}
+                }
+            },
+            NumberKind::DecF => {
+                let number = n.parse_f64();
+                TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true, loc: loc.clone()}
+            },
+        }
+    }
+
     fn parse_ident_expr(&mut self,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
-        let next = assert_next!(self, "expecting argument declaration");
-        let id = assert_ident!(next, "Expecting variable name to be an identifier");
+        let next = assert_next!(self, "Expecting identifier declaration");
+        let id = assert_ident!(next, "Expecting identifier declaration");
 
         let o_sv = self.context.get_scoped_var(&id.to_string());
         let mut expr = match o_sv {
@@ -1589,7 +1665,7 @@ impl<'b> Parser<'b> {
                                 TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: next.location.clone()},
                         
                             _ => {
-                                // peek to see if this is a function call. If it is, we resolve it later
+                                // peek to see if this is a function call. 
                                 let lookahead_item = self.peek_next_item();
                                 let lookahead = lookahead_item.token;
 
@@ -1604,10 +1680,11 @@ impl<'b> Parser<'b> {
                                             };
                                             match o_func_id {
                                                 Some(func_id) => {
+                                                    //yep it's a function call
                                                     let arg_types = parser_context.funcs[func_id as usize].get_arg_types();
                                                     let args = self.parse_function_call_args(&arg_types, parser_func_context, parser_context);
                                                     assert_ok!(args);
-                                                    let func_return_type = parser_context.funcs[func_id as usize].return_type.clone();
+                                                    let func_return_type = parser_context.funcs[func_id as usize].decl.return_type.clone();
                                                     let loc = SourceLocation::new(next.location.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(next.location.end.clone()));
                                                     TypedExpr{expr: Expr::StaticFuncCall(id.to_string().clone(), args), r#type: func_return_type, is_const: true, loc: loc}
                                                 },
@@ -1624,6 +1701,48 @@ impl<'b> Parser<'b> {
                                                         }
                                                     }
                                                 }
+                                            }
+                                        },
+                                        Punct::Period => {
+                                            //if it's not a type or variable, and is followed by a '.' it might be an import 
+                                            if parser_context.import_namespace_map.contains_key(&id.to_string()) {
+                                                self.skip_next_item();
+                                                //ok, it's in the namespace map, so peek some more
+                                                let namespace_member_next = assert_next!(self, "Expecting identifier declaration");
+                                                let namespace_member_id = assert_ident!(namespace_member_next, "Expecting member of namespace to be an identifier");
+                                                //I expect there are better ways of doing this
+                                                let full_name = format!("{}.{}", id.to_string(), namespace_member_id.to_string());
+                                                let g_idx = parser_context.global_var_map.get(&full_name);
+                                                match g_idx {
+                                                    Some(idx) => {
+                                                        let g_var = &parser_context.globals[*idx as usize];
+                                                        TypedExpr{expr: Expr::GlobalVariableUse(full_name), r#type: g_var.r#type.clone(), is_const: g_var.constant, 
+                                                            loc: SourceLocation::new(next.location.start.clone(), namespace_member_next.location.end.clone())
+                                                        }
+                                                    }, 
+                                                    None => {
+                                                        let o_func_id = match parser_context.func_map.get(&full_name) {
+                                                            Some(idx) => Some(*idx),
+                                                            None => None,
+                                                        };
+
+                                                        match o_func_id {
+                                                            Some(func_id) => {
+                                                                //yep it's a function call
+                                                                let arg_types = parser_context.funcs[func_id as usize].get_arg_types();
+                                                                let args = self.parse_function_call_args(&arg_types, parser_func_context, parser_context);
+                                                                assert_ok!(args);
+                                                                let func_return_type = parser_context.funcs[func_id as usize].decl.return_type.clone();
+                                                                let loc = SourceLocation::new(next.location.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(next.location.end.clone()));
+                                                                TypedExpr{expr: Expr::StaticFuncCall(full_name.clone(), args), r#type: func_return_type, is_const: true, loc: loc}
+                                                            },
+                                                            //give up
+                                                            None => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))   
                                             }
                                         },
                                         _ => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
@@ -1766,51 +1885,7 @@ impl<'b> Parser<'b> {
         };
 
         match lookahead {
-            Token::Number(n) => {
-                self.skip_next_item();
-                match n.kind() {
-                    NumberKind::Hex => {
-                        if n.str_len() > 10 {
-                            let number = n.parse_i64();
-                            return Ok(TypedExpr{expr: Expr::BigIntLiteral(number.unwrap()), r#type: Type::BigInt, is_const: true, loc: lookahead_item.location.clone()});
-                        } else {
-                            let number = n.parse_i32();
-                            return Ok(TypedExpr{expr: Expr::IntLiteral(number.unwrap()), r#type: Type::Int, is_const: true, loc: lookahead_item.location.clone()});
-                        }
-                    },
-                    NumberKind::DecI => {
-                        let number_i64 = n.parse_i64().unwrap();
-                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Ok(TypedExpr{expr: Expr::BigIntLiteral(number_i64), r#type: Type::BigInt, is_const: true, loc: lookahead_item.location.clone()});
-                        } else {
-                            let number_i32 = n.parse_i32().unwrap();
-                            return Ok(TypedExpr{expr: Expr::IntLiteral(number_i32), r#type: Type::Int, is_const: true, loc: lookahead_item.location.clone()});
-                        }
-                    },
-                    NumberKind::Bin => {
-                        if n.str_len() > 34 {
-                            let number = n.parse_i64();
-                            return Ok(TypedExpr{expr: Expr::BigIntLiteral(number.unwrap()), r#type: Type::BigInt, is_const: true, loc: lookahead_item.location.clone()});
-                        } else {
-                            let number = n.parse_i32();
-                            return Ok(TypedExpr{expr: Expr::IntLiteral(number.unwrap()), r#type: Type::Int, is_const: true, loc: lookahead_item.location.clone()});
-                        }
-                    },
-                    NumberKind::Oct => {
-                        if n.str_len() > 18 {
-                            let number = n.parse_i64();
-                            return Ok(TypedExpr{expr: Expr::BigIntLiteral(number.unwrap()), r#type: Type::BigInt, is_const: true, loc: lookahead_item.location.clone()});
-                        } else {
-                            let number = n.parse_i32();
-                            return Ok(TypedExpr{expr: Expr::IntLiteral(number.unwrap()), r#type: Type::Int, is_const: true, loc: lookahead_item.location.clone()});
-                        }
-                    },
-                    NumberKind::DecF => {
-                        let number = n.parse_f64();
-                        return Ok(TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true, loc: lookahead_item.location.clone()});
-                    },
-                }
-            },
+            Token::Number(n) => { return Ok(self.parse_number(&n, &lookahead_item.location)); },
             
             Token::Boolean(b) => {
                 self.skip_next_item();
@@ -2113,6 +2188,16 @@ impl<'b> Parser<'b> {
 mod test {
     use super::*;
     
+    struct DummyImporter{
+
+    }
+
+    impl Importer for DummyImporter{
+        fn import(&mut self, _: &String, _: &String) -> Result<Imports, String> {
+            Ok(Imports{exports: Exports::new(), stub_name: String::from(""), unique_name: String::from("")})
+        }
+    }
+
     #[test]
     fn add_test() {
         let add = "export function addd(x: number, y: number, z: number): number {
@@ -2121,7 +2206,7 @@ mod test {
         }";
 
         let mut parser = Parser::new(add).unwrap();
-        let script = parser.parse(false).unwrap();
+        let script = parser.parse_full(false, false, & mut DummyImporter{}, &String::from("")).unwrap();
         println!("{:#?}", script);
     }
 }

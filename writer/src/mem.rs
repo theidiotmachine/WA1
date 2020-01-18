@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::cmp;
 
 use types::StructType;
-use ast::prelude::UserType;
+use ast::prelude::TypeDecl;
 
 use crate::wasm_types::get_ir_value_type;
 use parity_wasm::elements::{ValueType};
@@ -63,11 +63,11 @@ fn generate_struct_mem_layout(struct_type: &StructType) -> StructMemLayout {
     StructMemLayout{size: offset, members: out_members, alignment: alignment}
 }
 
-pub fn generate_mem_layout_map(type_map: &HashMap<String, UserType>) -> HashMap<String, UserMemLayout>{
+pub fn generate_mem_layout_map(type_map: &HashMap<String, TypeDecl>) -> HashMap<String, UserMemLayout>{
     let mut out: HashMap<String, UserMemLayout> = HashMap::new();
     for t in type_map {
         match t.1 {
-            UserType::Struct{struct_type, under_construction: _} => {
+            TypeDecl::Struct{name: _, struct_type, under_construction: _, export: _} => {
                 out.insert(t.0.clone(), UserMemLayout::Struct(generate_struct_mem_layout(&struct_type)));
             },
             _ => panic!()
@@ -130,6 +130,10 @@ impl DataSection {
                 data: vec![0xba, 0xad, 0xf0, 0x0d, 0xba, 0xad, 0xf0, 0x0d ],
             }
         ]}
+    }
+
+    pub fn has_data(&self) -> bool {
+        self.entries.len() > 1
     }
 }
 

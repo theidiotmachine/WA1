@@ -30,15 +30,14 @@ pub mod prelude {
     pub use super::tokens::prelude::*;
     pub use super::Item;
     pub use super::OpenCurlyKind;
-    pub use super::Position;
     pub use super::Scanner;
     pub use super::ScannerState;
-    pub use super::SourceLocation;
     pub use super::Span;
 }
 use crate::tokenizer::RawToken;
 use crate::tokens::prelude::*;
 use error::{Error, RawError};
+use errs::prelude::*;
 
 type Res<T> = Result<T, Error>;
 mod look_behind;
@@ -54,48 +53,6 @@ pub fn tokenize(text: &str) -> Res<Vec<Token<&str>>> {
         ret.push(inner);
     }
     Ok(ret)
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-/// The start and end position of a token
-/// including the line/column number
-pub struct SourceLocation {
-    pub start: Position,
-    pub end: Position,
-}
-
-impl SourceLocation {
-    #[inline]
-    pub const fn new(start: Position, end: Position) -> Self {
-        Self { start, end }
-    }
-}
-
-impl ::std::fmt::Display for SourceLocation {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(f, "{}-{}", self.start, self.end)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-/// A single character position in the
-/// file including the line/column number
-pub struct Position {
-    pub line: usize,
-    pub column: usize,
-}
-
-impl ::std::fmt::Display for Position {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(f, "{}:{}", self.line, self.column)
-    }
-}
-
-impl Position {
-    #[inline]
-    pub const fn new(line: usize, column: usize) -> Self {
-        Self { line, column }
-    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
