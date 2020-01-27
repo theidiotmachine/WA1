@@ -196,9 +196,12 @@ fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, is_pic: boo
     }
 }
 
-fn compile(program: &Program) -> Option<Module> {
+fn compile_program(program: &Program) -> Option<WasmModule> {
     let mut errs: Vec<Error> = vec![];
-    let m = transform(program, &mut errs);
+    //let m = transform(program, &mut errs);
+
+    let m = compile(program, &mut errs);
+
     if errs.len() > 0 {
         pretty_print_errs(&errs);
         None
@@ -207,8 +210,11 @@ fn compile(program: &Program) -> Option<Module> {
     }
 }
 
-fn write_wasm(of_full_path: &PathBuf, module: Module) -> i32 {
-    let r = serialize_to_file(of_full_path, module);
+fn write_wasm(of_full_path: &PathBuf, module: &mut WasmModule) -> i32 {
+    let mut data: Vec<u8> = vec![];
+    module.serialize(&mut data);
+    let r = fs::write(of_full_path, data);
+            
     match r {
         Ok(_) => 0,
         Err(e) => {
@@ -245,9 +251,9 @@ fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, sf_name: &
             match o_program {
                 None => 1,
                 Some(program) => {
-                    let o_module = compile(&program);
+                    let o_module = compile_program(&program);
                     match o_module {
-                        Some(module) => write_wasm(of_full_path, module),
+                        Some(mut module) => write_wasm(of_full_path, &mut module),
                         None => 1
                     }
                 }
@@ -266,9 +272,9 @@ fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, sf_name: &
                         match o_program {
                             None => 1,
                             Some(program) => {
-                                let o_module = compile(&program);
+                                let o_module = compile_program(&program);
                                 match o_module {
-                                    Some(module) => write_wasm(of_full_path, module),
+                                    Some(mut module) => write_wasm(of_full_path, &mut module),
                                     None => 1
                                 }
                             }

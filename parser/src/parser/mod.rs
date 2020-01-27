@@ -236,7 +236,7 @@ enum ImportFilter{
     Named(Vec<String>)
 }
 
-fn filter_impoorts(exports: &Exports, imports: &ImportFilter) -> Exports {
+fn filter_imports(exports: &Exports, imports: &ImportFilter) -> Exports {
     match imports {
         ImportFilter::All => (exports.clone()),
         ImportFilter::Named(_) => {panic!()}
@@ -407,7 +407,7 @@ impl<'b> Parser<'b> {
         self.look_ahead.token.clone()
     }
 
-    /// Peek at the next locatiom, without changing state.
+    /// Peek at the next location, without changing state.
     fn peek_next_location(& self) -> SourceLocation {
         self.look_ahead.location.clone()
     }
@@ -723,7 +723,7 @@ impl<'b> Parser<'b> {
                 }
             };
             let exports = imports.exports;
-            let exports = filter_impoorts(&exports, &import_filter);
+            let exports = filter_imports(&exports, &import_filter);
             let namespace = imports.stub_name;
             for g in &exports.globals {
                 let import_name = format!("{}.{}", namespace, g.name);
@@ -996,10 +996,10 @@ impl<'b> Parser<'b> {
         self.skip_next_item();
 
         assert_punct!(self, Punct::OpenParen);
-        let cond = self.parse_expr(parser_func_context, parser_context);
-        assert_ok!(cond);
-        if cond.r#type != Type::Boolean {
-            parser_context.errors.push(Error::TypeFailure(cond.loc.clone(), Type::Boolean,  cond.r#type.clone()));
+        let condition = self.parse_expr(parser_func_context, parser_context);
+        assert_ok!(condition);
+        if condition.r#type != Type::Boolean {
+            parser_context.errors.push(Error::TypeFailure(condition.loc.clone(), Type::Boolean,  condition.r#type.clone()));
         }
         assert_punct!(self, Punct::CloseParen);
 
@@ -1017,10 +1017,10 @@ impl<'b> Parser<'b> {
                 parser_context.errors.push(Error::TypeFailureIf(loc.clone(), then_block.r#type.clone(), else_block.r#type.clone()));
             } 
             loc.end = else_block.loc.end.clone();
-            Ok(TypedExpr{expr: Expr::IfThenElse(Box::new(cond), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: then_block_type, loc: loc})
+            Ok(TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: then_block_type, loc: loc})
         } else {
             loc.end = then_block.loc.end.clone();
-            Ok(TypedExpr{expr: Expr::IfThen(Box::new(cond), Box::new(then_block)), is_const: true, r#type: Type::RealVoid, loc: loc})
+            Ok(TypedExpr{expr: Expr::IfThen(Box::new(condition), Box::new(then_block)), is_const: true, r#type: Type::RealVoid, loc: loc})
         }
     }
 
@@ -1032,10 +1032,10 @@ impl<'b> Parser<'b> {
         self.skip_next_item();
 
         assert_punct!(self, Punct::OpenParen);
-        let cond = self.parse_expr(parser_func_context, parser_context);
-        assert_ok!(cond);
-        if cond.r#type != Type::Boolean {
-            parser_context.errors.push(Error::TypeFailure(cond.loc.clone(), Type::Boolean, cond.r#type.clone()));
+        let condition = self.parse_expr(parser_func_context, parser_context);
+        assert_ok!(condition);
+        if condition.r#type != Type::Boolean {
+            parser_context.errors.push(Error::TypeFailure(condition.loc.clone(), Type::Boolean, condition.r#type.clone()));
         }
         assert_punct!(self, Punct::CloseParen);
 
@@ -1046,7 +1046,7 @@ impl<'b> Parser<'b> {
         assert_ok!(block);
         loc.end = block.loc.end.clone();
 
-        Ok(TypedExpr{expr: Expr::While(Box::new(cond), Box::new(block)), is_const: true, r#type: Type::RealVoid, loc: loc})
+        Ok(TypedExpr{expr: Expr::While(Box::new(condition), Box::new(block)), is_const: true, r#type: Type::RealVoid, loc: loc})
     }
 
     fn parse_class_decl(&mut self,
@@ -1221,7 +1221,7 @@ impl<'b> Parser<'b> {
                 &**i
             },
             _ => { 
-                parser_context.errors.push(Error::CantConstructUsingArrayLiterall(loc.clone(), for_type.clone()));
+                parser_context.errors.push(Error::CantConstructUsingArrayLiteral(loc.clone(), for_type.clone()));
                 &Type::RealVoid
             }
         };
@@ -1304,7 +1304,7 @@ impl<'b> Parser<'b> {
                 }
             }, 
             _ => {
-                parser_context.errors.push(Error::CantConstructUsingObjectLiterall(loc.clone(), for_type.clone()));
+                parser_context.errors.push(Error::CantConstructUsingObjectLiteral(loc.clone(), for_type.clone()));
                 HashMap::new()
             }
         };
@@ -1692,7 +1692,7 @@ impl<'b> Parser<'b> {
                                                     //might be a built in, so check that
                                                     let oe_built_in = self.try_parse_built_in(&id.to_string(), parser_func_context, parser_context);
                                                     match oe_built_in {
-                                                        None => {return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()));},
+                                                        None => {return Err(Error::VariableNotRecognized(next.location.clone(), id.to_string().clone()));},
                                                         Some(e_built_in) => {
                                                             match e_built_in {
                                                                 Err(e) => {return Err(e);},
@@ -1737,17 +1737,17 @@ impl<'b> Parser<'b> {
                                                                 TypedExpr{expr: Expr::StaticFuncCall(full_name.clone(), args), r#type: func_return_type, is_const: true, loc: loc}
                                                             },
                                                             //give up
-                                                            None => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
+                                                            None => return Err(Error::VariableNotRecognized(next.location.clone(), id.to_string().clone()))
                                                         }
                                                     }
                                                 }
                                             } else {
-                                                return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))   
+                                                return Err(Error::VariableNotRecognized(next.location.clone(), id.to_string().clone()))   
                                             }
                                         },
-                                        _ => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
+                                        _ => return Err(Error::VariableNotRecognized(next.location.clone(), id.to_string().clone()))
                                     },
-                                    _ => return Err(Error::VariableNotRecognised(next.location.clone(), id.to_string().clone()))
+                                    _ => return Err(Error::VariableNotRecognized(next.location.clone(), id.to_string().clone()))
                                 }
                             }
                         }
@@ -2086,11 +2086,15 @@ impl<'b> Parser<'b> {
                                                 Box::new(rhs.clone())
                                             }
                                         };
-                                        TypedExpr{expr: Expr::Assignment(l_value, ass_op, rhs_out), r#type: bin_op_type_cast.out_type, is_const: false, loc: loc}
+                                        if ass_op == AssignmentOperator::Assign {
+                                            TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, is_const: false, loc: loc}
+                                        } else {
+                                            TypedExpr{expr: Expr::ModifyAssignment(ass_op, Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, is_const: false, loc: loc}
+                                        } 
                                     },
                                     None => {
                                         parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
-                                        TypedExpr{expr: Expr::Assignment(l_value, ass_op, Box::new(rhs.clone())), r#type: Type::Unknown, is_const: false, loc: loc}
+                                        TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, Box::new(rhs.clone())), r#type: Type::Unknown, is_const: false, loc: loc}
                                     }
                                 }
                             }
