@@ -126,7 +126,7 @@ Currently the following features are supported.
 
 * number - a 64 bit float.
 * bigint - a 64 bit int.
-* int - a 32 bit int. Will be autocasted to number and bigint if needed. This means that an expression like this will actually be an int.
+* int - a 32 bit int. Will be auto-casted to number and bigint if needed. This means that an expression like this will actually be an int.
 ```
 let a = 0;
 ```
@@ -135,7 +135,7 @@ let a = 0;
 
 #### Casting
 
-As mentioned above, numeric types will autocast. If you need to manually invoke casting, the 'as' keyword is your friend.
+As mentioned above, numeric types will auto-cast. If you need to manually invoke casting, the 'as' keyword is your friend.
 
 ```
 //totally spurious example
@@ -161,7 +161,7 @@ let a = 9 as number;
     You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to create 
     (this last uses malloc). A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
 
-### Under contruction 
+### Under construction 
 
 * Linker - currently building import keywords. This will generate WASM imports today, which is quite nice
 
@@ -196,11 +196,11 @@ let a = 9 as number;
 1. Optimise steps. These should be on even on O0
     1. [ ] use the 'consume' code to not write drops
     1. [ ] remove returns right before end
-    1. [ ] change tee + drop into set
-    1. [ ] remove get + drop
+    1. [x] change tee + drop into set
+    1. [x] remove get + drop
     1. [ ] remove casts straight after consts, and just have the appropriately typed const inline
     1. [ ] == 0 is eqz
-    1. [ ] globals that are init to a const should use the wasm global init mechansim
+    1. [ ] globals that are init to a const should use the wasm global init mechanism
     1. [ ] when calling __static, copy true data into the data section and drop the initializer expression
 1. Function calling
     1. [x] simple static function call
@@ -240,7 +240,7 @@ let a = 9 as number;
 1. Closure generation and usage
     1. [ ] closure capture
     1. [ ] call function with closure
-    1. [ ] optimisation - don't capture consts, you have all the information to roll them inline. This is awesome because I don't think JS can do this
+    1. [ ] optimization - don't capture consts, you have all the information to roll them inline. This is awesome because I don't think JS can do this
 1. templates
     1. [ ] generate meta code to turn into templates, type check against unknown
     1. [ ] we are going to do this at compile time! Yes, thank me later
@@ -273,4 +273,4 @@ let a = 9 as number;
         1. [ ] patches memory - using GOT.mem
 1. tool chain
     1. [ ] npm 
-    1. [ ] binaryen optimiser
+    1. [ ] binaryen optimizer

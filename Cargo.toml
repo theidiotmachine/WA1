@@ -6,6 +6,5 @@ members = [
     "parser",
     "ast",
     "writer",
-    "errs",
-    "object-file"
+    "errs"
 ]

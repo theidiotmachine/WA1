@@ -286,8 +286,10 @@ pub enum Expr {
     ClosureVariableUse(String),
     ///round brackets
     Parens(Box<TypedExpr>),
-    /// assignmnet expression
-    Assignment(TypedLValueExpr, AssignmentOperator, Box<TypedExpr>),
+    /// assignment expression
+    Assignment(Box<TypedExpr>, TypedLValueExpr, Box<TypedExpr>),
+    /// modify and assign expression
+    ModifyAssignment(AssignmentOperator, Box<TypedExpr>, TypedLValueExpr, Box<TypedExpr>),
     /// static func call. Arg is func name.
     StaticFuncCall(String, Vec<TypedExpr>),
     /// dynamic func call.
@@ -380,7 +382,7 @@ impl TypedExpr{
                     match o_lhs {
                         None => None,
                         Some(lhs_lhs) => {
-                            Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(Box::new(lhs_lhs), name.clone()), loc: self.loc})
+                            Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(lhs.clone(), Box::new(lhs_lhs), name.clone()), loc: self.loc})
                         }
                     }
                 }
@@ -403,7 +405,7 @@ pub enum LValueExpr{
     //Assign a closure variable
     ClosureVariableAssign(String),
     //Assign a static named member of some data, so e.g. a.b
-    StaticNamedMemberAssign(Box<TypedLValueExpr>, String),
+    StaticNamedMemberAssign(Box<TypedExpr>, Box<TypedLValueExpr>, String),
     //Assign a static numeric member of some data, so e.g. a[2]
     StaticU32MemberAssign(Box<TypedLValueExpr>, u32),
 }
