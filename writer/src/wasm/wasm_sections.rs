@@ -1,6 +1,8 @@
-use crate::wasm::{WasmValueType, WasmFuncType, WasmFunc, WasmExpr};
-use crate::wasm::{serialize_string, serialize_u32, get_serialized_size_u32};
+use crate::wasm::{WasmValueType, WasmFuncType};
+use crate::wasm::wasm_code::{WasmFunc, WasmExpr};
+use crate::wasm::wasm_serialize::{serialize_string, serialize_u32, get_serialized_size_u32, serialize_u32_pad};
 use crate::wasm::wasm_instructions::{WasmInstr};
+use crate::wasm::wasm_object_file::{WasmObjectModuleFragment, WasmRelocationEntry};
 
 pub struct WasmTypeSection{
     data: Vec<u8>,
@@ -153,8 +155,8 @@ impl WasmMemSection{
 }
 
 pub struct WasmGlobalSection{
-    n: u32,
-    data: Vec<u8>,
+    pub n: u32,
+    pub data: Vec<u8>,
 }
 
 impl WasmGlobalSection{
@@ -244,6 +246,10 @@ impl WasmStartSection{
         serialize_u32(self.data.len() as u32, out);
         out.append(&mut self.data);
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
 }
 
 pub struct WasmCodeSection{
@@ -273,6 +279,25 @@ impl WasmCodeSection{
 
         serialize_u32(final_data.len() as u32 + len_sz, out);
         serialize_u32(self.n, out);
+        
+        out.append(&mut final_data);
+    }
+
+    pub fn serialize_reloc(&self, reloc: &mut WasmObjectModuleFragment, out: &mut Vec<u8>) {
+        out.push(10);
+        
+        let len_sz = 5;
+        let mut final_data: Vec<u8> = vec![];
+
+        for f in &self.funcs {
+            let offset = final_data.len() as u32;
+            let mut this_reloc_entries = f.serialize_reloc(offset, &mut final_data);
+            reloc.code_reloc_section.entries.append(&mut this_reloc_entries);
+        }
+
+        serialize_u32(final_data.len() as u32 + len_sz, out);
+        //ugh, if we fix this, it makes the reloc calc much easier. see MAGIC_RELOC_OFFSET
+        serialize_u32_pad(self.n, out);
         
         out.append(&mut final_data);
     }

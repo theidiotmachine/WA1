@@ -34,6 +34,7 @@ fn main() {
     let module = HostRef::new(Module::new(&store, &wasm).expect("wasm module"));
     let instance = Instance::new(&store, &module, &[]).expect("wasm instance");
     
+    // this code is VILE!
     let mut name: String = String::from("");
     let mut args: Vec<f64> = vec![];
     let s = Scanner::new(func_call_str);
@@ -42,7 +43,15 @@ fn main() {
         let token = i.token;
         match token {
             Token::Ident(n) => {
-                name = n.as_str().to_owned();
+                name.push_str(n.as_str());
+            },
+            Token::Punct(p) => {
+                match p {
+                    Punct::Period => {
+                        name.push('.');
+                    },
+                    _ => {}
+                }
             },
             Token::Number(n) => {
                 args.push(n.parse_f64().unwrap());
@@ -51,6 +60,7 @@ fn main() {
         }
     }
     
+    println!("** {} **", name.as_str());
     let func = instance.find_export_by_name(name.as_str()).expect("answer").func().expect("function");
     let mut args_to_pass: Vec<Val> = vec![];
     for arg in args {

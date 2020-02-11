@@ -39,21 +39,19 @@ pub struct FuncDecl {
     pub return_type: Type,
     pub args: Vec<FuncArg>,
     pub export: bool,
-    pub import: bool,
 }
 
-
-impl Func {
+impl FuncDecl{
     pub fn get_arg_types(&self) -> Vec<Type> {
         let mut out: Vec<Type> = vec![];
-        for arg in &self.decl.args {
+        for arg in &self.args {
             out.push(arg.r#type.clone());
         }
         out
     }
 
     pub fn get_func_type(&self) -> FuncType {
-        FuncType{out_type: self.decl.return_type.clone(), in_types: self.get_arg_types()}
+        FuncType{out_type: self.return_type.clone(), in_types: self.get_arg_types()}
     }
 }
 
@@ -64,5 +62,3 @@ pub struct FuncObjectCreation {
     pub name: String,
     pub closure: Vec<ClosureRef>
 }
-
-

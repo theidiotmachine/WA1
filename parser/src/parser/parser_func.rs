@@ -123,7 +123,7 @@ impl<'a> Parser<'a> {
         assert_ok!(return_type);
 
         Ok(FuncDecl{
-            name: id.to_string(), return_type: return_type.clone(), args: arg_list, export, import: false, 
+            name: id.to_string(), return_type: return_type.clone(), args: arg_list, export, 
         })
     }
 }

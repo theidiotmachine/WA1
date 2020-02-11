@@ -1,11 +1,10 @@
 extern crate parser;
 
 mod transform;
-pub use transform::{transform, compile};
+pub use transform::{compile, RelocationMode};
 
 pub mod prelude {
-    pub use super::transform;
-    pub use super::compile;
+    pub use super::{compile, RelocationMode};
     pub use super::wasm::wasm_module::{WasmModule};
 }
 

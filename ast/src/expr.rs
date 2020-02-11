@@ -16,6 +16,7 @@ pub mod prelude {
     pub use super::TypedLValueExpr;
     pub use super::LValueExpr;
     pub use super::GlobalVariableDecl;
+    pub use super::GlobalVariableImport;
     pub use super::ClosureRef;
     pub use super::VariableDecl;
     pub use super::ObjectLiteralElem;
@@ -241,7 +242,15 @@ pub struct GlobalVariableDecl {
     pub constant: bool,
     pub init: Option<TypedExpr>,
     pub export: bool,
-    pub import: bool,
+}
+
+/// Variable decl
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GlobalVariableImport {
+    pub name: String,
+    pub r#type: Type,
+    pub constant: bool,
+    pub export: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -308,7 +317,7 @@ pub enum Expr {
     FuncDecl(FuncObjectCreation),
     /// variable declaration
     VariableDecl(Box<VariableDecl>),
-    /// global variable declaration. Only appears in the __start function.
+    /// global variable declaration. Only appears in the _start function.
     GlobalVariableDecl(Box<GlobalVariableDecl>),
     /// return statement
     Return(Box<Option<TypedExpr>>),

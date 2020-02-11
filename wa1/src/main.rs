@@ -2,8 +2,8 @@ extern crate clap;
 use clap::{Arg, App, SubCommand, ArgMatches};
 use std::{fs};
 use std::path::{PathBuf, Component};
+use std::process::Command;
 use ast::{Exports, Program, Imports};
-
 
 extern crate parser;
 use parser::*;
@@ -16,8 +16,6 @@ pub use errs::pretty_print_errs;
 
 pub mod build_config;
 use build_config::BuildConfig;
-use parity_wasm::elements::{Module};
-use parity_wasm::elements::{serialize_to_file/*, deserialize_file*/};
 
 struct CachingImporter{
     pub config_path: PathBuf,
@@ -57,10 +55,10 @@ impl Importer for CachingImporter {
         let mut import_path = self.config_path.clone().join(self.src_path.clone()).join(file_path.clone()).join(import_path_name.clone());
         import_path.set_extension("wa1");
 
-        let o_stub_name = import_path.file_stem();
-        let stub_name = match o_stub_name {
+        let o_module_name = import_path.file_stem();
+        let module_name = match o_module_name {
             None => return Err(String::from("Can't parse import name")),
-            Some(stub_name) => stub_name.to_string_lossy().to_string()
+            Some(module_name) => module_name.to_string_lossy().to_string()
         };
 
         let unique_name = canon(&(file_path.to_owned()), &PathBuf::from(import_path_name));
@@ -75,7 +73,7 @@ impl Importer for CachingImporter {
                 match o_exports {
                     Some(exports) => {
                         write_exports(&output_path, &exports);
-                        Ok(Imports{exports, stub_name: stub_name, unique_name})
+                        Ok(Imports{exports, module_name: module_name, unique_name})
                     },
                     None => Err(e.to_string()) 
                 }
@@ -90,14 +88,14 @@ impl Importer for CachingImporter {
                             match o_exports {
                                 Some(exports) => {
                                     write_exports(&output_path, &exports);
-                                    Ok(Imports{exports, stub_name: stub_name, unique_name})
+                                    Ok(Imports{exports, module_name, unique_name})
                                 },
                                 None => Err(String::from("Failed to parse"))
                             }
                         } else {
                             let r_exports = read_exports(&output_path);
                             match r_exports {
-                                Ok(exports) => Ok(Imports{exports, stub_name: stub_name, unique_name}),
+                                Ok(exports) => Ok(Imports{exports, module_name, unique_name}),
                                 Err(e) => Err(e) 
                             }
                         }
@@ -115,8 +113,10 @@ fn build_simple(matches: &ArgMatches) -> i32 {
     let output = PathBuf::from(matches.value_of("OUTPUT").unwrap_or(default_output.as_str()));
     let is_unsafe = matches.is_present("unsafe");
     let mut importer = CachingImporter{config_path: PathBuf::new(), src_path: PathBuf::new(), out_path: PathBuf::new()};
+    let module_name = output.file_stem().unwrap().to_string_lossy().into_owned();
             
-    compile_if_changed(&output, &PathBuf::from(input), &PathBuf::from(input), is_unsafe, false, &mut importer)
+    compile_if_changed(&output, &PathBuf::from(input), &PathBuf::from(input), is_unsafe, RelocationMode::Simple, &module_name,
+        &mut importer)
 }
 
 fn parse_exports(input: &PathBuf, is_unsafe: bool) -> Option<Exports> {
@@ -148,7 +148,6 @@ fn write_exports(output: &PathBuf, exports: &Exports) -> i32 {
                     1
                 },
                 _ => {
-                    println!("Success");
                     0
                 }
             }
@@ -171,12 +170,12 @@ fn read_exports(exports_file: &PathBuf) -> Result<Exports, String> {
 }
 
 
-fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, is_pic: bool, importer: &mut dyn Importer) -> Option<Program> {
+fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, module_name: &String, importer: &mut dyn Importer) -> Option<Program> {
     let r_input_contents = fs::read_to_string(sf_full_path.clone());
     match r_input_contents {
         Ok(input_contents) => {
             let mut parser = Parser::new(input_contents.as_str()).unwrap();
-            let o_script = parser.parse_full(is_unsafe, is_pic, importer, &(sf_name.to_string_lossy().to_string()));
+            let o_script = parser.parse_full(is_unsafe, importer, module_name, &(sf_name.to_string_lossy().to_string()));
             match o_script {
                 Err(errs) => {
                     println!("Parse failed.");
@@ -196,16 +195,16 @@ fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, is_pic: boo
     }
 }
 
-fn compile_program(program: &Program) -> Option<WasmModule> {
+fn compile_program(program: &Program, reloc_mode: RelocationMode, module_name: &String) -> Option<WasmModule> {
     let mut errs: Vec<Error> = vec![];
-    //let m = transform(program, &mut errs);
 
-    let m = compile(program, &mut errs);
+    let m = compile(program, reloc_mode, module_name, &mut errs);
 
     if errs.len() > 0 {
         pretty_print_errs(&errs);
         None
     } else {
+        println!("Success");
         Some(m)
     }
 }
@@ -224,34 +223,28 @@ fn write_wasm(of_full_path: &PathBuf, module: &mut WasmModule) -> i32 {
     }
 }
 
-/*
-fn read_wasm(wf_full_path: &PathBuf) -> Option<Module> {
-    let r_module = deserialize_file(wf_full_path);
-    match r_module {
-        Err(e) => {
-            println!("ERROR: {}", e);
-            None
-        },
-        Ok(module) => {
-            Some(module)
-        }
-    }
-}
-*/
-
-fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, is_pic: bool, importer: &mut dyn Importer) -> i32 {
+fn compile_if_changed(
+    of_full_path: &PathBuf, 
+    sf_full_path: &PathBuf, 
+    sf_name: &PathBuf, 
+    is_unsafe: bool, 
+    reloc_mode: RelocationMode, 
+    module_name: &String, 
+    importer: &mut dyn Importer
+) -> i32 {
     let of_full_path_string = of_full_path.to_string_lossy();
     let sf_full_path_string = sf_full_path.to_string_lossy();
+
     println!("Parsing {} to {}", &sf_full_path_string, &of_full_path_string);
     
     let r_output_metadata = of_full_path.metadata();
     match r_output_metadata {
         Err(_) => {
-            let o_program = parse(sf_full_path, sf_name, is_unsafe, is_pic, importer);
+            let o_program = parse(sf_full_path, sf_name, is_unsafe, module_name, importer);
             match o_program {
                 None => 1,
                 Some(program) => {
-                    let o_module = compile_program(&program);
+                    let o_module = compile_program(&program, reloc_mode, module_name);
                     match o_module {
                         Some(mut module) => write_wasm(of_full_path, &mut module),
                         None => 1
@@ -268,11 +261,11 @@ fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, sf_name: &
                 },
                 Ok(input_metadata) => {
                     if input_metadata.modified().unwrap() > output_metadata.modified().unwrap() {
-                        let o_program = parse(sf_full_path, sf_name, is_unsafe, is_pic, importer);
+                        let o_program = parse(sf_full_path, sf_name, is_unsafe, module_name, importer);
                         match o_program {
                             None => 1,
                             Some(program) => {
-                                let o_module = compile_program(&program);
+                                let o_module = compile_program(&program, reloc_mode, module_name);
                                 match o_module {
                                     Some(mut module) => write_wasm(of_full_path, &mut module),
                                     None => 1
@@ -280,6 +273,7 @@ fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, sf_name: &
                             }
                         }           
                     } else {
+                        println!("Skipping, up to date");
                         0
                     }
                 }                
@@ -287,6 +281,9 @@ fn compile_if_changed(of_full_path: &PathBuf, sf_full_path: &PathBuf, sf_name: &
         }
     }       
 }
+
+//const WASM_EXE: &'static str = "/home/ME/Code/Ext/LLVM/llvm-build/bin/wasm-ld";
+//const WASM_EXE: &'static str = "wasm-ld-9";
 
 fn build(matches: &ArgMatches) -> i32 {
     let config = matches.value_of("CONFIG").unwrap();
@@ -307,12 +304,46 @@ fn build(matches: &ArgMatches) -> i32 {
             let mut importer = CachingImporter{config_path: config_path.clone(), src_path: build_config.src_path.clone(), out_path: build_config.out_path.clone()};
             let mut out = 0;
 
+            let out_path = config_path.clone().join(build_config.out_path.clone());
+
+            let r = fs::create_dir_all(out_path.clone());
+            match r {
+                Ok(_) => {},
+                Err(e) => {
+                    println!("Failed to create output dir because {}", e);
+                    return 1;
+                }
+            }
+
+            let clean = matches.is_present("clean");
+            if clean {
+                println!("Cleaning {}", out_path.clone().to_string_lossy());
+                let r = fs::remove_dir_all(out_path.clone());
+                match r {
+                    Ok(_) => {},
+                    Err(e) => {
+                        println!("Failed to clean because {}", e);
+                        return 1;
+                    }
+                }
+
+                let r = fs::create_dir_all(out_path.clone());
+                match r {
+                    Ok(_) => {},
+                    Err(e) => {
+                        println!("Failed to create output dir because {}", e);
+                        return 1;
+                    }
+                }
+            }
+
             //first, build the files
             for sf in &build_config.source_files {
                 let sf_full_path = config_path.clone().join(build_config.src_path.clone()).join(sf.file_name.clone());
                 let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(sf.file_name.clone());
                 of_full_path.set_extension("wasm");
-                let this_out = compile_if_changed(&of_full_path, &sf_full_path, &sf.file_name, sf.is_unsafe, true, &mut importer);
+                let module_name = sf.file_name.file_stem().unwrap().to_string_lossy().into_owned();
+                let this_out = compile_if_changed(&of_full_path, &sf_full_path, &sf.file_name, sf.is_unsafe, RelocationMode::StaticObjectFile, &module_name, &mut importer);
                 if this_out != 0 {
                     out = this_out;
                 }
@@ -322,34 +353,55 @@ fn build(matches: &ArgMatches) -> i32 {
             let epf_full_path = config_path.clone().join(build_config.src_path.clone()).join(build_config.entry_point.file_name.clone());
             let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.entry_point.file_name.clone());
             of_full_path.set_extension("wasm");
-            let this_out = compile_if_changed(&of_full_path, &epf_full_path, &build_config.entry_point.file_name, build_config.entry_point.is_unsafe, true, &mut importer);
+            let this_out = compile_if_changed(&of_full_path, &epf_full_path, &build_config.entry_point.file_name, build_config.entry_point.is_unsafe, 
+                RelocationMode::StaticEntryPoint, &build_config.module_name, &mut importer);
             if this_out != 0 {
                 out = this_out;
             }
 
-            /*
             if out == 0 {
                 //let's link!
+                let mut args: Vec<String> = vec![];
+                args.push(String::from("--no-entry"));
+                //args.push(String::from("--verbose"));
                 
-                //load the entry point wasm
-                let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.out_file_name.clone());
+                let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.module_name.clone());
                 of_full_path.set_extension("wasm");
-                let mut linked_module = read_wasm(&of_full_path).unwrap();
-                let mut linked_module_type_section = linked_module.type_section_mut().unwrap();
-                let mut linked_module_types = linked_module_type_section.types();   
+
+                args.push(String::from("-o"));
+                args.push(of_full_path.to_string_lossy().into_owned());
+                println!("Linking to {}", of_full_path.to_string_lossy());
 
                 for sf in &build_config.source_files {
                     let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(sf.file_name.clone());
                     of_full_path.set_extension("wasm");
-                    let of_module = read_wasm(&of_full_path).unwrap();
-                    let of_module_type_section = of_module.type_section().unwrap();
-                    let of_module_types = of_module_type_section.types();
-                    for t in of_module_types {
-                        //linked_module_types.p
-                    }
-                    
+                    args.push(format!("{}", of_full_path.to_string_lossy()));
                 }
-            }*/
+                
+                let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.entry_point.file_name.clone());
+                of_full_path.set_extension("wasm");
+                
+                args.push(format!("{}", of_full_path.to_string_lossy()));
+
+                //println!("{} {}", WASM_EXE, args.join(" "));
+                let output = Command::new(build_config.wasm_exe).args(args).output().expect("failed to execute process");
+                println!("{}", String::from_utf8_lossy(&output.stderr));
+
+                match output.status.code() {
+                    Some(code) => {
+                        if code == 0 {
+                            println!("Success");
+                        } else {
+                            println!("Linker exited with status code: {}", code);
+                        }
+                        out = code;
+                    },
+                    None => {
+                        println!("Linker terminated by signal");
+                        out = 1;
+                    }
+                } 
+            }
 
             out
         }
@@ -387,6 +439,9 @@ fn main() {
                     .help("Input configuration")
                     .required(true)
                     .index(1))
+                .arg(Arg::with_name("clean")
+                    .help("delete all output files")
+                    .long("clean"))
                 ,
             ]
         )
