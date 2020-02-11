@@ -79,7 +79,7 @@ function asTest(): void {
     //const d: int = b;
 }
 
-export function testSuite(): void {
+export function testSuite(): int {
     assert(idNumber(3) == 3);
     assert(idNumber(-3.0) == -3);
     assert(addd(3, 5) == 8);
@@ -88,4 +88,5 @@ export function testSuite(): void {
     assert(fourTimes(3) == 12);
     structTest();
     intTest();
+    1;
 }

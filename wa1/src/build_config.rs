@@ -14,5 +14,6 @@ pub struct BuildConfig{
     pub source_files: Vec<SourceFile>,
     pub src_path: PathBuf,
     pub out_path: PathBuf,
-    pub out_file_name: PathBuf,
+    pub module_name: String,
+    pub wasm_exe: String,
 }

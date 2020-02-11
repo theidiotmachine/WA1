@@ -17,10 +17,10 @@ cargo build
 in the root. To run, you need to pass the compiler some arguments.
 
 ```
-cargo run -- build-simple wa1/src/one.wa1 -o=out.wasm
+cargo run -- build-simple tests/simple/one.wa1 -o=tests/simple/out.wasm
 ```
 
-will parse `wa1/src/one.ws` and generate `out.wasm` in the root.
+will parse `tests/simple/one.wa1` and generate `tests/simple/out.wasm`.
 
 ## Running
 
@@ -32,7 +32,7 @@ We ship a runner built on [wasmtime](https://github.com/bytecodealliance/wasmtim
 To run, call
 
 ```
-cargo run --bin test-runner -- out.wasm -f 'fourTimes(8);'
+cargo run --bin test-runner -- tests/simple/out.wasm -f 'fourTimes(8);'
 ```
 
 ### Webpage
@@ -70,7 +70,7 @@ the last value of a block is its return value, and you can compose expressions f
 
 Because we are not monsters, classic control flow also works, so you can still use `return` if you want.
 
-So, a simple function is written like this. Use the export keyword to make it visible outside web assembly.
+So, a simple function is written like this. In simple mode, use the export keyword to make it visible outside web assembly.
 
 ```
 export function mul(x: number, y: number): number {
@@ -149,6 +149,69 @@ let a = 9 as number;
 * Local and global variables - type inference works here.
 * if, else, while, continue, break, return.
 
+### Linker
+
+If you use the build tools, we generate a WASM object files, which can then be linked with a linker. A very simple example exists in the tests folder. 
+
+#### The linker exe
+
+The linker we use is (wasm-ld)[https://lld.llvm.org/WebAssembly.html], given that is the only working WASM linker. You will need to install it somehow.
+On Ubuntu you can get that by calling 
+
+```
+sudo apt install lld-9
+```
+
+On Windows and OSX you are on your own, I am afraid. I found building it from source was not impossible. Once you have an exe name (and in in Ubuntu 
+it is wasm-ld-9, surprisingly) you need to edit the build-wsb.json file you are building to point to the right location. Yes, I know. This should get better
+as either the LLVM WASM toolchain matures, or I get fed up and write a compatible linker.
+
+#### Using it
+
+When you are set up, call this to run the sample.
+
+```
+cargo run -- build tests/linker/build-wsb.json --clean
+```
+
+Here, the 'clean' arg will always force a build. You can omit if you wish. The build-wsb.json format is subject to change. However, at the moment,
+here it is.
+
+```json
+{
+    "entry_point": {
+        "file_name": "two.wa1",
+        "is_unsafe": false
+    },
+    "source_files": [
+        {
+            "file_name": "one.wa1",
+            "is_unsafe": false
+        }
+    ],
+    "src_path": "./src",
+    "out_path": "./out",
+    "module_name": "linker",
+    "wasm_exe": "wasm-ld-9
+}
+```
+
+The 'entry_point' is the place where we do the module exports. So anything exported in there will be exported to the final wasm.
+Anything exported from the 'source_files' will be visible to other files, but not outside the module.
+
+The only working import syntax is 
+
+```
+import {*} from "./one"
+```
+
+where the '*' means to import everything. Once you import a function 'f' from './m' it will appear as 'm.f'. That means 
+to test the example you would run
+
+```
+cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 2);'
+```
+
 ### Unsafe mode
 
 * `__ptr` type - not yet finished
@@ -157,13 +220,14 @@ let a = 9 as number;
     * `__memorySize()` - `memory.size` instruction
     * `__memoryGrow(0, numPages)` - `memory.grow` instruction
     * `__trap()` - `unreachable` instruction
-* `__struct` type - works but you need either the super secret `malloc` function for them to be useful, or cast from a `__ptr` (this is unsafe). 
+* `__struct` type - works but you need either the super secret `malloc` function for them to be useful, or cast from a `__ptr` (this is unsafe. The clue
+    is in the name...). 
     You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to create 
     (this last uses malloc). A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
 
 ### Under construction 
 
-* Linker - currently building import keywords. This will generate WASM imports today, which is quite nice
+* Linker - memory next
 
 ## TODO
 
@@ -194,7 +258,7 @@ let a = 9 as number;
 1. Strings
     1. [ ] a 'char' is a unicode grapheme cluster - see [this](https://manishearth.github.io/blog/2017/01/14/stop-ascribing-meaning-to-unicode-code-points/) - this guy has some cool rust libs
 1. Optimise steps. These should be on even on O0
-    1. [ ] use the 'consume' code to not write drops
+    1. [x] use the 'consume' code to not write drops
     1. [ ] remove returns right before end
     1. [x] change tee + drop into set
     1. [x] remove get + drop
@@ -208,6 +272,7 @@ let a = 9 as number;
 1. Known bugs
     1. [ ] fairly sure prefix unary operators are wrong - may need to start at a precedence
     1. [ ] the lexer doesn't parse negative numbers!
+    1. [x] import order is not correct - imports need to be first - need a secondary mapping. Claim fixed, needs to be tested
 1. Inlining
     1. [ ] inline numeric constants?
     1. [ ] or full blown inlining, of which this is just a special case?
@@ -262,15 +327,12 @@ let a = 9 as number;
     1. [ ] A file format for that
     1. [x] When import commands are run, load that, pull the imports in
 1. Linker
-    1. [ ] object file format that contains
+    1. [x] object file format that contains
         1. [ ] WASM or an AST
             1. [ ] where the WASM is in PIC format - that is, static memory loads from a func that I can then patch
         1. [ ] A dupe of the export format?
         1. [ ] AST/WASM fragments to be inlined
-    1. [ ] linker that
-        1. [ ] loads object files
-        1. [ ] patches function calls and globals
-        1. [ ] patches memory - using GOT.mem
+    1. [x] use wasm-ld
 1. tool chain
     1. [ ] npm 
     1. [ ] binaryen optimizer

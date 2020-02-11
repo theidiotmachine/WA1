@@ -5,7 +5,8 @@
  */
 
 use crate::wasm::{WasmResultType};
-use crate::wasm::{serialize_u32, serialize_i32, serialize_i64, serialize_f32, serialize_f64};
+use crate::wasm::wasm_serialize::{serialize_u32, serialize_i32, serialize_i64, serialize_f32, serialize_f64, serialize_u32_pad};
+use crate::wasm::wasm_object_file::{WasmRelocationEntry};
 
 /// Instruction.
 #[derive(Clone, Debug, PartialEq)]
@@ -485,25 +486,34 @@ macro_rules! op {
 	});
 }
 
+/// This is one byte for the opcode, and five for the padded u32 sleb that is the number of functions in the 
+/// expr, which is depressingly counted in the offset
+const MAGIC_RELOC_OFFSET: u32 = 6;
 
 impl WasmInstr {
-	/// Is this instruction starts the new block (which should end with terminal instruction).
-	pub fn is_block(&self) -> bool {
+	pub fn serialize_reloc(&self, reloc_entries: &mut Vec<WasmRelocationEntry>, writer: &mut Vec<u8>) {
 		match self {
-			&WasmInstr::Block(_) | &WasmInstr::Loop(_) | &WasmInstr::If(_) => true,
-			_ => false,
+			WasmInstr::Call(index) => {
+				reloc_entries.push(WasmRelocationEntry::new_call(writer.len() as u32 + MAGIC_RELOC_OFFSET, *index));
+				op!(writer, opcodes::CALL, {
+					serialize_u32_pad(*index, writer);
+				});
+			},
+			WasmInstr::GetGlobal(index) => {
+				reloc_entries.push(WasmRelocationEntry::new_global_use(writer.len() as u32 + MAGIC_RELOC_OFFSET, *index));
+				op!(writer, opcodes::GETGLOBAL, {
+					serialize_u32_pad(*index, writer);
+				});
+			},
+			WasmInstr::SetGlobal(index) => {
+				reloc_entries.push(WasmRelocationEntry::new_global_use(writer.len() as u32 + MAGIC_RELOC_OFFSET, *index));
+				op!(writer, opcodes::SETGLOBAL, {
+					serialize_u32_pad(*index, writer);
+				})
+			},
+			_ => self.serialize(writer),
 		}
 	}
-
-	/// Is this instruction determines the termination of instruction sequence?
-	///
-	/// `true` for `Instruction::End`
-	pub fn is_terminal(&self) -> bool {
-		match self {
-			&WasmInstr::End => true,
-			_ => false,
-		}
-    }
 
     pub fn serialize(&self, writer: &mut Vec<u8>) {
         use self::WasmInstr::*;

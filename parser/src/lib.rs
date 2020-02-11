@@ -199,36 +199,42 @@ pub trait Importer{
 
 #[derive(Debug)]
 struct ParserContext {
-    pub globals: Vec<GlobalVariableDecl>,
-    pub global_var_map: HashMap<String, u32>,
-    pub funcs: Vec<Func>,
-    pub func_map: HashMap<String, u32>,
+    pub global_decls: Vec<GlobalVariableDecl>,
+    pub global_imports: Vec<GlobalVariableImport>,
+    pub func_decls: Vec<Func>,
+    pub func_imports: Vec<FuncDecl>,
     pub errors: Vec<Error>,
     pub type_map: HashMap<String, TypeDecl>,
     pub import_namespace_map: HashMap<String, String>,
     pub is_unsafe: bool,
-    pub is_pic: bool,
     pub file_name: String,
 }
 
 impl ParserContext {
-    fn new(is_unsafe: bool, is_pic: bool, file_name: &String) -> ParserContext {
+    fn new(is_unsafe: bool, file_name: &String) -> ParserContext {
         ParserContext{
-            globals: vec![],
-            funcs: vec![],
+            global_decls: vec![],
+            global_imports: vec![],
+            func_decls: vec![],
+            func_imports: vec![],
             errors: vec![],
-            global_var_map: HashMap::new(),
-            func_map: HashMap::new(),
             type_map: HashMap::new(),
             import_namespace_map: HashMap::new(),
             is_unsafe: is_unsafe,
-            is_pic: is_pic,
             file_name: file_name.clone()
         }
     }
 
     fn push_err(&mut self, err: Error) {
         self.errors.push(err);
+    }
+
+    pub fn get_fn_decl_from_decls(&self, name: &String) -> Option<FuncDecl> {
+        self.func_decls.iter().find(|&x| x.decl.name == *name).map(|x| x.decl.clone())
+    }
+
+    pub fn get_fn_decl_from_imports(&self, name: &String) -> Option<FuncDecl> {
+        self.func_imports.iter().find(|&x| x.name == *name).map(|x| x.clone())
     }
 }
 

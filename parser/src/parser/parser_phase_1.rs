@@ -13,19 +13,33 @@ macro_rules! should_be_ok {
 }
 
 fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
-    let mut globals: Vec<GlobalVariableDecl> = vec![];
-    let mut funcs: Vec<FuncDecl>  = vec![];
-    let mut types: Vec<TypeDecl>  = vec![];
+    let mut global_decls: Vec<GlobalVariableDecl> = vec![];
+    let mut global_imports: Vec<GlobalVariableImport> = vec![];
+    let mut func_decls: Vec<FuncDecl> = vec![];
+    let mut func_imports: Vec<FuncDecl> = vec![];
+    let mut types: Vec<TypeDecl> = vec![];
 
-    for g in &parser_context.globals {
+    for g in &parser_context.global_decls {
         if g.export {
-            globals.push(g.clone());
+            global_decls.push(g.clone());
         }
     }
 
-    for f in &parser_context.funcs {
+    for g in &parser_context.global_imports {
+        if g.export {
+            global_imports.push(g.clone());
+        }
+    }
+
+    for f in &parser_context.func_decls {
         if f.decl.export {
-            funcs.push(f.decl.clone())
+            func_decls.push(f.decl.clone())
+        }
+    }
+
+    for f in &parser_context.func_imports {
+        if f.export {
+            func_imports.push(f.clone())
         }
     }
 
@@ -45,7 +59,7 @@ fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
         }
     }
 
-    Exports{ globals, funcs, types }
+    Exports{ global_imports, global_decls, func_imports, func_decls, types }
 }
 
 impl<'a> Parser<'a> {
@@ -77,9 +91,7 @@ impl<'a> Parser<'a> {
             local_var_map: HashMap::new(), body: None, 
         };
 
-        let idx = parser_context.funcs.len();
-        parser_context.func_map.insert(func.decl.name.clone(), idx as u32);
-        parser_context.funcs.push(func); 
+        parser_context.func_decls.push(func); 
     }
 
     fn parse_phase_1_global(&mut self,
@@ -95,7 +107,7 @@ impl<'a> Parser<'a> {
         is_unsafe: bool,
         file_name: &String,
     ) -> Exports {
-        let mut parser_context = ParserContext::new(is_unsafe, true, file_name);
+        let mut parser_context = ParserContext::new(is_unsafe, file_name);
         loop {
             if self.look_ahead.token.is_eof() {
                 break;
