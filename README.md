@@ -151,7 +151,8 @@ let a = 9 as number;
 
 ### Linker
 
-If you use full build mode, we generate WASM object files, which can then be linked with a linker. A very simple example exists in the tests folder. 
+If you use full build mode, we generate [WASM object files](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md), which, 
+because they are a standard, can then be linked with an external linker. A very simple example exists in the tests folder. 
 
 #### The linker exe
 
@@ -159,7 +160,7 @@ The linker we use is [wasm-ld](https://lld.llvm.org/WebAssembly.html), given tha
 On Ubuntu you can get that by calling 
 
 ```
-sudo apt install lld-9
+sudo apt install lld
 ```
 
 On Windows and OSX you are on your own, I am afraid. I found building it from source was not impossible. Once you have an exe name (and in in Ubuntu 
