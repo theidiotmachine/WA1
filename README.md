@@ -116,7 +116,7 @@ export function bang(x: number): number {
 }
 ```
 
-There are some examples in the `wa1\src\one.wa1` file which contains our one working test!
+There are some examples in the `tests/simple/one.wa1` file which contains our one working test!
 
 ## Features
 
@@ -151,11 +151,11 @@ let a = 9 as number;
 
 ### Linker
 
-If you use the build tools, we generate a WASM object files, which can then be linked with a linker. A very simple example exists in the tests folder. 
+If you use full build mode, we generate WASM object files, which can then be linked with a linker. A very simple example exists in the tests folder. 
 
 #### The linker exe
 
-The linker we use is (wasm-ld)[https://lld.llvm.org/WebAssembly.html], given that is the only working WASM linker. You will need to install it somehow.
+The linker we use is [wasm-ld](https://lld.llvm.org/WebAssembly.html), given that is the only working WASM linker. You will need to install it somehow.
 On Ubuntu you can get that by calling 
 
 ```
