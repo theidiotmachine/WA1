@@ -21,6 +21,19 @@ use crate::wasm::wasm_instructions::{WasmInstr, opcodes};
 use crate::wasm::wasm_serialize::{serialize_i32, serialize_i64, serialize_f32, serialize_f64};
 use crate::wasm::wasm_object_file::{WasmObjectModuleFragment};
 
+#[derive(PartialEq, Copy, Clone)]
+pub enum TranslationUnitType{
+    Simple,
+    LinkedSourceFile,
+    LinkedEntryPoint
+}
+
+#[derive(PartialEq, Copy, Clone)]
+pub enum OutputType{
+    Standalone,
+    StaticLibrary
+}
+
 struct CompilerContext{
     pub mem_layout_map: HashMap<String, UserMemLayout>,
     pub global_var_map: HashMap<String, u32>,
@@ -877,7 +890,8 @@ fn compile_expr(
 
 fn register_func(
     func_decl: &FuncDecl,
-    reloc_mode: RelocationMode,
+    tu_type: TranslationUnitType,
+    output_type: OutputType,
     module_name: &String,
     start_function: &String,
     func_idx: u32,
@@ -887,19 +901,19 @@ fn register_func(
 
     m.func_section.new_func(type_idx);
     //Only register a start function if we are not linking
-    if start_function.eq(&func_decl.name) && reloc_mode == RelocationMode::Simple {
+    if start_function.eq(&func_decl.name) && output_type == OutputType::Standalone {
         m.start_section.set_start(func_idx);
     }
 
     if func_decl.export {
-        if reloc_mode == RelocationMode::StaticEntryPoint || reloc_mode == RelocationMode::StaticObjectFile {
+        if tu_type == TranslationUnitType::LinkedEntryPoint || tu_type == TranslationUnitType::LinkedSourceFile {
             m.export_section.new_func(&format!("{}.{}", module_name, func_decl.name), func_idx);
         } else {
             m.export_section.new_func(&func_decl.name, func_idx);
         }
         match &mut m.object_file_sections {
             Some(wrf) => {
-                if reloc_mode == RelocationMode::StaticObjectFile {
+                if tu_type == TranslationUnitType::LinkedSourceFile {
                     wrf.linking_section.symbol_table.new_local_exported_function(func_idx, &format!("{}.{}", module_name, func_decl.name));
                 } else { //RelocationMode::StaticEntryPoint
                     wrf.linking_section.symbol_table.new_full_exported_function(func_idx, &format!("{}.{}", module_name, func_decl.name));
@@ -912,7 +926,9 @@ fn register_func(
             Some(wrf) => {
                 if start_function.eq(&func_decl.name) {
                     wrf.linking_section.symbol_table.new_start_function(func_idx, &func_decl.name);
-                    wrf.linking_section.init_funcs.new_init_func(func_idx);
+                    if output_type == OutputType::StaticLibrary {
+                        wrf.linking_section.init_funcs.new_init_func(wrf.linking_section.symbol_table.funcs[func_idx as usize]);
+                    }
                 } else {
                     wrf.linking_section.symbol_table.new_local_function(func_idx, &func_decl.name);
                 }
@@ -966,15 +982,16 @@ fn compile_func(
     m.code_section.new_func(WasmFunc{locals, expr});
 }
 
-#[derive(PartialEq, Copy, Clone)]
-pub enum RelocationMode{
-    Simple,
-    StaticObjectFile,
-    StaticEntryPoint
-}
 
-pub fn compile(program: &Program, reloc_mode: RelocationMode, module_name: &String, errors: &mut Vec<Error>) -> WasmModule {
-    let mut m = WasmModule::new(reloc_mode);
+
+pub fn compile(
+    program: &Program, 
+    tu_type: TranslationUnitType, 
+    output_type: OutputType,
+    module_name: &String, 
+    errors: &mut Vec<Error>
+) -> WasmModule {
+    let mut m = WasmModule::new(tu_type);
     let mut global_var_map: HashMap<String, u32> = HashMap::new();
     let mut global_idx: u32 = 0;
 
@@ -1028,7 +1045,7 @@ pub fn compile(program: &Program, reloc_mode: RelocationMode, module_name: &Stri
         match &mut m.object_file_sections {
             Some(wrf) => {
                 if g.export {
-                    if reloc_mode == RelocationMode::StaticObjectFile {
+                    if tu_type == TranslationUnitType::LinkedSourceFile {
                         wrf.linking_section.symbol_table.new_local_exported_global(global_idx, &format!("{}.{}", module_name, g.name));
                     } else {
                         wrf.linking_section.symbol_table.new_full_exported_global(global_idx, &format!("{}.{}", module_name, g.name));
@@ -1052,7 +1069,7 @@ pub fn compile(program: &Program, reloc_mode: RelocationMode, module_name: &Stri
         let module = bits[0];
         let field = bits[1];
         let type_idx = m.type_section.new_func_type(get_wasm_func_type(&func.get_func_type()));
-        if reloc_mode == RelocationMode::Simple {
+        if tu_type == TranslationUnitType::Simple {
             m.import_section.new_func(&module.to_owned(), &field.to_owned(), type_idx);
         } else {
             m.import_section.new_func(&module.to_owned(), &func.name, type_idx);
@@ -1081,7 +1098,7 @@ pub fn compile(program: &Program, reloc_mode: RelocationMode, module_name: &Stri
     }
 
     for func in &program.func_decls {
-        register_func(&func.decl, reloc_mode, module_name, &program.start, func_idx, &mut m);
+        register_func(&func.decl, tu_type, output_type, module_name, &program.start, func_idx, &mut m);
 
         func_map.insert(func.decl.name.clone(), func_idx);
         func_idx += 1;

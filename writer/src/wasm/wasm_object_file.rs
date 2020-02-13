@@ -138,8 +138,8 @@ impl WasmInitFuncs{
         out.append(&mut final_data);
     }
 
-    pub fn new_init_func(&mut self, func_idx: u32) {
-        self.functions.push(func_idx);
+    pub fn new_init_func(&mut self, func_sym_idx: u32) {
+        self.functions.push(func_sym_idx);
     }
 }
 
@@ -215,7 +215,7 @@ impl WasmSymbolTable{
     pub fn new_start_function(&mut self, index: u32, name: &String) {
         self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: 0, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }

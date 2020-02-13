@@ -1,6 +1,6 @@
 use crate::wasm::wasm_sections::*;
 use crate::wasm::wasm_object_file::WasmObjectModuleFragment;
-use crate::transform::RelocationMode;
+use crate::transform::TranslationUnitType;
 
 pub struct WasmModule {
     pub type_section: WasmTypeSection,
@@ -16,7 +16,7 @@ pub struct WasmModule {
 }
 
 impl WasmModule{
-    pub fn new(pic_mode: RelocationMode) -> WasmModule {
+    pub fn new(tu_type: TranslationUnitType) -> WasmModule {
         WasmModule{
             type_section: WasmTypeSection::new(),
             import_section: WasmImportSection::new(),
@@ -27,7 +27,7 @@ impl WasmModule{
             start_section: WasmStartSection::new(),
             code_section: WasmCodeSection::new(),
             data_section: WasmDataSection::new(),
-            object_file_sections: if pic_mode == RelocationMode::Simple { None } else { Some(WasmObjectModuleFragment::new()) },
+            object_file_sections: if tu_type == TranslationUnitType::Simple { None } else { Some(WasmObjectModuleFragment::new()) },
         }
     }
 

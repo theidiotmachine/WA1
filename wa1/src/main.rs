@@ -115,7 +115,7 @@ fn build_simple(matches: &ArgMatches) -> i32 {
     let mut importer = CachingImporter{config_path: PathBuf::new(), src_path: PathBuf::new(), out_path: PathBuf::new()};
     let module_name = output.file_stem().unwrap().to_string_lossy().into_owned();
             
-    compile_if_changed(&output, &PathBuf::from(input), &PathBuf::from(input), is_unsafe, RelocationMode::Simple, &module_name,
+    compile_if_changed(&output, &PathBuf::from(input), &PathBuf::from(input), is_unsafe, TranslationUnitType::Simple, OutputType::Standalone, &module_name,
         &mut importer)
 }
 
@@ -195,10 +195,10 @@ fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, module_name
     }
 }
 
-fn compile_program(program: &Program, reloc_mode: RelocationMode, module_name: &String) -> Option<WasmModule> {
+fn compile_program(program: &Program, tu_type: TranslationUnitType, output_type: OutputType, module_name: &String) -> Option<WasmModule> {
     let mut errs: Vec<Error> = vec![];
 
-    let m = compile(program, reloc_mode, module_name, &mut errs);
+    let m = compile(program, tu_type, output_type, module_name, &mut errs);
 
     if errs.len() > 0 {
         pretty_print_errs(&errs);
@@ -228,7 +228,8 @@ fn compile_if_changed(
     sf_full_path: &PathBuf, 
     sf_name: &PathBuf, 
     is_unsafe: bool, 
-    reloc_mode: RelocationMode, 
+    tu_type: TranslationUnitType, 
+    output_type: OutputType,
     module_name: &String, 
     importer: &mut dyn Importer
 ) -> i32 {
@@ -244,7 +245,7 @@ fn compile_if_changed(
             match o_program {
                 None => 1,
                 Some(program) => {
-                    let o_module = compile_program(&program, reloc_mode, module_name);
+                    let o_module = compile_program(&program, tu_type, output_type, module_name);
                     match o_module {
                         Some(mut module) => write_wasm(of_full_path, &mut module),
                         None => 1
@@ -265,7 +266,7 @@ fn compile_if_changed(
                         match o_program {
                             None => 1,
                             Some(program) => {
-                                let o_module = compile_program(&program, reloc_mode, module_name);
+                                let o_module = compile_program(&program, tu_type, output_type, module_name);
                                 match o_module {
                                     Some(mut module) => write_wasm(of_full_path, &mut module),
                                     None => 1
@@ -289,6 +290,7 @@ fn build(matches: &ArgMatches) -> i32 {
     let config = matches.value_of("CONFIG").unwrap();
     let config_contents = fs::read_to_string(config).expect(format!("Couldn't read {}", config).as_str());
     let r_build_config: Result<BuildConfig, serde_json::Error> = serde_json::from_str(&config_contents);    
+    let output_type: OutputType = OutputType::Standalone;
     match r_build_config {
         Err(e) => {
             println!("ERROR: Failed to parse {}, because {}", config, e);
@@ -343,7 +345,9 @@ fn build(matches: &ArgMatches) -> i32 {
                 let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(sf.file_name.clone());
                 of_full_path.set_extension("wasm");
                 let module_name = sf.file_name.file_stem().unwrap().to_string_lossy().into_owned();
-                let this_out = compile_if_changed(&of_full_path, &sf_full_path, &sf.file_name, sf.is_unsafe, RelocationMode::StaticObjectFile, &module_name, &mut importer);
+                let this_out = compile_if_changed(
+                    &of_full_path, &sf_full_path, &sf.file_name, sf.is_unsafe, TranslationUnitType::LinkedSourceFile, output_type, &module_name, &mut importer
+                );
                 if this_out != 0 {
                     out = this_out;
                 }
@@ -354,7 +358,7 @@ fn build(matches: &ArgMatches) -> i32 {
             let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.entry_point.file_name.clone());
             of_full_path.set_extension("wasm");
             let this_out = compile_if_changed(&of_full_path, &epf_full_path, &build_config.entry_point.file_name, build_config.entry_point.is_unsafe, 
-                RelocationMode::StaticEntryPoint, &build_config.module_name, &mut importer);
+                TranslationUnitType::LinkedEntryPoint, output_type, &build_config.module_name, &mut importer);
             if this_out != 0 {
                 out = this_out;
             }
@@ -362,7 +366,17 @@ fn build(matches: &ArgMatches) -> i32 {
             if out == 0 {
                 //let's link!
                 let mut args: Vec<String> = vec![];
-                args.push(String::from("--no-entry"));
+                match output_type{
+                    OutputType::StaticLibrary => {
+                        args.push(String::from("--no-entry"));
+                        args.push(String::from("--relocatable"));
+                    },
+                    OutputType::Standalone => {
+                        args.push(String::from("--entry"));
+                        args.push(format!("_start_{}", build_config.module_name));
+                    }
+                } 
+                
                 //args.push(String::from("--verbose"));
                 
                 let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.module_name.clone());

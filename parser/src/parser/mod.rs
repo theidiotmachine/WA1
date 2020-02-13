@@ -347,7 +347,7 @@ impl<'b> Parser<'b> {
         file_name: &String,
     ) -> Result<Program, Vec<Error>> {
         let mut parser_context = ParserContext::new(is_unsafe, file_name);
-        let mut start_func_name = String::from("_start");
+        let mut start_func_name = String::from("_start_");
         start_func_name.push_str(module_name);
         self.parse_internal(&start_func_name, &mut parser_context, importer);
         if parser_context.errors.is_empty() {
