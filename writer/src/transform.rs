@@ -805,18 +805,18 @@ fn compile_expr(
                     };
 
                     let data_section_entry = wasm_module.data_section.allocate_new_data_section_entry(stml.size, stml.alignment);
-                    let addr = data_section_entry.addr as i32;
+                    let addr = data_section_entry.addr;
 
                     //now set each member
                     for ole in oles {
                         //sets are, irritatingly, the address, the value, and then the instruction
-                        wasm_expr.data.push(WasmInstr::I32Const(addr));
+                        wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
                         compile_expr(&ole.value, context, local_var_map, true, wasm_module, wasm_expr, errors);
                         compile_struct_member_set(&struct_name, &ole.name, context, wasm_expr);
                     }
 
                     //now leave the return value, which is the pointer to the newly created thing
-                    wasm_expr.data.push(WasmInstr::I32Const(addr));
+                    wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
                 },
                 _ => unreachable!(),
             }
@@ -830,19 +830,19 @@ fn compile_expr(
                     let full_size = elem_size * exprs.len() as u32;
 
                     let data_section_entry = wasm_module.data_section.allocate_new_data_section_entry(full_size, elem_size);
-                    let addr = data_section_entry.addr as i32;
+                    let addr = data_section_entry.addr;
 
                     let mut idx = 0;
                     for expr in exprs {
                         //sets are, irritatingly, the address, the value, and then the instruction
-                        wasm_expr.data.push(WasmInstr::I32Const(addr));
+                        wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
                         compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
                         compile_array_member_set(&elem_value_type, elem_size, idx, wasm_expr);
                         idx += 1;
                     }
 
                     //now leave the return value, which is the pointer to the newly created thing
-                    wasm_expr.data.push(WasmInstr::I32Const(addr));
+                    wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
                 },
                 _ => unreachable!(),
             }

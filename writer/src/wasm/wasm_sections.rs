@@ -291,7 +291,7 @@ impl WasmCodeSection{
 
         for f in &self.funcs {
             let offset = final_data.len() as u32;
-            let mut this_reloc_entries = f.serialize_reloc(offset, &mut final_data);
+            let mut this_reloc_entries = f.serialize_reloc(reloc, offset, &mut final_data);
             reloc.code_reloc_section.entries.append(&mut this_reloc_entries);
         }
 
@@ -352,28 +352,34 @@ impl WasmDataSection{
     pub fn serialize(&mut self, out: &mut Vec<u8>) {
         out.push(11);
 
-        //memidx and vec len, 1 byte each
-        let mut section_sz: u32 = 2; 
+        //memidx and vec len, 1 byte each, 5 bytes for the data vec len
+        let mut section_sz: u32 = 7; 
 
         let mut e = WasmExpr::new();
         e.push(WasmInstr::I32Const(0));
         let mut expr_data: Vec<u8> = vec![];
         e.serialize(&mut expr_data);
+
         section_sz += expr_data.len() as u32;
         section_sz += self.size;
 
         serialize_u32(section_sz, out);
         //1 data element
         out.push(1);
+
         //from mem index 0
         out.push(0);
-        //init expr
+        //location expr
         out.append(&mut expr_data);
         //data itself
-        e.serialize(out);
+        serialize_u32_pad(self.size, out);
         for e in &self.entries {
             out.append(& mut e.data.clone());
         }
+    }
+
+    pub fn register_data_symbol(&self, reloc: &mut WasmObjectModuleFragment) {
+        reloc.linking_section.symbol_table.new_data(&String::from(".data"), 0, 0, self.size);
     }
 
     pub fn is_empty(&self) -> bool {

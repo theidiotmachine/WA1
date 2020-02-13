@@ -2062,7 +2062,7 @@ impl<'b> Parser<'b> {
                         let o_l_value = lhs.as_l_value();
                         match o_l_value {
                             None => {
-                                parser_context.errors.push(Error::NotAnLValue);
+                                parser_context.errors.push(Error::NotAnLValue(loc));
                                 lhs.clone()
                             },
                             Some(l_value) => {

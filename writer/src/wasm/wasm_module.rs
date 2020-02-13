@@ -34,29 +34,48 @@ impl WasmModule{
     pub fn serialize(&mut self, out: &mut Vec<u8>) {
         let mut dumb = vec![0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00];
         out.append(&mut dumb);
+        
         let mut code_section_index = 1;
         self.type_section.serialize(out);
+
         if !self.import_section.is_empty() {
             self.import_section.serialize(out);
             code_section_index += 1;
         }
+
         self.func_section.serialize(out);
         code_section_index += 1;
+
         if !self.data_section.is_empty() {
             self.mem_section.serialize(out);
             code_section_index += 1;
         }
+
         if !self.global_section.is_empty() {
             self.global_section.serialize(out);
             code_section_index += 1;
         }
+
         if !self.export_section.is_empty() {
             self.export_section.serialize(out);
             code_section_index += 1;
         }
+
         if !self.start_section.is_empty() {
             self.start_section.serialize(out);
             code_section_index += 1;
+        }
+
+        if !self.data_section.is_empty() {
+            //this is irritating. We need the symbol table finished before we go into the code 
+            // serialization, so we take time out of our busy schedule to register a data 
+            // symbol, oh data did you not think to be more considerate
+            match &mut self.object_file_sections {
+                None => {},
+                Some(reloc) => {
+                    self.data_section.register_data_symbol(reloc);
+                }
+            }
         }
 
         match &mut self.object_file_sections {
@@ -67,9 +86,11 @@ impl WasmModule{
                 self.code_section.serialize_reloc(reloc, out);
             }
         }
+
         if !self.data_section.is_empty() {
             self.data_section.serialize(out);
         }
+
         match &self.object_file_sections {
             None => {},
             Some(reloc) => {

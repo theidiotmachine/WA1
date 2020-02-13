@@ -6,7 +6,7 @@
 
 use crate::wasm::{WasmResultType};
 use crate::wasm::wasm_serialize::{serialize_u32, serialize_i32, serialize_i64, serialize_f32, serialize_f64, serialize_u32_pad};
-use crate::wasm::wasm_object_file::{WasmRelocationEntry};
+use crate::wasm::wasm_object_file::{WasmRelocationEntry, WasmObjectModuleFragment};
 
 /// Instruction.
 #[derive(Clone, Debug, PartialEq)]
@@ -66,6 +66,7 @@ pub enum WasmInstr {
 	GrowMemory(u8),
 
 	I32Const(i32),
+	U32ConstStaticMemAddr(u32),
 	I64Const(i64),
 	F32Const(f32),
 	F64Const(f64),
@@ -491,24 +492,38 @@ macro_rules! op {
 const MAGIC_RELOC_OFFSET: u32 = 6;
 
 impl WasmInstr {
-	pub fn serialize_reloc(&self, reloc_entries: &mut Vec<WasmRelocationEntry>, writer: &mut Vec<u8>) {
+	pub fn serialize_reloc(&self, reloc: &WasmObjectModuleFragment, reloc_entries: &mut Vec<WasmRelocationEntry>, writer: &mut Vec<u8>) {
 		match self {
 			WasmInstr::Call(index) => {
-				reloc_entries.push(WasmRelocationEntry::new_call(writer.len() as u32 + MAGIC_RELOC_OFFSET, *index));
+				reloc_entries.push(WasmRelocationEntry::new_call(writer.len() as u32 + MAGIC_RELOC_OFFSET, 
+					reloc.linking_section.symbol_table.funcs[*index as usize]
+				));
 				op!(writer, opcodes::CALL, {
 					serialize_u32_pad(*index, writer);
 				});
 			},
 			WasmInstr::GetGlobal(index) => {
-				reloc_entries.push(WasmRelocationEntry::new_global_use(writer.len() as u32 + MAGIC_RELOC_OFFSET, *index));
+				reloc_entries.push(WasmRelocationEntry::new_global_use(writer.len() as u32 + MAGIC_RELOC_OFFSET, 
+					reloc.linking_section.symbol_table.globals[*index as usize]
+				));
 				op!(writer, opcodes::GETGLOBAL, {
 					serialize_u32_pad(*index, writer);
 				});
 			},
 			WasmInstr::SetGlobal(index) => {
-				reloc_entries.push(WasmRelocationEntry::new_global_use(writer.len() as u32 + MAGIC_RELOC_OFFSET, *index));
+				reloc_entries.push(WasmRelocationEntry::new_global_use(writer.len() as u32 + MAGIC_RELOC_OFFSET, 
+					reloc.linking_section.symbol_table.globals[*index as usize]
+				));
 				op!(writer, opcodes::SETGLOBAL, {
 					serialize_u32_pad(*index, writer);
+				})
+			},
+			WasmInstr::U32ConstStaticMemAddr(def) => {
+				reloc_entries.push(WasmRelocationEntry::new_static_mem_const(writer.len() as u32 + MAGIC_RELOC_OFFSET, 
+					reloc.linking_section.symbol_table.data[0]
+				));
+				op!(writer, opcodes::I32CONST, {
+					serialize_u32_pad(*def, writer);
 				})
 			},
 			_ => self.serialize(writer),
@@ -670,6 +685,9 @@ impl WasmInstr {
 			}),
 			I32Const(def) => op!(writer, I32CONST, {
 				serialize_i32(*def, writer);
+			}),
+			U32ConstStaticMemAddr(def) => op!(writer, I32CONST, {
+				serialize_u32(*def, writer);
 			}),
 			I64Const(def) => op!(writer, I64CONST, {
 				serialize_i64(*def, writer);
