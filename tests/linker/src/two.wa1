@@ -1,5 +1,0 @@
-import {*} from "./one"
-
-export function hello(x: number, y: number): number {
-    one.add(x, y);
-}

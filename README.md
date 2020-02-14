@@ -35,9 +35,11 @@ To run, call
 cargo run --bin test-runner -- tests/simple/out.wasm -f 'fourTimes(8);'
 ```
 
+This will run the init function (always called `__wasm_call_ctors` for compatibility with existing WASM conventions) and then the entry point you give it.
+
 ### Webpage
 
-One way is to use a webpage that looks something like this
+One way is to use a webpage that looks something like this:
 
 ```html
 <html>
@@ -48,6 +50,7 @@ One way is to use a webpage that looks something like this
     ).then(bytes =>
       WebAssembly.instantiate(bytes, {imports: {}})
     ).then(results => {
+      results.instance.exports.__wasm_call_ctors();
       window.addd = results.instance.exports.addd; //or whatever is exported from the file
     });
   </script>
@@ -61,7 +64,8 @@ Serve it with http-server; install that with
 npm install -g http-server
 ```
 
-and manually call in your browser in the debugger by typing the function name (called `addd` out of the box).
+and manually call in your browser in the debugger by typing the function name (called `addd` out of the box). Note that you have to call 
+`__wasm_call_ctors` manually. We don't use start functions, because the wasm linker tools [warn agains it](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md#start-section).
 
 # The language
 
@@ -70,7 +74,7 @@ the last value of a block is its return value, and you can compose expressions f
 
 Because we are not monsters, classic control flow also works, so you can still use `return` if you want.
 
-So, a simple function is written like this. In simple mode, use the export keyword to make it visible outside web assembly.
+So, a simple function is written like this. In simple build mode, use the export keyword to make it visible outside web assembly.
 
 ```
 export function mul(x: number, y: number): number {
@@ -116,7 +120,7 @@ export function bang(x: number): number {
 }
 ```
 
-There are some examples in the `tests/simple/one.wa1` file which contains our one working test!
+There are some examples in the `tests/simple/one.wa1` file which contains our original test!
 
 ## Features
 
@@ -144,14 +148,14 @@ let a = 9 as number;
 
 ### Control
 
-* Function creation - all arguments and return value must be typed.
+* Declare a function with `function`. The arguments and return value must be typed.
 * Function calling.
 * Local and global variables - type inference works here.
-* if, else, while, continue, break, return.
+* `if`, `else`, `while`, `continue`, `break`, `return`.
 
 ### Linker
 
-If you use full build mode, we generate [WASM object files](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md), which, 
+Instead of using the simple build mode described above, you may use a full build mode. For this we generate [WASM object files](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md), which, 
 because they are a standard, can then be linked with an external linker. A very simple example exists in the tests folder. 
 
 #### The linker exe
@@ -164,7 +168,7 @@ sudo apt install lld
 ```
 
 On Windows and OSX you are on your own, I am afraid. I found building it from source was not impossible. Once you have an exe name (and in in Ubuntu 
-it is wasm-ld-9, surprisingly) you need to edit the build-wsb.json file you are building to point to the right location. Yes, I know. This should get better
+it is `wasm-ld-9`, surprisingly) you need to edit the `build-wsb.json `file you are building to point to the right location. Yes, I know. This should get better
 as either the LLVM WASM toolchain matures, or I get fed up and write a compatible linker.
 
 #### Using it
@@ -193,12 +197,12 @@ here it is.
     "src_path": "./src",
     "out_path": "./out",
     "module_name": "linker",
-    "wasm_exe": "wasm-ld-9
+    "wasm_exe": "wasm-ld-9'
 }
 ```
 
-The 'entry_point' is the place where we do the module exports. So anything exported in there will be exported to the final wasm.
-Anything exported from the 'source_files' will be visible to other files, but not outside the module.
+The `entry_point` is the place where we do the module exports. So anything exported in there will be exported to the final wasm.
+Anything exported from the `source_files` will be visible to other files, but not outside the module.
 
 The only working import syntax is 
 
@@ -206,7 +210,7 @@ The only working import syntax is
 import {*} from "./one"
 ```
 
-where the '*' means to import everything. Once you import a function 'f' from './m' it will appear as 'm.f'. That means 
+where the `*` means to import everything. Once you import a function `f` from `./m` it will appear as `m.f`. That means 
 to test the example you would run
 
 ```
@@ -215,20 +219,20 @@ cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 
 
 ### Unsafe mode
 
+Unsafe mode is designed to be a mode that library writers can write low-level code. It feels like C in that it is 
+not much more than structured WASM. In order to use it you need to somehow pass the unsafe arg to the compiler.
+
 * `__ptr` type - not yet finished
-* `__size_t` type - pretty much the same as a `__ptr`, but makes some bit work a bit type safer
+* `__size_t` type - pretty much the same as a `__ptr`, but makes some things a bit type safer
 * intrinsics - wrap low level wasm calls
     * `__memorySize()` - `memory.size` instruction
     * `__memoryGrow(0, numPages)` - `memory.grow` instruction
     * `__trap()` - `unreachable` instruction
-* `__struct` type - works but you need either the super secret `malloc` function for them to be useful, or cast from a `__ptr` (this is unsafe. The clue
-    is in the name...). 
-    You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to create 
-    (this last uses malloc). A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
-
-### Under construction 
-
-* Linker - memory next
+* `__struct` type - works but you need either the super secret `malloc` function for them to be useful 
+    (which doesn't exist, so good luck with that), cast from a `__ptr` (this is unsafe. The clue
+    is in the name...), or use `__static` (which does actually work and is a C-style static allocation). 
+    You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to dynamically allocate (which uses malloc), 
+    or `__static Hello {a: 3}`. A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
 
 ## TODO
 
@@ -327,12 +331,9 @@ cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 
     1. [ ] A stage 1 parser that will generate a list of file exports - globals, functions, types
     1. [ ] A file format for that
     1. [x] When import commands are run, load that, pull the imports in
+    1. [ ] Functions to be inlined
 1. Linker
     1. [x] object file format that contains
-        1. [ ] WASM or an AST
-            1. [ ] where the WASM is in PIC format - that is, static memory loads from a func that I can then patch
-        1. [ ] A dupe of the export format?
-        1. [ ] AST/WASM fragments to be inlined
     1. [x] use wasm-ld
 1. tool chain
     1. [ ] npm 

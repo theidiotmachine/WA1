@@ -22,7 +22,7 @@ mod parser_phase_1;
 use crate::ParserContext;
 use crate::ParserFuncContext;
 use crate::Res;
-use crate::{assert_punct, assert_ok,assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_string_literal, expect_keyword};
+use crate::{assert_punct, assert_ok,assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_string_literal, expect_keyword, StartFuncType};
 use crate::try_create_cast;
 use crate::create_cast;
 use crate::Commitment;
@@ -277,6 +277,7 @@ impl<'a> Parser<'a> {
     }
 }
 
+
 impl<'b> Parser<'b> {
     fn _new(
         scanner: Scanner<'b>,
@@ -300,10 +301,11 @@ impl<'b> Parser<'b> {
         Ok(ret)
     }
 
-    /// consume a parser context, populate it
+    /// Consume a parser context, populate it.
     fn parse_internal(
         &mut self, 
         start_func_name: &String,
+        start_func_type: StartFuncType,
         parser_context: &mut ParserContext,
         importer: &mut dyn Importer,
     ) {
@@ -321,7 +323,7 @@ impl<'b> Parser<'b> {
 
         let start_function = Func{ 
             decl: FuncDecl{
-                name: start_func_name.clone(), return_type: Type::RealVoid, args: vec![], export: false,
+                name: start_func_name.clone(), return_type: Type::RealVoid, args: vec![], export: start_func_type == StartFuncType::WASMCallCtors,
             },
             body: Some(TypedExpr{
                 expr: Expr::Block(init_body),
@@ -344,14 +346,18 @@ impl<'b> Parser<'b> {
         is_unsafe: bool,
         importer: &mut dyn Importer,
         module_name: &String,
+        start_func_type: StartFuncType,
         file_name: &String,
-    ) -> Result<Program, Vec<Error>> {
+    ) -> Result<AST, Vec<Error>> {
         let mut parser_context = ParserContext::new(is_unsafe, file_name);
-        let mut start_func_name = String::from("_start_");
-        start_func_name.push_str(module_name);
-        self.parse_internal(&start_func_name, &mut parser_context, importer);
+        
+        let start_func_name = match start_func_type{
+            StartFuncType::WASMCallCtors => String::from("__wasm_call_ctors"),
+            StartFuncType::Start => format!("_start_{}", module_name)
+        };
+        self.parse_internal(&start_func_name, start_func_type, &mut parser_context, importer);
         if parser_context.errors.is_empty() {
-            Ok(Program{start: start_func_name, global_decls: parser_context.global_decls, global_imports: parser_context.global_imports,
+            Ok(AST{start: start_func_name, global_decls: parser_context.global_decls, global_imports: parser_context.global_imports,
                 func_decls: parser_context.func_decls, func_imports: parser_context.func_imports, type_map: parser_context.type_map
             })
         } else {
@@ -2202,7 +2208,7 @@ mod test {
         }";
 
         let mut parser = Parser::new(add).unwrap();
-        let script = parser.parse_full(false, & mut DummyImporter{}, &String::from(""), &String::from("")).unwrap();
+        let script = parser.parse_full(false, & mut DummyImporter{}, &String::from(""), StartFuncType::Start, &String::from("")).unwrap();
         println!("{:#?}", script);
     }
 }

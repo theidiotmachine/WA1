@@ -2,6 +2,8 @@ use crate::wasm::wasm_sections::*;
 use crate::wasm::wasm_object_file::WasmObjectModuleFragment;
 use crate::transform::TranslationUnitType;
 
+/// IR type that represents a wasm module. Serialization of this type
+/// will produce a wasm binary.
 pub struct WasmModule {
     pub type_section: WasmTypeSection,
     pub import_section: WasmImportSection,

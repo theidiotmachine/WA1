@@ -901,9 +901,9 @@ fn register_func(
 
     m.func_section.new_func(type_idx);
     //Only register a start function if we are not linking
-    if start_function.eq(&func_decl.name) && output_type == OutputType::Standalone {
-        m.start_section.set_start(func_idx);
-    }
+    //if start_function.eq(&func_decl.name) && output_type == OutputType::Standalone {
+        //m.start_section.set_start(func_idx);
+    //}
 
     if func_decl.export {
         if tu_type == TranslationUnitType::LinkedEntryPoint || tu_type == TranslationUnitType::LinkedSourceFile {
@@ -926,7 +926,7 @@ fn register_func(
             Some(wrf) => {
                 if start_function.eq(&func_decl.name) {
                     wrf.linking_section.symbol_table.new_start_function(func_idx, &func_decl.name);
-                    if output_type == OutputType::StaticLibrary {
+                    if output_type == OutputType::Standalone {
                         wrf.linking_section.init_funcs.new_init_func(wrf.linking_section.symbol_table.funcs[func_idx as usize]);
                     }
                 } else {
@@ -982,10 +982,9 @@ fn compile_func(
     m.code_section.new_func(WasmFunc{locals, expr});
 }
 
-
-
+/// Compile an AST to a Wasm Module IR type.
 pub fn compile(
-    program: &Program, 
+    ast: &AST, 
     tu_type: TranslationUnitType, 
     output_type: OutputType,
     module_name: &String, 
@@ -995,7 +994,7 @@ pub fn compile(
     let mut global_var_map: HashMap<String, u32> = HashMap::new();
     let mut global_idx: u32 = 0;
 
-    for g in &program.global_imports {
+    for g in &ast.global_imports {
         let bits: Vec<&str> = g.name.as_str().split(".").collect();
         let module = bits[0];
         let field = bits[1];
@@ -1015,7 +1014,7 @@ pub fn compile(
         global_idx += 1;
     }
 
-    for g in &program.global_decls {
+    for g in &ast.global_decls {
         let wt = get_wasm_value_type(&g.r#type);
 
         let mut init_expr = vec![];
@@ -1064,7 +1063,7 @@ pub fn compile(
     let mut func_map: HashMap<String, u32> = HashMap::new();
     let mut func_idx: u32 = 0;
 
-    for func in &program.func_imports {
+    for func in &ast.func_imports {
         let bits: Vec<&str> = func.name.as_str().split(".").collect();
         let module = bits[0];
         let field = bits[1];
@@ -1097,20 +1096,20 @@ pub fn compile(
         func_idx += 1;
     }
 
-    for func in &program.func_decls {
-        register_func(&func.decl, tu_type, output_type, module_name, &program.start, func_idx, &mut m);
+    for func in &ast.func_decls {
+        register_func(&func.decl, tu_type, output_type, module_name, &ast.start, func_idx, &mut m);
 
         func_map.insert(func.decl.name.clone(), func_idx);
         func_idx += 1;
     }
 
     let context = CompilerContext{
-        mem_layout_map: generate_mem_layout_map(&program.type_map),
+        mem_layout_map: generate_mem_layout_map(&ast.type_map),
         func_map: func_map.clone(),
         global_var_map: global_var_map.clone(),
     };
 
-    for func in &program.func_decls {
+    for func in &ast.func_decls {
         compile_func(func, &context, &mut m, errors);
     }
 

@@ -15,7 +15,7 @@ pub mod prelude {
     pub use super::expr::prelude::*;
     pub use super::intrinsic::prelude::*;
     pub use super::ast_types::prelude::*;
-    pub use super::Program;
+    pub use super::AST;
     pub use super::Exports;
     pub use super::Imports;
 }
@@ -25,7 +25,7 @@ extern crate lazy_static;
 
 /// The AST of a fully parsed program. 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
-pub struct Program {
+pub struct AST {
     ///global variables declared in this program
     pub global_decls: Vec<GlobalVariableDecl>,
 

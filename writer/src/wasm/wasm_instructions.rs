@@ -520,7 +520,7 @@ impl WasmInstr {
 			},
 			WasmInstr::U32ConstStaticMemAddr(def) => {
 				reloc_entries.push(WasmRelocationEntry::new_static_mem_const(writer.len() as u32 + MAGIC_RELOC_OFFSET, 
-					reloc.linking_section.symbol_table.data[0]
+					reloc.linking_section.symbol_table.data[0], *def
 				));
 				op!(writer, opcodes::I32CONST, {
 					serialize_u32_pad(*def, writer);

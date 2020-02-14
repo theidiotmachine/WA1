@@ -215,7 +215,7 @@ impl WasmSymbolTable{
     pub fn new_start_function(&mut self, index: u32, name: &String) {
         self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: WASM_SYM_VISIBILITY_HIDDEN, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
@@ -388,8 +388,8 @@ impl WasmRelocationEntry{
         WasmRelocationEntry{relocation_type: WasmRelocationType::R_WASM_GLOBAL_INDEX_LEB, offset: offset, index: index, addend: 0}
     }
 
-    pub fn new_static_mem_const(offset: u32, index: u32) -> WasmRelocationEntry {
-        WasmRelocationEntry{relocation_type: WasmRelocationType::R_WASM_MEMORY_ADDR_SLEB, offset: offset, index: index, addend: 0}
+    pub fn new_static_mem_const(offset: u32, index: u32, addend: u32) -> WasmRelocationEntry {
+        WasmRelocationEntry{relocation_type: WasmRelocationType::R_WASM_MEMORY_ADDR_SLEB, offset: offset, index: index, addend: addend}
     }
 
     pub fn serialize(&self, out: &mut Vec<u8>){
