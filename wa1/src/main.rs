@@ -3,7 +3,7 @@ use clap::{Arg, App, SubCommand, ArgMatches};
 use std::{fs};
 use std::path::{PathBuf, Component};
 use std::process::Command;
-use ast::{Exports, Program, Imports};
+use ast::{Exports, AST, Imports};
 
 extern crate parser;
 use parser::*;
@@ -115,8 +115,9 @@ fn build_simple(matches: &ArgMatches) -> i32 {
     let mut importer = CachingImporter{config_path: PathBuf::new(), src_path: PathBuf::new(), out_path: PathBuf::new()};
     let module_name = output.file_stem().unwrap().to_string_lossy().into_owned();
             
-    compile_if_changed(&output, &PathBuf::from(input), &PathBuf::from(input), is_unsafe, RelocationMode::Simple, &module_name,
-        &mut importer)
+    compile_if_changed(&output, &PathBuf::from(input), &PathBuf::from(input), is_unsafe, TranslationUnitType::Simple, OutputType::Standalone, &module_name,
+        StartFuncType::WASMCallCtors, &mut importer
+    )
 }
 
 fn parse_exports(input: &PathBuf, is_unsafe: bool) -> Option<Exports> {
@@ -170,12 +171,12 @@ fn read_exports(exports_file: &PathBuf) -> Result<Exports, String> {
 }
 
 
-fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, module_name: &String, importer: &mut dyn Importer) -> Option<Program> {
+fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, module_name: &String, start_func_type: StartFuncType,importer: &mut dyn Importer) -> Option<AST> {
     let r_input_contents = fs::read_to_string(sf_full_path.clone());
     match r_input_contents {
         Ok(input_contents) => {
             let mut parser = Parser::new(input_contents.as_str()).unwrap();
-            let o_script = parser.parse_full(is_unsafe, importer, module_name, &(sf_name.to_string_lossy().to_string()));
+            let o_script = parser.parse_full(is_unsafe, importer, module_name, start_func_type, &(sf_name.to_string_lossy().to_string()));
             match o_script {
                 Err(errs) => {
                     println!("Parse failed.");
@@ -195,10 +196,10 @@ fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, module_name
     }
 }
 
-fn compile_program(program: &Program, reloc_mode: RelocationMode, module_name: &String) -> Option<WasmModule> {
+fn compile_ast(ast: &AST, tu_type: TranslationUnitType, output_type: OutputType, module_name: &String) -> Option<WasmModule> {
     let mut errs: Vec<Error> = vec![];
 
-    let m = compile(program, reloc_mode, module_name, &mut errs);
+    let m = compile(ast, tu_type, output_type, module_name, &mut errs);
 
     if errs.len() > 0 {
         pretty_print_errs(&errs);
@@ -228,8 +229,10 @@ fn compile_if_changed(
     sf_full_path: &PathBuf, 
     sf_name: &PathBuf, 
     is_unsafe: bool, 
-    reloc_mode: RelocationMode, 
+    tu_type: TranslationUnitType, 
+    output_type: OutputType,
     module_name: &String, 
+    start_func_type: StartFuncType,
     importer: &mut dyn Importer
 ) -> i32 {
     let of_full_path_string = of_full_path.to_string_lossy();
@@ -240,11 +243,11 @@ fn compile_if_changed(
     let r_output_metadata = of_full_path.metadata();
     match r_output_metadata {
         Err(_) => {
-            let o_program = parse(sf_full_path, sf_name, is_unsafe, module_name, importer);
-            match o_program {
+            let o_ast = parse(sf_full_path, sf_name, is_unsafe, module_name, start_func_type, importer);
+            match o_ast {
                 None => 1,
-                Some(program) => {
-                    let o_module = compile_program(&program, reloc_mode, module_name);
+                Some(ast) => {
+                    let o_module = compile_ast(&ast, tu_type, output_type, module_name);
                     match o_module {
                         Some(mut module) => write_wasm(of_full_path, &mut module),
                         None => 1
@@ -261,11 +264,11 @@ fn compile_if_changed(
                 },
                 Ok(input_metadata) => {
                     if input_metadata.modified().unwrap() > output_metadata.modified().unwrap() {
-                        let o_program = parse(sf_full_path, sf_name, is_unsafe, module_name, importer);
+                        let o_program = parse(sf_full_path, sf_name, is_unsafe, module_name, start_func_type, importer);
                         match o_program {
                             None => 1,
                             Some(program) => {
-                                let o_module = compile_program(&program, reloc_mode, module_name);
+                                let o_module = compile_ast(&program, tu_type, output_type, module_name);
                                 match o_module {
                                     Some(mut module) => write_wasm(of_full_path, &mut module),
                                     None => 1
@@ -289,6 +292,7 @@ fn build(matches: &ArgMatches) -> i32 {
     let config = matches.value_of("CONFIG").unwrap();
     let config_contents = fs::read_to_string(config).expect(format!("Couldn't read {}", config).as_str());
     let r_build_config: Result<BuildConfig, serde_json::Error> = serde_json::from_str(&config_contents);    
+    let output_type: OutputType = OutputType::Standalone;
     match r_build_config {
         Err(e) => {
             println!("ERROR: Failed to parse {}, because {}", config, e);
@@ -343,7 +347,10 @@ fn build(matches: &ArgMatches) -> i32 {
                 let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(sf.file_name.clone());
                 of_full_path.set_extension("wasm");
                 let module_name = sf.file_name.file_stem().unwrap().to_string_lossy().into_owned();
-                let this_out = compile_if_changed(&of_full_path, &sf_full_path, &sf.file_name, sf.is_unsafe, RelocationMode::StaticObjectFile, &module_name, &mut importer);
+                let this_out = compile_if_changed(
+                    &of_full_path, &sf_full_path, &sf.file_name, sf.is_unsafe, TranslationUnitType::LinkedSourceFile, output_type, &module_name, 
+                    StartFuncType::Start, &mut importer
+                );
                 if this_out != 0 {
                     out = this_out;
                 }
@@ -353,8 +360,10 @@ fn build(matches: &ArgMatches) -> i32 {
             let epf_full_path = config_path.clone().join(build_config.src_path.clone()).join(build_config.entry_point.file_name.clone());
             let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.entry_point.file_name.clone());
             of_full_path.set_extension("wasm");
-            let this_out = compile_if_changed(&of_full_path, &epf_full_path, &build_config.entry_point.file_name, build_config.entry_point.is_unsafe, 
-                RelocationMode::StaticEntryPoint, &build_config.module_name, &mut importer);
+            let this_out = compile_if_changed(
+                &of_full_path, &epf_full_path, &build_config.entry_point.file_name, build_config.entry_point.is_unsafe, 
+                TranslationUnitType::LinkedEntryPoint, output_type, &build_config.module_name, StartFuncType::Start, &mut importer
+            );
             if this_out != 0 {
                 out = this_out;
             }
@@ -362,8 +371,19 @@ fn build(matches: &ArgMatches) -> i32 {
             if out == 0 {
                 //let's link!
                 let mut args: Vec<String> = vec![];
-                args.push(String::from("--no-entry"));
-                //args.push(String::from("--verbose"));
+                match output_type{
+                    OutputType::StaticLibrary => {
+                        args.push(String::from("--no-entry"));
+                        args.push(String::from("--relocatable"));
+                    },
+                    OutputType::Standalone => {
+                        args.push(String::from("--export=__wasm_call_ctors"));
+                        args.push(String::from("--entry"));
+                        args.push(String::from("__wasm_call_ctors"));
+                    }
+                } 
+                
+                args.push(String::from("--verbose"));
                 
                 let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.module_name.clone());
                 of_full_path.set_extension("wasm");

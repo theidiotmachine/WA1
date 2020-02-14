@@ -2,7 +2,7 @@ mod parser;
 pub use parser::Parser;
 
 pub mod prelude {
-    pub use super::Parser;
+    pub use super::{Parser, StartFuncType};
 }
 
 use types::prelude::*;
@@ -10,6 +10,15 @@ use std::collections::HashMap;
 use ast::prelude::*;
 pub use errs::Error;
 use ast::Imports;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StartFuncType{
+    ///The internal module start func
+    Start,
+    ///A full blown external start func
+    WASMCallCtors
+}
+
 
 /// assert that something from an inner call was ok. Usage `let sthing = self.parse_sthing(); assert_ok!(sthing);`
 #[macro_export]
@@ -197,6 +206,7 @@ pub trait Importer{
     fn import(&mut self, import_path_name: &String, from_path_name: &String) -> Result<Imports, String>;
 }
 
+/// Running state of the parser. Used to collect the AST as we build it.
 #[derive(Debug)]
 struct ParserContext {
     pub global_decls: Vec<GlobalVariableDecl>,

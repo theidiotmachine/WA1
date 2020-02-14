@@ -79,6 +79,11 @@ function asTest(): void {
     //const d: int = b;
 }
 
+const g = 5;
+function globalTest(): void {
+    assert(g == 5);
+}
+
 export function testSuite(): int {
     assert(idNumber(3) == 3);
     assert(idNumber(-3.0) == -3);
@@ -88,5 +93,6 @@ export function testSuite(): int {
     assert(fourTimes(3) == 12);
     structTest();
     intTest();
+    globalTest();
     1;
 }

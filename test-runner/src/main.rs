@@ -60,6 +60,16 @@ fn main() {
         }
     }
     
+    println!("** running ctor **");
+    let o_ctor_func = instance.find_export_by_name("__wasm_call_ctors");
+    match o_ctor_func {
+        Some(ctor_func) => {
+            let f = ctor_func.func().expect("__wasm_call_ctors must be a function");
+            f.borrow().call(&vec![]).expect("success");
+        },
+        _ => {}
+    }
+
     println!("** {} **", name.as_str());
     let func = instance.find_export_by_name(name.as_str()).expect("answer").func().expect("function");
     let mut args_to_pass: Vec<Val> = vec![];
@@ -77,18 +87,7 @@ fn main() {
             _ => println!("Unknown answer"),
         }
     } else {
-        println!("No answer");
+        println!("Answer void");
     }
-                
-    /*
-    let answer = instance.find_export_by_name("fourTimes").expect("answer").func().expect("function");
-    let result = answer.borrow().call(&[Val::F64(4)]).expect("success");
-    match result[0]{
-        Val::F32(n) => println!("Answer: {}", n),
-        Val::F64(n) => println!("Answer: {}", n),
-        Val::I32(n) => println!("Answer: {}", n),
-        Val::I64(n) => println!("Answer: {}", n),
-        _ => println!("Unkniwn Answer"),
-    }*/
 }
     

@@ -1,0 +1,13 @@
+__struct test_struct {
+  a: int;
+}
+
+let cache = __static test_struct{a: 10};
+
+export function setA(a: int): void {
+    cache.a = a;
+}
+
+export function getA(): int {
+    cache.a;
+}

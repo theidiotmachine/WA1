@@ -21,6 +21,19 @@ use crate::wasm::wasm_instructions::{WasmInstr, opcodes};
 use crate::wasm::wasm_serialize::{serialize_i32, serialize_i64, serialize_f32, serialize_f64};
 use crate::wasm::wasm_object_file::{WasmObjectModuleFragment};
 
+#[derive(PartialEq, Copy, Clone)]
+pub enum TranslationUnitType{
+    Simple,
+    LinkedSourceFile,
+    LinkedEntryPoint
+}
+
+#[derive(PartialEq, Copy, Clone)]
+pub enum OutputType{
+    Standalone,
+    StaticLibrary
+}
+
 struct CompilerContext{
     pub mem_layout_map: HashMap<String, UserMemLayout>,
     pub global_var_map: HashMap<String, u32>,
@@ -805,18 +818,18 @@ fn compile_expr(
                     };
 
                     let data_section_entry = wasm_module.data_section.allocate_new_data_section_entry(stml.size, stml.alignment);
-                    let addr = data_section_entry.addr as i32;
+                    let addr = data_section_entry.addr;
 
                     //now set each member
                     for ole in oles {
                         //sets are, irritatingly, the address, the value, and then the instruction
-                        wasm_expr.data.push(WasmInstr::I32Const(addr));
+                        wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
                         compile_expr(&ole.value, context, local_var_map, true, wasm_module, wasm_expr, errors);
                         compile_struct_member_set(&struct_name, &ole.name, context, wasm_expr);
                     }
 
                     //now leave the return value, which is the pointer to the newly created thing
-                    wasm_expr.data.push(WasmInstr::I32Const(addr));
+                    wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
                 },
                 _ => unreachable!(),
             }
@@ -830,19 +843,19 @@ fn compile_expr(
                     let full_size = elem_size * exprs.len() as u32;
 
                     let data_section_entry = wasm_module.data_section.allocate_new_data_section_entry(full_size, elem_size);
-                    let addr = data_section_entry.addr as i32;
+                    let addr = data_section_entry.addr;
 
                     let mut idx = 0;
                     for expr in exprs {
                         //sets are, irritatingly, the address, the value, and then the instruction
-                        wasm_expr.data.push(WasmInstr::I32Const(addr));
+                        wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
                         compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
                         compile_array_member_set(&elem_value_type, elem_size, idx, wasm_expr);
                         idx += 1;
                     }
 
                     //now leave the return value, which is the pointer to the newly created thing
-                    wasm_expr.data.push(WasmInstr::I32Const(addr));
+                    wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
                 },
                 _ => unreachable!(),
             }
@@ -877,7 +890,8 @@ fn compile_expr(
 
 fn register_func(
     func_decl: &FuncDecl,
-    reloc_mode: RelocationMode,
+    tu_type: TranslationUnitType,
+    output_type: OutputType,
     module_name: &String,
     start_function: &String,
     func_idx: u32,
@@ -887,19 +901,19 @@ fn register_func(
 
     m.func_section.new_func(type_idx);
     //Only register a start function if we are not linking
-    if start_function.eq(&func_decl.name) && reloc_mode == RelocationMode::Simple {
-        m.start_section.set_start(func_idx);
-    }
+    //if start_function.eq(&func_decl.name) && output_type == OutputType::Standalone {
+        //m.start_section.set_start(func_idx);
+    //}
 
     if func_decl.export {
-        if reloc_mode == RelocationMode::StaticEntryPoint || reloc_mode == RelocationMode::StaticObjectFile {
+        if tu_type == TranslationUnitType::LinkedEntryPoint || tu_type == TranslationUnitType::LinkedSourceFile {
             m.export_section.new_func(&format!("{}.{}", module_name, func_decl.name), func_idx);
         } else {
             m.export_section.new_func(&func_decl.name, func_idx);
         }
         match &mut m.object_file_sections {
             Some(wrf) => {
-                if reloc_mode == RelocationMode::StaticObjectFile {
+                if tu_type == TranslationUnitType::LinkedSourceFile {
                     wrf.linking_section.symbol_table.new_local_exported_function(func_idx, &format!("{}.{}", module_name, func_decl.name));
                 } else { //RelocationMode::StaticEntryPoint
                     wrf.linking_section.symbol_table.new_full_exported_function(func_idx, &format!("{}.{}", module_name, func_decl.name));
@@ -912,7 +926,9 @@ fn register_func(
             Some(wrf) => {
                 if start_function.eq(&func_decl.name) {
                     wrf.linking_section.symbol_table.new_start_function(func_idx, &func_decl.name);
-                    wrf.linking_section.init_funcs.new_init_func(func_idx);
+                    if output_type == OutputType::Standalone {
+                        wrf.linking_section.init_funcs.new_init_func(wrf.linking_section.symbol_table.funcs[func_idx as usize]);
+                    }
                 } else {
                     wrf.linking_section.symbol_table.new_local_function(func_idx, &func_decl.name);
                 }
@@ -966,19 +982,19 @@ fn compile_func(
     m.code_section.new_func(WasmFunc{locals, expr});
 }
 
-#[derive(PartialEq, Copy, Clone)]
-pub enum RelocationMode{
-    Simple,
-    StaticObjectFile,
-    StaticEntryPoint
-}
-
-pub fn compile(program: &Program, reloc_mode: RelocationMode, module_name: &String, errors: &mut Vec<Error>) -> WasmModule {
-    let mut m = WasmModule::new(reloc_mode);
+/// Compile an AST to a Wasm Module IR type.
+pub fn compile(
+    ast: &AST, 
+    tu_type: TranslationUnitType, 
+    output_type: OutputType,
+    module_name: &String, 
+    errors: &mut Vec<Error>
+) -> WasmModule {
+    let mut m = WasmModule::new(tu_type);
     let mut global_var_map: HashMap<String, u32> = HashMap::new();
     let mut global_idx: u32 = 0;
 
-    for g in &program.global_imports {
+    for g in &ast.global_imports {
         let bits: Vec<&str> = g.name.as_str().split(".").collect();
         let module = bits[0];
         let field = bits[1];
@@ -998,7 +1014,7 @@ pub fn compile(program: &Program, reloc_mode: RelocationMode, module_name: &Stri
         global_idx += 1;
     }
 
-    for g in &program.global_decls {
+    for g in &ast.global_decls {
         let wt = get_wasm_value_type(&g.r#type);
 
         let mut init_expr = vec![];
@@ -1028,7 +1044,7 @@ pub fn compile(program: &Program, reloc_mode: RelocationMode, module_name: &Stri
         match &mut m.object_file_sections {
             Some(wrf) => {
                 if g.export {
-                    if reloc_mode == RelocationMode::StaticObjectFile {
+                    if tu_type == TranslationUnitType::LinkedSourceFile {
                         wrf.linking_section.symbol_table.new_local_exported_global(global_idx, &format!("{}.{}", module_name, g.name));
                     } else {
                         wrf.linking_section.symbol_table.new_full_exported_global(global_idx, &format!("{}.{}", module_name, g.name));
@@ -1047,12 +1063,12 @@ pub fn compile(program: &Program, reloc_mode: RelocationMode, module_name: &Stri
     let mut func_map: HashMap<String, u32> = HashMap::new();
     let mut func_idx: u32 = 0;
 
-    for func in &program.func_imports {
+    for func in &ast.func_imports {
         let bits: Vec<&str> = func.name.as_str().split(".").collect();
         let module = bits[0];
         let field = bits[1];
         let type_idx = m.type_section.new_func_type(get_wasm_func_type(&func.get_func_type()));
-        if reloc_mode == RelocationMode::Simple {
+        if tu_type == TranslationUnitType::Simple {
             m.import_section.new_func(&module.to_owned(), &field.to_owned(), type_idx);
         } else {
             m.import_section.new_func(&module.to_owned(), &func.name, type_idx);
@@ -1080,20 +1096,20 @@ pub fn compile(program: &Program, reloc_mode: RelocationMode, module_name: &Stri
         func_idx += 1;
     }
 
-    for func in &program.func_decls {
-        register_func(&func.decl, reloc_mode, module_name, &program.start, func_idx, &mut m);
+    for func in &ast.func_decls {
+        register_func(&func.decl, tu_type, output_type, module_name, &ast.start, func_idx, &mut m);
 
         func_map.insert(func.decl.name.clone(), func_idx);
         func_idx += 1;
     }
 
     let context = CompilerContext{
-        mem_layout_map: generate_mem_layout_map(&program.type_map),
+        mem_layout_map: generate_mem_layout_map(&ast.type_map),
         func_map: func_map.clone(),
         global_var_map: global_var_map.clone(),
     };
 
-    for func in &program.func_decls {
+    for func in &ast.func_decls {
         compile_func(func, &context, &mut m, errors);
     }
 

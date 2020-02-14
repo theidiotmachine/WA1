@@ -1,0 +1,8 @@
+import {*} from "./cache"
+import {*} from "./assert"
+
+export function test(): void {
+    assert.assert(cache.getA() == 10);
+    cache.setA(20);
+    assert.assert(cache.getA() == 20);
+}

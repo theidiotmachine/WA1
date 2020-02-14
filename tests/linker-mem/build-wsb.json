@@ -1,16 +1,20 @@
 {
     "entry_point": {
-        "file_name": "two.wa1",
+        "file_name": "index.wa1",
         "is_unsafe": false
     },
     "source_files": [
         {
-            "file_name": "one.wa1",
+            "file_name": "cache.wa1",
+            "is_unsafe": true
+        },
+        {
+            "file_name": "assert.wa1",
             "is_unsafe": false
         }
     ],
     "src_path": "./src",
     "out_path": "./out",
-    "module_name": "linker",
+    "module_name": "linker_mem",
     "wasm_exe": "wasm-ld-9"
 }

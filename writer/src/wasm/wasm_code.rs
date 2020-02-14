@@ -1,7 +1,7 @@
 use crate::wasm::{WasmValueType};
 use crate::wasm::wasm_serialize::{serialize_u32, get_serialized_size_u32};
 use crate::wasm::wasm_instructions::{WasmInstr, opcodes};
-use crate::wasm::wasm_object_file::{WasmRelocationEntry};
+use crate::wasm::wasm_object_file::{WasmRelocationEntry, WasmObjectModuleFragment};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WasmLocals{
@@ -41,9 +41,9 @@ impl WasmExpr{
         out.push(opcodes::END);
     }
 
-    pub fn serialize_reloc(&self, reloc_entries: &mut Vec<WasmRelocationEntry>, out: &mut Vec<u8>) {
+    pub fn serialize_reloc(&self, reloc: &WasmObjectModuleFragment, reloc_entries: &mut Vec<WasmRelocationEntry>, out: &mut Vec<u8>) {
         for i in &self.data {
-            i.serialize_reloc(reloc_entries, out);
+            i.serialize_reloc(reloc, reloc_entries, out);
         }
         out.push(opcodes::END);
     }
@@ -71,12 +71,12 @@ impl WasmFunc{
         out.append(&mut data);
     }
 
-    pub fn serialize_reloc(&self, base_offset: u32, out: &mut Vec<u8>) -> Vec<WasmRelocationEntry>{
+    pub fn serialize_reloc(&self, reloc: &WasmObjectModuleFragment, base_offset: u32, out: &mut Vec<u8>) -> Vec<WasmRelocationEntry>{
         let mut data: Vec<u8> = vec![];
         self.serialize_locals(&mut data);
 
         let mut reloc_entries: Vec<WasmRelocationEntry> = vec![];
-        self.expr.serialize_reloc(&mut reloc_entries, &mut data);
+        self.expr.serialize_reloc(reloc, &mut reloc_entries, &mut data);
 
         // we need to shift all the reloc entries by the size of the function. Not brilliant.
         // at that point, may as well roll the base offset in, too

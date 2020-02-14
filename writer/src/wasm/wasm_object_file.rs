@@ -138,19 +138,55 @@ impl WasmInitFuncs{
         out.append(&mut final_data);
     }
 
-    pub fn new_init_func(&mut self, func_idx: u32) {
-        self.functions.push(func_idx);
+    pub fn new_init_func(&mut self, func_sym_idx: u32) {
+        self.functions.push(func_sym_idx);
     }
 }
 
 pub struct WasmSymbolTable{
     /// Sequence of syminfo
     pub infos: Vec<WasmSymInfo>,
+
+    /// Map of global index to sym index
+    pub globals: Vec<u32>,
+    /// Map of func index to sym index
+    pub funcs: Vec<u32>,
+    /// Sym indexes of data. Will probably be of length 1
+    pub data: Vec<u32>,
 }
 
 impl WasmSymbolTable{
+
+    fn new_func_symbol_index(&mut self, index: u32) -> u32 {
+        let out = self.infos.len() as u32;
+        if self.funcs.len() <= index as usize {
+            self.funcs.resize((index + 1) as usize, 0);
+        }
+        self.funcs[index as usize] = out;
+        out
+    }
+
+    fn new_global_symbol_index(&mut self, index: u32) -> u32 {
+        let out = self.infos.len() as u32;
+        if self.globals.len() <= index as usize {
+            self.globals.resize((index + 1) as usize, 0);
+        }
+        self.globals[index as usize] = out;
+        out
+    }
+
+    fn new_data_symbol_index(&mut self, index: u32) -> u32 {
+        let out = self.infos.len() as u32;
+        if self.data.len() <= index as usize {
+            self.data.resize((index + 1) as usize, 0);
+        }
+        self.data[index as usize] = out;
+        out
+    }
+
     /// A function that is exported to another module, but not out of wasm
     pub fn new_local_exported_function(&mut self, index: u32, name: &String) {
+        self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
             kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: 0, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
@@ -159,6 +195,7 @@ impl WasmSymbolTable{
 
     /// A function that is exported out of wasm
     pub fn new_full_exported_function(&mut self, index: u32, name: &String) {
+        self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
             kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
@@ -167,6 +204,7 @@ impl WasmSymbolTable{
 
     /// A function that is not exported 
     pub fn new_local_function(&mut self, index: u32, name: &String) {
+        self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
             kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: WASM_SYM_BINDING_LOCAL, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
@@ -175,14 +213,16 @@ impl WasmSymbolTable{
 
     /// The start function
     pub fn new_start_function(&mut self, index: u32, name: &String) {
+        self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: 0, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: WASM_SYM_VISIBILITY_HIDDEN, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
 
     /// An imported function
     pub fn new_imported_function(&mut self, index: u32, name: &String) {
+        self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
             kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: true, flags: WASM_SYM_UNDEFINED
              //+ WASM_SYM_EXPLICIT_NAME, name: Some(name.clone())
@@ -193,6 +233,7 @@ impl WasmSymbolTable{
 
     /// A function imported and then exported. Only exists in entrypoint files
     pub fn new_imported_exported_function(&mut self, index: u32) {
+        self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
             kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: true, flags: WASM_SYM_EXPORTED + WASM_SYM_UNDEFINED, name: None, 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
@@ -201,6 +242,7 @@ impl WasmSymbolTable{
 
     /// A global that is exported to another module, but not out of wasm
     pub fn new_local_exported_global(&mut self, index: u32, name: &String) {
+        self.new_global_symbol_index(index);
         self.infos.push(WasmSymInfo{
             kind: WasmSymInfoKind::SYMTAB_GLOBAL, is_import: false, flags: 0, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
@@ -209,6 +251,7 @@ impl WasmSymbolTable{
 
     /// A global that is exported out of wasm
     pub fn new_full_exported_global(&mut self, index: u32, name: &String) {
+        self.new_global_symbol_index(index);
         self.infos.push(WasmSymInfo{
             kind: WasmSymInfoKind::SYMTAB_GLOBAL, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
@@ -217,6 +260,7 @@ impl WasmSymbolTable{
 
     /// A global that is not exported 
     pub fn new_local_global(&mut self, index: u32, name: &String) {
+        self.new_global_symbol_index(index);
         self.infos.push(WasmSymInfo{
             kind: WasmSymInfoKind::SYMTAB_GLOBAL, is_import: false, flags: WASM_SYM_BINDING_LOCAL, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
@@ -225,6 +269,7 @@ impl WasmSymbolTable{
 
     /// An imported global
     pub fn new_imported_global(&mut self, index: u32) {
+        self.new_global_symbol_index(index);
         self.infos.push(WasmSymInfo{
             kind: WasmSymInfoKind::SYMTAB_GLOBAL, is_import: true, flags: WASM_SYM_UNDEFINED, name: None, 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
@@ -233,9 +278,18 @@ impl WasmSymbolTable{
 
     /// A global imported and then exported. Only exists in entrypoint files
     pub fn new_imported_exported_global(&mut self, index: u32) {
+        self.new_global_symbol_index(index);
         self.infos.push(WasmSymInfo{
             kind: WasmSymInfoKind::SYMTAB_GLOBAL, is_import: true, flags: WASM_SYM_EXPORTED + WASM_SYM_UNDEFINED, name: None, 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
+        })
+    }
+
+    pub fn new_data(&mut self, name: &String, index: u32, offset: u32, size: u32) {
+        self.new_data_symbol_index(index);
+        self.infos.push(WasmSymInfo{
+            kind: WasmSymInfoKind::SYMTAB_DATA, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
+            index: 0, data_segment_index: index, data_offset: offset, data_size: size, section: 0
         })
     }
 
@@ -334,6 +388,10 @@ impl WasmRelocationEntry{
         WasmRelocationEntry{relocation_type: WasmRelocationType::R_WASM_GLOBAL_INDEX_LEB, offset: offset, index: index, addend: 0}
     }
 
+    pub fn new_static_mem_const(offset: u32, index: u32, addend: u32) -> WasmRelocationEntry {
+        WasmRelocationEntry{relocation_type: WasmRelocationType::R_WASM_MEMORY_ADDR_SLEB, offset: offset, index: index, addend: addend}
+    }
+
     pub fn serialize(&self, out: &mut Vec<u8>){
         out.push(self.relocation_type as u8);
         serialize_u32(self.offset, out);
@@ -387,7 +445,7 @@ impl WasmObjectModuleFragment{
                     functions: vec![]
                 },
                 symbol_table: WasmSymbolTable{
-                    infos: vec![]
+                    infos: vec![], funcs: vec![], globals: vec![], data: vec![]
                 }
             },
             code_reloc_section: WasmRelocSection{
