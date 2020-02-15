@@ -2,7 +2,7 @@ use crate::wasm::{WasmValueType, WasmFuncType};
 use crate::wasm::wasm_code::{WasmFunc, WasmExpr};
 use crate::wasm::wasm_serialize::{serialize_string, serialize_u32, get_serialized_size_u32, serialize_u32_pad};
 use crate::wasm::wasm_instructions::{WasmInstr};
-use crate::wasm::wasm_object_file::{WasmObjectModuleFragment, WasmRelocationEntry};
+use crate::wasm::wasm_object_file::{WasmObjectModuleFragment};
 
 pub struct WasmTypeSection{
     data: Vec<u8>,

@@ -1086,7 +1086,7 @@ pub fn compile(
         } else {
             match &mut m.object_file_sections {
                 Some(wrf) => {
-                    wrf.linking_section.symbol_table.new_imported_function(func_idx, &func.name);
+                    wrf.linking_section.symbol_table.new_imported_function(func_idx);
                 },
                 _ => {}
             }
