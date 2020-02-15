@@ -5,13 +5,19 @@ use crate::wasm::wasm_serialize::{serialize_string, serialize_u32, serialize_u32
 /// It contains copies of fragments of the code and comments in that file.
 
 #[derive(Debug, Clone, Copy)]
-pub enum WasmSymInfoKind{
-    SYMTAB_FUNCTION = 0,
-    SYMTAB_DATA = 1,
-    SYMTAB_GLOBAL = 2,
-    SYMTAB_SECTION = 3,
-    SYMTAB_EVENT = 4,
-    SYMTAB_TABLE = 5,
+enum WasmSymInfoKind{
+    ///SYMTAB_FUNCTION
+    SymTabFunction = 0,
+    ///SYMTAB_DATA
+    SymTabData = 1,
+    ///SYMTAB_GLOBAL
+    SymTabGlobal = 2,
+    ///SYMTAB_SECTION
+    SymTabSection = 3,
+    ///SYMTAB_EVENT
+    SymTabEvent = 4,
+    ///SYMTAB_TABLE
+    SymTabTable = 5,
 }
 
 /// Indicating that this is a weak symbol. When linking multiple modules defining the same symbol, all weak definitions are 
@@ -39,7 +45,7 @@ const WASM_SYM_NO_STRIP: u32 = 0x80;
 
 /// Represents a syminfo structure,
 pub struct WasmSymInfo{
-    pub kind: WasmSymInfoKind,
+    kind: WasmSymInfoKind,
 
     /// Whether this symbol references an import or a locally declared symbol
     pub is_import: bool,
@@ -71,7 +77,7 @@ impl WasmSymInfo {
         serialize_u32(self.flags, out);
 
         match &self.kind{
-            WasmSymInfoKind::SYMTAB_DATA => {
+            WasmSymInfoKind::SymTabData => {
                 match &self.name {
                     Some(name) => serialize_string(&name, out),
                     _ => {}
@@ -82,10 +88,10 @@ impl WasmSymInfo {
                     serialize_u32(self.data_size, out);
                 }
             },
-            WasmSymInfoKind::SYMTAB_SECTION => {
+            WasmSymInfoKind::SymTabSection => {
                 serialize_u32(self.section, out);
             },
-            WasmSymInfoKind::SYMTAB_FUNCTION | WasmSymInfoKind::SYMTAB_GLOBAL | WasmSymInfoKind::SYMTAB_EVENT | WasmSymInfoKind::SYMTAB_TABLE => {
+            WasmSymInfoKind::SymTabFunction | WasmSymInfoKind::SymTabGlobal | WasmSymInfoKind::SymTabEvent | WasmSymInfoKind::SymTabTable => {
                 serialize_u32(self.index, out);
                 if self.is_import { 
                     if (self.flags & WASM_SYM_EXPLICIT_NAME) == WASM_SYM_EXPLICIT_NAME {
@@ -188,7 +194,7 @@ impl WasmSymbolTable{
     pub fn new_local_exported_function(&mut self, index: u32, name: &String) {
         self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: 0, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SymTabFunction, is_import: false, flags: 0, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
@@ -197,7 +203,7 @@ impl WasmSymbolTable{
     pub fn new_full_exported_function(&mut self, index: u32, name: &String) {
         self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SymTabFunction, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
@@ -206,7 +212,7 @@ impl WasmSymbolTable{
     pub fn new_local_function(&mut self, index: u32, name: &String) {
         self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: WASM_SYM_BINDING_LOCAL, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SymTabFunction, is_import: false, flags: WASM_SYM_BINDING_LOCAL, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
@@ -215,27 +221,26 @@ impl WasmSymbolTable{
     pub fn new_start_function(&mut self, index: u32, name: &String) {
         self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: false, flags: WASM_SYM_VISIBILITY_HIDDEN, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SymTabFunction, is_import: false, flags: WASM_SYM_VISIBILITY_HIDDEN, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
 
     /// An imported function
-    pub fn new_imported_function(&mut self, index: u32, name: &String) {
+    pub fn new_imported_function(&mut self, index: u32) {
         self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: true, flags: WASM_SYM_UNDEFINED
-             //+ WASM_SYM_EXPLICIT_NAME, name: Some(name.clone())
+            kind: WasmSymInfoKind::SymTabFunction, is_import: true, flags: WASM_SYM_UNDEFINED
              , name: None, 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
 
-    /// A function imported and then exported. Only exists in entrypoint files
+    /// A function imported and then exported. Only exists in entry point files
     pub fn new_imported_exported_function(&mut self, index: u32) {
         self.new_func_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_FUNCTION, is_import: true, flags: WASM_SYM_EXPORTED + WASM_SYM_UNDEFINED, name: None, 
+            kind: WasmSymInfoKind::SymTabFunction, is_import: true, flags: WASM_SYM_EXPORTED + WASM_SYM_UNDEFINED, name: None, 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
@@ -244,7 +249,7 @@ impl WasmSymbolTable{
     pub fn new_local_exported_global(&mut self, index: u32, name: &String) {
         self.new_global_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_GLOBAL, is_import: false, flags: 0, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SymTabGlobal, is_import: false, flags: 0, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
@@ -253,7 +258,7 @@ impl WasmSymbolTable{
     pub fn new_full_exported_global(&mut self, index: u32, name: &String) {
         self.new_global_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_GLOBAL, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SymTabGlobal, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
@@ -262,7 +267,7 @@ impl WasmSymbolTable{
     pub fn new_local_global(&mut self, index: u32, name: &String) {
         self.new_global_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_GLOBAL, is_import: false, flags: WASM_SYM_BINDING_LOCAL, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SymTabGlobal, is_import: false, flags: WASM_SYM_BINDING_LOCAL, name: Some(name.clone()), 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
@@ -271,16 +276,16 @@ impl WasmSymbolTable{
     pub fn new_imported_global(&mut self, index: u32) {
         self.new_global_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_GLOBAL, is_import: true, flags: WASM_SYM_UNDEFINED, name: None, 
+            kind: WasmSymInfoKind::SymTabGlobal, is_import: true, flags: WASM_SYM_UNDEFINED, name: None, 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
 
-    /// A global imported and then exported. Only exists in entrypoint files
+    /// A global imported and then exported. Only exists in entry point files
     pub fn new_imported_exported_global(&mut self, index: u32) {
         self.new_global_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_GLOBAL, is_import: true, flags: WASM_SYM_EXPORTED + WASM_SYM_UNDEFINED, name: None, 
+            kind: WasmSymInfoKind::SymTabGlobal, is_import: true, flags: WASM_SYM_EXPORTED + WASM_SYM_UNDEFINED, name: None, 
             index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
         })
     }
@@ -288,7 +293,7 @@ impl WasmSymbolTable{
     pub fn new_data(&mut self, name: &String, index: u32, offset: u32, size: u32) {
         self.new_data_symbol_index(index);
         self.infos.push(WasmSymInfo{
-            kind: WasmSymInfoKind::SYMTAB_DATA, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
+            kind: WasmSymInfoKind::SymTabData, is_import: false, flags: WASM_SYM_EXPORTED, name: Some(name.clone()), 
             index: 0, data_segment_index: index, data_offset: offset, data_size: size, section: 0
         })
     }
@@ -340,30 +345,42 @@ impl WasmLinkingSection{
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WasmRelocationType{
+    ///R_WASM_FUNCTION_INDEX_LEB.
     ///A function index encoded as a 5-byte varuint32. Used for the immediate argument of a call instruction.
-    R_WASM_FUNCTION_INDEX_LEB = 0,
+    RWasmFunctionIndexLEB = 0,
+    ///R_WASM_TABLE_INDEX_SLEB.
     ///A function table index encoded as a 5-byte varint32. Used to refer to the immediate argument of a i32.const instruction, e.g. taking the address of a function.
-    R_WASM_TABLE_INDEX_SLEB = 1,
+    RWasmTableIndexSLEB = 1,
+    ///R_WASM_TABLE_INDEX_I32.
     /// A function table index encoded as a uint32, e.g. taking the address of a function in a static data initializer.
-    R_WASM_TABLE_INDEX_I32 = 2,
+    RWasmTableIndexI32 = 2,
+    /// R_WASM_MEMORY_ADDR_LEB.
     /// A linear memory index encoded as a 5-byte varuint32. Used for the immediate argument of a load or store instruction, e.g. directly loading from or storing to a C++ global.
-    R_WASM_MEMORY_ADDR_LEB = 3,
+    RWasmMemoryAddrLEB = 3,
+    ///R_WASM_MEMORY_ADDR_SLEB.
     /// A linear memory index encoded as a 5-byte varint32. Used for the immediate argument of a i32.const instruction, e.g. taking the address of a C++ global.
-    R_WASM_MEMORY_ADDR_SLEB = 4,
+    RWasmMemoryAddrSLEB = 4,
+    ///R_WASM_MEMORY_ADDR_I32.
     /// A linear memory index encoded as a uint32, e.g. taking the address of a C++ global in a static data initializer.
-    R_WASM_MEMORY_ADDR_I32 = 5,
+    RWasmMemoryAddrI32 = 5,
+    ///R_WASM_TYPE_INDEX_LEB.
     /// A type table index encoded as a 5-byte varuint32, e.g. the type immediate in a call_indirect.
-    R_WASM_TYPE_INDEX_LEB = 6,
+    RWasmTypeIndexLEB = 6,
+    ///R_WASM_GLOBAL_INDEX_LEB.
     /// A global index encoded as a 5-byte varuint32, e.g. the index immediate in a get_global.
-    R_WASM_GLOBAL_INDEX_LEB = 7,
-    /// a byte offset within code section for the specic function encoded as a uint32. The offsets start at the actual function code excluding its size field.
-    R_WASM_FUNCTION_OFFSET_I32 = 8,
+    RWasmGlobalIndexLEB = 7,
+    ///R_WASM_FUNCTION_OFFSET_I32.
+    /// a byte offset within code section for the specific function encoded as a uint32. The offsets start at the actual function code excluding its size field.
+    RWasmFunctionOffsetI32 = 8,
+    ///R_WASM_SECTION_OFFSET_I32.
     /// an byte offset from start of the specified section encoded as a uint32.
-    R_WASM_SECTION_OFFSET_I32 = 9,
+    RWasmSectionOffsetI32 = 9,
+    ///R_WASM_EVENT_INDEX_LEB.
     /// An event index encoded as a 5-byte varuint32. Used for the immediate argument of a throw and if_except instruction.
-    R_WASM_EVENT_INDEX_LEB = 10,
+    RWasmEventIndexLEB = 10,
+    ///R_WASM_TABLE_NUMBER_LEB.
     /// A table number encoded as a 5-byte varuint32. Used for the table immediate argument in the table.* instructions.
-    R_WASM_TABLE_NUMBER_LEB = 13,
+    RWasmTableNumberLEB = 13,
 }
 
 pub struct WasmRelocationEntry{
@@ -373,32 +390,32 @@ pub struct WasmRelocationEntry{
     pub offset: u32,
     /// The index of the symbol used (or, for R_WASM_TYPE_INDEX_LEB relocations, the index of the type)
     pub index: u32,
-    /// For R_WASM_MEMORY_ADDR_LEB, R_WEBASSEMBLY_MEMORY_ADDR_SLEB, R_WASM_MEMORY_ADDR_I32, 
-    /// R_WEBASSEMBLY_FUNCTION_OFFSET_I32, and R_WASM_SECTION_OFFSET_I32 relocations the following field is additionally present:
+    /// For R_WASM_MEMORY_ADDR_LEB, R_WASM_MEMORY_ADDR_SLEB, R_WASM_MEMORY_ADDR_I32, 
+    /// R_WASM_FUNCTION_OFFSET_I32, and R_WASM_SECTION_OFFSET_I32 relocations the following field is additionally present:
     /// addend to add to the address
     pub addend: u32,
 }
 
 impl WasmRelocationEntry{
     pub fn new_call(offset: u32, index: u32) -> WasmRelocationEntry {
-        WasmRelocationEntry{relocation_type: WasmRelocationType::R_WASM_FUNCTION_INDEX_LEB, offset: offset, index: index, addend: 0}
+        WasmRelocationEntry{relocation_type: WasmRelocationType::RWasmFunctionIndexLEB, offset: offset, index: index, addend: 0}
     }
 
     pub fn new_global_use(offset: u32, index: u32) -> WasmRelocationEntry {
-        WasmRelocationEntry{relocation_type: WasmRelocationType::R_WASM_GLOBAL_INDEX_LEB, offset: offset, index: index, addend: 0}
+        WasmRelocationEntry{relocation_type: WasmRelocationType::RWasmGlobalIndexLEB, offset: offset, index: index, addend: 0}
     }
 
     pub fn new_static_mem_const(offset: u32, index: u32, addend: u32) -> WasmRelocationEntry {
-        WasmRelocationEntry{relocation_type: WasmRelocationType::R_WASM_MEMORY_ADDR_SLEB, offset: offset, index: index, addend: addend}
+        WasmRelocationEntry{relocation_type: WasmRelocationType::RWasmMemoryAddrSLEB, offset: offset, index: index, addend: addend}
     }
 
     pub fn serialize(&self, out: &mut Vec<u8>){
         out.push(self.relocation_type as u8);
         serialize_u32(self.offset, out);
         serialize_u32_pad(self.index, out);
-        if self.relocation_type == WasmRelocationType::R_WASM_MEMORY_ADDR_LEB || self.relocation_type == WasmRelocationType::R_WASM_MEMORY_ADDR_SLEB 
-            || self.relocation_type == WasmRelocationType::R_WASM_MEMORY_ADDR_I32
-            || self.relocation_type == WasmRelocationType::R_WASM_FUNCTION_OFFSET_I32 || self.relocation_type == WasmRelocationType::R_WASM_SECTION_OFFSET_I32 {
+        if self.relocation_type == WasmRelocationType::RWasmMemoryAddrLEB || self.relocation_type == WasmRelocationType::RWasmMemoryAddrSLEB 
+            || self.relocation_type == WasmRelocationType::RWasmMemoryAddrI32
+            || self.relocation_type == WasmRelocationType::RWasmFunctionOffsetI32 || self.relocation_type == WasmRelocationType::RWasmSectionOffsetI32 {
             serialize_u32(self.addend, out);
         }
     }

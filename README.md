@@ -65,7 +65,7 @@ npm install -g http-server
 ```
 
 and manually call in your browser in the debugger by typing the function name (called `addd` out of the box). Note that you have to call 
-`__wasm_call_ctors` manually. We don't use start functions, because the wasm linker tools [warn agains it](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md#start-section).
+`__wasm_call_ctors` manually. We don't use start functions, because the wasm linker tools [warn against it](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md#start-section).
 
 # The language
 

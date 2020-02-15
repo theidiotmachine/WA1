@@ -23,7 +23,7 @@ fn main() {
     let input = matches.value_of("INPUT").unwrap();
     println!("Running {}", &input);
 
-    // actually wrong - we should be doing a check. Good enouugh for now
+    // actually wrong - we should be doing a check. Good enough for now
     let func_call_str = matches.value_of("FUNC_CALL").unwrap();
     
     let wasm = fs::read(input).expect("wasm file");
