@@ -13,6 +13,8 @@ pub enum RawToken {
     Keyword(Keyword),
     /// A `null` literal value
     Null,
+    /// A `__null` literal value
+    UnsafeNull,
     /// A number, this includes integers (`1`), decimals (`0.1`),
     /// hex (`0x8f`), binary (`0b010011010`), and octal (`0o273`)
     Number(NumberKind),

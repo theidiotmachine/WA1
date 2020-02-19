@@ -283,6 +283,8 @@ pub enum Expr {
     BoolLiteral(bool),
     ///null
     Null,
+    ///__null
+    UnsafeNull,
     ///void. Unlike TS we use void as the unit type, so you can instantiate it.
     Void,
     ///string literal

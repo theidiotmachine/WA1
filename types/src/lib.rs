@@ -1,6 +1,7 @@
 use serde::{Serialize, Deserialize};
 
 pub mod cast;
+pub mod generics;
 use cast::get_type_casts_for_function_set;
 use cast::FuncCallTypeCast;
 use cast::TypeCast;
@@ -16,10 +17,10 @@ pub mod prelude {
     pub use super::Privacy;
     pub use super::get_unary_op_type;
     pub use super::get_binary_op_type_cast;
-    pub use super::AbstractTypeDecl;
     pub use super::StructType;
     pub use super::StructMember;
     pub use super::cast::prelude::*;
+    pub use super::generics::*;
 }
 
 use std::fmt::Display;
@@ -49,7 +50,7 @@ pub enum OpType{
     SimpleOpType(Vec<FuncType>),
     /// The type of an assignment operator. rhs must be the same type as lhs, rv is same type as lhs.
     AssignmentOpType,
-    /// The type of an assign and modify operator. This is, say +=. We onlt have an array of types
+    /// The type of an assign and modify operator. This is, say +=. We only have an array of types
     /// here because they represent the various things the lhs can be; the rhs must be cast to
     /// that.
     AssignModifyOpType(Vec<Type>),
@@ -67,7 +68,7 @@ pub enum Privacy{
     Public, Private, Protected
 }
 
-/// Data memeber of a class.
+/// Data member of a class.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClassMember{
     pub name: String,
@@ -104,32 +105,6 @@ impl StructType {
     }
 }
 
-/// This is part of the type system rewrite. I am not sure it's correct yet.
-/// This is the body of a type function that consumes type args and returns a type.
-#[derive(Debug, Clone, PartialEq)]
-pub enum AbstractTypeBody{
-    VariableUse(String),
-    Array(Box<AbstractTypeBody>),
-    Func(Vec<AbstractTypeBody>, Box<AbstractTypeBody>),
-    UserType,
-    Number,
-    String,
-    Boolean,
-    Any,
-    Unknown, //???
-    RealVoid,
-    FakeVoid,
-    Never,
-}
-
-/// This is part of the type system rewrite. I am not sure it's correct yet.
-/// This is a type function that conumes type args and returns a type.
-#[derive(Debug, Clone, PartialEq)]
-pub struct AbstractTypeDecl{
-    pub args: Vec<String>,
-    pub out: AbstractTypeBody,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Type {
     /// unit type that actually manifests as nothing
@@ -162,13 +137,15 @@ pub enum Type {
     Any,
     /// Options. This is built into the type system because I want a zero-cost abstraction of a null pointer.
     Option(Box<Type>),
+    /// The unsafe option type. May one day become the full option type.
+    UnsafeOption(Box<Type>),
     /// Option - some
     Some(Box<Type>),
     /// user type
     UserClass{name: String, type_args: Vec<Type>},
     /// user struct type
     UnsafeStruct{name: String},
-    /// not yet known - will be filled in by the typer
+    /// not yet known - will be filled in by the type system
     Undeclared,
     ///Unresolved type var
     VariableUsage(String),
@@ -230,6 +207,7 @@ impl Display for Type {
             //Type::Object => write!(f, "object"),
             Type::Any => write!(f, "any"),
             Type::Option(inner) => write!(f, "Option<{}>", inner),
+            Type::UnsafeOption(inner) => write!(f, "__Option<{}>", inner),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
             Type::UserClass{name, type_args: _} => write!(f, "{}", name),
             Type::UnsafeStruct{name} => write!(f, "{}", name),

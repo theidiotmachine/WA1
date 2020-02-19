@@ -281,8 +281,8 @@ function align_offset_size_t(A: __size_t): __size_t if((A & (7 as __size_t)) == 
 __struct malloc_chunk {
   prev_foot: __size_t;  // Size of previous chunk (if free)
   head: __size_t;       // Size and inuse bits
-  fd: Option<malloc_chunk>;         // double links -- used only if free. was struct malloc_chunk*
-  bk: Option<malloc_chunk>;
+  fd: __Option<malloc_chunk>;         // double links -- used only if free. was struct malloc_chunk*
+  bk: __Option<malloc_chunk>;
 }
 
 /*
@@ -508,20 +508,20 @@ __struct malloc_tree_chunk {
   /* The first four fields must be compatible with malloc_chunk */
   prev_foot: __size_t;
   head: __size_t;
-  fd: Option<malloc_tree_chunk>;
-  bk: Option<malloc_tree_chunk>;
+  fd: __Option<malloc_tree_chunk>;
+  bk: __Option<malloc_tree_chunk>;
 
   //WA1 - in dlmalloc these are an array of size 2. I don't have an 
   //array implementation yet, and it doesn't seem that important
-  child_0: Option<malloc_tree_chunk>; 
-  child_1: Option<malloc_tree_chunk>;
-  parent: Option<malloc_tree_chunk>;
+  child_0: __Option<malloc_tree_chunk>; 
+  child_1: __Option<malloc_tree_chunk>;
+  parent: __Option<malloc_tree_chunk>;
   index: __size_t; //actually should be a u32, but this will do
 }
 
 /* A little helper macro for trees */
 //#define leftmost_child(t) ((t)->child[0] != 0? (t)->child[0] : (t)->child[1])
-function leftmost_child(t: malloc_tree_chunk): Option<malloc_tree_chunk> {
+function leftmost_child(t: malloc_tree_chunk): __Option<malloc_tree_chunk> {
   if(t.child_0.isSome())
     t.child_0;
   else 
@@ -588,7 +588,7 @@ function leftmost_child(t: malloc_tree_chunk): Option<malloc_tree_chunk> {
 __struct malloc_segment {
   base: __ptr;                    /* base address */
   size: __size_t;                 /* allocated size */
-  next: Option<malloc_segment>;   /* ptr to next segment */
+  next: __Option<malloc_segment>;   /* ptr to next segment */
   //sflags: __size_t;             /* mmap and extern flag WA1 - was a u32, but not used*/
 }
 
@@ -698,18 +698,18 @@ __struct malloc_state {
   dvsize:           __size_t;
   topsize:          __size_t;
   least_addr:       __ptr; //was a char*
-  dv:               Option<malloc_chunk>;
-  top:              Option<malloc_chunk>;
+  dv:               __Option<malloc_chunk>;
+  top:              __Option<malloc_chunk>;
   trim_check:       __size_t;
   release_checks:   __size_t;
   magic:            __size_t;
-  smallbins:        __array<Option<malloc_chunk>>; //mchunkptr  smallbins[(NSMALLBINS+1)*2];
-  treebins:         __array<Option<malloc_tree_chunk>>; //tbinptr    treebins[NTREEBINS];
+  smallbins:        __array<__Option<malloc_chunk>>; //mchunkptr  smallbins[(NSMALLBINS+1)*2];
+  treebins:         __array<__Option<malloc_tree_chunk>>; //tbinptr    treebins[NTREEBINS];
   footprint:        __size_t;
   max_footprint:    __size_t;
   footprint_limit:  __size_t; /* zero means no limit */
   mflags:           __size_t; //was a u32
-  seg:              Option<malloc_segment>;
+  seg:              __Option<malloc_segment>;
   extp:             __ptr;      /* Unused but available for extensions */
   exts:             __size_t;
 }
@@ -752,38 +752,38 @@ const gm: malloc_state = __static malloc_state{
   dvsize:           (0 as __size_t),
   topsize:          (0 as __size_t),
   least_addr:       (0 as __ptr),
-  dv:               null,
-  top:              null,
+  dv:               __null,
+  top:              __null,
   trim_check:       (0 as __size_t),
   release_checks:   (0 as __size_t),
   magic:            (0 as __size_t),
   //66 lots of malloc_chunk...
-  smallbins:        __static __array<Option<malloc_chunk>> [
-    null, null, null, null, null, null, null, null, null, null, 
-    null, null, null, null, null, null, null, null, null, null, 
-    null, null, null, null, null, null, null, null, null, null, 
-    null, null, null, null, null, null, null, null, null, null, 
-    null, null, null, null, null, null, null, null, null, null, 
-    null, null, null, null, null, null, null, null, null, null, 
-    null, null, null, null, null, null
+  smallbins:        __static __array<__Option<malloc_chunk>> [
+    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
+    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
+    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
+    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
+    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
+    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
+    __null, __null, __null, __null, __null, __null
   ],
-  treebins:         __static __array<Option<malloc_tree_chunk>>[
-      null, null, null, null, null, null, null, null, null, null, 
-      null, null, null, null, null, null, null, null, null, null, 
-      null, null, null, null, null, null, null, null, null, null, 
-      null, null
+  treebins:         __static __array<__Option<malloc_tree_chunk>>[
+      __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
+      __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
+      __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
+      __null, __null
   ],
   footprint:        (0 as __size_t),
   max_footprint:    (0 as __size_t),
   footprint_limit:  (0 as __size_t),
   mflags:           (0 as __size_t),
-  seg:              null,
+  seg:              __null,
   extp:             (0 as __ptr),
   exts:             (0 as __size_t),
 };
 //#define is_global(M)       ((M) == &_gm_)
 
-function is_initialized(m: malloc_state): boolean m.top != null;
+function is_initialized(m: malloc_state): boolean m.top != __null;
 
 /* page-align a size */
 //#define page_align(S) (((S) + (mparams.page_size - SIZE_T_ONE)) & ~(mparams.page_size - SIZE_T_ONE))
@@ -815,16 +815,14 @@ function is_granularity_aligned(s: __ptr): boolean ((s as __size_t) & (mparams.g
 function segment_holds(s: malloc_segment, a: __ptr): boolean (a >= s.base && a < s.base + s.size);
 
 /* Return segment holding given address */
-/*
-function segment_holding(m: malloc_state, addr: __ptr): Option<malloc_segment> {
-  let o_sp: Option<malloc_segment> = m.seg;
+function segment_holding(m: malloc_state, addr: __ptr): __Option<malloc_segment> {
+  let o_sp: __Option<malloc_segment> = m.seg;
   while(true) {
     let sp = o_sp.unwrap();
     if (addr >= sp->base && addr < sp->base + sp->size)
       return Some(sp);
     o_sp = sp->next;
-    if (o_sp == null)
-      return null;
+    if (o_sp == __null)
+      return __null;
   }
 }
-*/

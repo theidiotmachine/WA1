@@ -1,0 +1,8 @@
+export function __Option_unwrap<T: __struct T>(x: __Option<T>): T {
+    let p: __ptr = x as __ptr;
+    if (p == 0) {
+        __trap();
+    } else {
+        p as T;
+    }
+}

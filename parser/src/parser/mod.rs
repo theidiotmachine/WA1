@@ -56,13 +56,8 @@ impl<> Default for Scope<> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-struct ScopedTypeVar{
-    pub internal_name: String,
-}
-
 struct TypeScope{
-    pub var_names: HashMap<String, ScopedTypeVar>,
+    pub var_names: HashMap<String, TypeArg>,
 }
 
 impl<> Default for TypeScope<> {
@@ -182,8 +177,8 @@ impl Context {
         }
     }
 
-    fn push_func_type_scope(&mut self, args: &Vec<String>) {
-        let mut v: HashMap<String, ScopedTypeVar> = match self.type_var_stack.last() {
+    fn push_type_scope(&mut self, args: &Vec<TypeArg>) {
+        let mut v: HashMap<String, TypeArg> = match self.type_var_stack.last() {
             None => HashMap::new(),
             Some(s) => {
                 s.var_names.clone()
@@ -191,13 +186,13 @@ impl Context {
         };
         
         for arg in args {
-            v.insert(arg.clone(), ScopedTypeVar{internal_name: self.get_unique_name(arg)});
+            v.insert(arg.name.clone(), TypeArg{name: self.get_unique_name(&arg.name), constraint: arg.constraint.clone()});
         }
         self.type_var_stack.push(TypeScope{var_names: v});
     }
 
-    fn push_empty_func_type_scope(&mut self) {
-        let v: HashMap<String, ScopedTypeVar> = match self.type_var_stack.last() {
+    fn push_empty_type_scope(&mut self) {
+        let v: HashMap<String, TypeArg> = match self.type_var_stack.last() {
             None => HashMap::new(),
             Some(s) => {
                 s.var_names.clone()
@@ -236,9 +231,9 @@ enum ImportFilter{
     Named(Vec<String>)
 }
 
-fn filter_imports(exports: &Exports, imports: &ImportFilter) -> Exports {
+fn filter_imports(exports: Exports, imports: &ImportFilter) -> Exports {
     match imports {
-        ImportFilter::All => (exports.clone()),
+        ImportFilter::All => (exports),
         ImportFilter::Named(_) => {panic!()}
     }
 }
@@ -358,7 +353,8 @@ impl<'b> Parser<'b> {
         self.parse_internal(&start_func_name, start_func_type, &mut parser_context, importer);
         if parser_context.errors.is_empty() {
             Ok(AST{start: start_func_name, global_decls: parser_context.global_decls, global_imports: parser_context.global_imports,
-                func_decls: parser_context.func_decls, func_imports: parser_context.func_imports, type_map: parser_context.type_map
+                func_decls: parser_context.func_decls, func_imports: parser_context.func_imports, generic_func_decls: parser_context.generic_func_decls,
+                type_map: parser_context.type_map
             })
         } else {
             Err(parser_context.errors)
@@ -506,75 +502,70 @@ impl<'b> Parser<'b> {
         Ok(())
     }
 
-    fn parse_type_decl_args(&mut self) -> Res<Vec<String>> {
-        assert_punct!(self, Punct::LessThan);
-
-        let mut out: Vec<String> = Vec::new();
-        loop {
-            let next = self.peek_next_item();
-            let token = &next.token;
-            match token {
-                Token::Punct(Punct::GreaterThan) => { self.skip_next_item(); return Ok(out); },
-                Token::Ident(n) => {
-                    out.push(n.to_string());
-                },
-                _ => return self.unexpected_token_error(next.span, &next.location, "expecting identifier in type list")
+    fn parse_type_decl_constraint(&mut self, 
+        parser_context: &mut ParserContext
+    ) -> TypeArgConstraint {
+        let err_out = TypeArgConstraint::None;
+        let next = expect_next!(self, parser_context, err_out);
+        let loc = next.location.clone();
+        let token = &next.token;
+        match token {
+            Token::Keyword(k) => {
+                match k {
+                    Keyword::UnsafeStruct => {
+                        self.skip_next_item();
+                        TypeArgConstraint::IsAStruct
+                    },
+                    _ => {
+                        parser_context.push_err(Error::UnrecognizedTypeArgConstraint(loc));
+                        err_out
+                    }
+                }
+            }, 
+            _ => {
+                parser_context.push_err(Error::UnrecognizedTypeArgConstraint(loc));
+                err_out
             }
         }
     }
 
-    fn parse_function_decl_arg(&mut self,
-        parser_context: &mut ParserContext,
-    ) -> Res<FuncArg> {
-        let next = assert_next!(self, "expecting argument declaration");
-        let id = assert_ident!(next, "Expecting variable name to be an identifier");
-        let name = id.to_string();
-        let next = self.peek_next_item();
-        let token = &next.token;
-        match token {
-            Token::Punct(Punct::Colon) => {
-                self.skip_next_item();
-                let arg_type = self.parse_type(parser_context);
-                assert_ok!(arg_type);
-                
-                let next = self.peek_next_item();
-                let token = &next.token;
-                if token.matches_punct(Punct::Comma) || token.matches_punct(Punct::CloseParen) {
+    fn parse_type_decl_args(&mut self, 
+        parser_context: &mut ParserContext
+    ) -> Vec<TypeArg> {
+        let mut out: Vec<TypeArg> = Vec::new();
+        expect_punct!(self, parser_context, Punct::LessThan, out);
+
+        loop {
+            let next = self.peek_next_item();
+            let token = &next.token;
+            match token {
+                Token::Punct(Punct::GreaterThan) => { self.skip_next_item(); return out; },
+                Token::Ident(n) => {
+                    self.skip_next_item();
+
+                    let next = self.peek_next_item();
+                    let token = &next.token;
+                    
+                    if token.matches_punct(Punct::Colon) {
+                        self.skip_next_item();
+                        let constraint = self.parse_type_decl_constraint(parser_context);
+                        out.push(TypeArg{name: n.to_string(), constraint: constraint});
+                    } else {
+                        out.push(TypeArg{name: n.to_string(), constraint: TypeArgConstraint::None});
+                    }
                     if token.matches_punct(Punct::Comma) {
                         self.skip_next_item();
                     }
-                    Ok(FuncArg{name: name, r#type: arg_type})
-                } else {
-                    self.unexpected_token_error(next.span, &next.location, "expecting ')' or ',' in arg list")
-                }
-            },
-            Token::Punct(Punct::Comma) => {
-                Ok(FuncArg{name: name, r#type: Type::Undeclared})
-            },
-            _ => self.unexpected_token_error(next.span, &next.location, "expecting ')' or ',' in arg list")
-        }
-    }
-
-    fn parse_function_decl_args(&mut self,
-        parser_context: &mut ParserContext,
-    ) -> Res<Vec<FuncArg>> {
-        assert_punct!(self, Punct::OpenParen);
-        let mut args: Vec<FuncArg> = Vec::new();
-        loop {
-            let next = self.peek_next_item();
-            let token = &next.token;
-            match token {
-                Token::Punct(Punct::CloseParen) => { self.skip_next_item(); return Ok(args); },
-                Token::Ident(_) => {
-                    let arg = self.parse_function_decl_arg(parser_context);
-                    assert_ok!(arg);
-                    args.push(arg)
                 },
-                _ => return self.unexpected_token_error(next.span, &next.location, "expecting identifier in arg list")
+                _ => {
+                    self.skip_next_item();
+                    parser_context.push_err(Error::UnrecognizedTypeArg(next.location.clone()));
+                }
             }
         }
     }
 
+    
     /// register params in the local scope
     fn register_params(&mut self, arg_list: &Vec<FuncArg>, parser_func_context: &mut ParserFuncContext) {
         for arg in arg_list {
@@ -588,102 +579,12 @@ impl<'b> Parser<'b> {
         }
     }
 
-    fn parse_named_function_decl(&mut self, 
-        export: bool,
-        parser_func_context_outer: &mut ParserFuncContext,
-        parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr>{
-        let mut parser_func_context_inner = ParserFuncContext::new();
-
-        let func_decl = self.parse_function_decl(export, parser_context);
-        assert_ok!(func_decl);
-
-        let loc = self.peek_next_location();
-
-        self.context.push_func_scope();
-
-        self.register_params(&func_decl.args, &mut parser_func_context_inner);
-
-        parser_func_context_inner.func_return_type = func_decl.return_type.clone();
-
-        let old_in_iteration = self.context.in_iteration;
-        self.context.in_iteration = false;
-        
-        let block = self.parse_block(false, &mut parser_func_context_inner, parser_context);
-        assert_ok!(block);
-
-        self.context.pop_func_scope();
-        self.context.in_iteration = old_in_iteration;
-
-        self.context.pop_type_scope();
-
-        // today if you don't have a return value at the end of function, you get errors at run time. So let's check now.
-        if parser_func_context_inner.func_return_type != Type::RealVoid {
-            match &block.expr {
-                Expr::Block(exprs) => {
-                    let o_last = exprs.last();
-                    match o_last {
-                        Some(last) => {
-                            match &last.expr {
-                                Expr::Return(o_e) => {
-                                    if o_e.is_none() {
-                                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()))
-                                    }
-                                },
-                                _ => {
-                                    if last.r#type == Type::RealVoid {
-                                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()));
-                                    }
-                                },
-                            }
-                        },
-                        _ => parser_context.errors.push(Error::NoValueReturned(block.loc.clone()))
-                    }
-                },
-                Expr::Return(o_e) => {
-                    if o_e.is_none() {
-                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()))
-                    }
-                },
-                _ => {
-                    if block.r#type == Type::RealVoid {
-                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()));
-                    }
-                },
-            }
-        }
-        
-        let func = Func{
-            decl: func_decl,
-            local_vars: parser_func_context_inner.local_vars, closure: parser_func_context_inner.closure, 
-            local_var_map: parser_func_context_inner.local_var_map, body: Some(block), 
-        };
-
-        let name = func.decl.name.clone();
-        let func_closure = func.closure.clone();
-        // now we have a closure of an inner function, we need to capture it. So look at every element
-        for cr in &func_closure {
-            // is it in our local vars?
-            let o_local_var = parser_func_context_outer.local_vars.iter_mut().find(|lv| lv.internal_name == cr.internal_name);
-            if o_local_var.is_some() {
-                // yes it is, so mark that local variable as a closure source
-                o_local_var.unwrap().closure_source = true;
-            } else {
-                //not a local variable, so it's in the closure of this function, so make sure it's captured
-                parser_func_context_outer.closure.push(cr.clone())
-            }
-        }
-        let func_type = func.decl.get_func_type();
-        parser_context.func_decls.push(func); 
-        Ok(TypedExpr{expr: Expr::FuncDecl(FuncObjectCreation{name: name, closure: func_closure}), is_const: true, r#type: Type::Func{func_type: Box::new(func_type), type_args: vec![]}, loc: loc})
-    }
-
     fn parse_import_decl(&mut self,
         parser_context: &mut ParserContext,
         importer: &mut dyn Importer,
     ) ->Option<()> {
         self.skip_next_item();
-        expect_punct!(self, parser_context, Punct::OpenBrace);
+        expect_punct!(self, parser_context, Punct::OpenBrace, None);
         let next = self.peek_next_item();
         self.skip_next_item();
         let import_filter: ImportFilter = match &next.token {
@@ -710,13 +611,13 @@ impl<'b> Parser<'b> {
                 ImportFilter::Named(vec![])
             }
         };
-        expect_punct!(self, parser_context, Punct::CloseBrace);
+        expect_punct!(self, parser_context, Punct::CloseBrace, None);
 
         //peek for 'as'?
 
-        expect_keyword!(self, parser_context, Keyword::From);
+        expect_keyword!(self, parser_context, Keyword::From, None);
 
-        let next = expect_next!(self, parser_context);
+        let next = expect_next!(self, parser_context, None);
         let id_string = expect_string_literal!(next, parser_context, "Expecting path name to import");
         if id_string.starts_with(".") {
             let r_imports = importer.import(&id_string, &(parser_context.file_name));
@@ -728,7 +629,7 @@ impl<'b> Parser<'b> {
                 }
             };
             let exports = imports.exports;
-            let exports = filter_imports(&exports, &import_filter);
+            let exports = filter_imports(exports, &import_filter);
             let namespace = imports.module_name;
             for g in &exports.global_decls {
                 let import_name = format!("{}.{}", namespace, g.name);
@@ -776,10 +677,10 @@ impl<'b> Parser<'b> {
         match &tok {
             Token::Keyword(ref k) => match k {
                 Keyword::Function => {
-                    let func = self.parse_named_function_decl(true, fake_parser_func_context, parser_context);
-                    match func {
-                        Ok(f) => init_body.push(f),
-                        Err(e) => parser_context.errors.push(e)
+                    let o_func = self.main_parse_named_function_decl(true, fake_parser_func_context, parser_context);
+                    match o_func {
+                        Some(f) => init_body.push(f),
+                        _ => {}
                     };
                 },
                 Keyword::Const => {
@@ -893,12 +794,10 @@ impl<'b> Parser<'b> {
                 Keyword::Import => {self.parse_import_decl(parser_context, importer);},
                 Keyword::Export => self.parse_export_decl(init_body, fake_parser_func_context, parser_context),
                 Keyword::Function => {
-                    let func = self.parse_named_function_decl(false, fake_parser_func_context, parser_context);
-                    match func {
-                        Ok(f) => {
-                            init_body.push(f);
-                        },
-                        Err(e) => parser_context.errors.push(e)
+                    let o_func = self.main_parse_named_function_decl(false, fake_parser_func_context, parser_context);
+                    match o_func {
+                        Some(f) => init_body.push(f),
+                        _ => {}
                     };
                 },
                 Keyword::Const => {
@@ -1075,12 +974,11 @@ impl<'b> Parser<'b> {
         let next = self.peek_next_item();
         let token = &next.token;
         if token.matches_punct(Punct::LessThan) {
-            let type_args = self.parse_type_decl_args();
-            assert_ok!(type_args);
-            self.context.push_func_type_scope(&type_args);
+            let type_args = self.parse_type_decl_args(parser_context);
+            self.context.push_type_scope(&type_args);
             parser_context.errors.push(Error::NotYetImplemented(next.location.clone(), String::from("generic classes")));
         } else {
-            self.context.push_empty_func_type_scope();
+            self.context.push_empty_type_scope();
         }
 
         let mut members: Vec<ClassMember> = vec![];
@@ -1492,6 +1390,7 @@ impl<'b> Parser<'b> {
             //FIXME64BIT
             Type::UnsafePtr | Type::UnsafeSizeT => self.parse_int_component(lhs, parser_func_context, parser_context),
             Type::Option(_/*inner*/) => self.parse_option_component(lhs, /*&inner,*/ parser_func_context, parser_context),
+            Type::UnsafeOption(_/*inner*/) => self.parse_unsafe_option_component(lhs, /*&inner,*/ parser_func_context, parser_context),
             _ => Err(Error::NoComponents(lhs.loc.clone()))
         }
     }
@@ -1895,6 +1794,11 @@ impl<'b> Parser<'b> {
                 return Ok(Parser::create_null(&lookahead_item.location));
             },
 
+            Token::UnsafeNull => {
+                self.skip_next_item();
+                return Ok(Parser::create_unsafe_null(&lookahead_item.location));
+            },
+
             Token::Template(_) => {
                 self.skip_next_item();
                 return Err(Error::NotYetImplemented(lookahead_item.location.clone(), "template strings".to_string()));
@@ -1914,8 +1818,15 @@ impl<'b> Parser<'b> {
                         return Ok(TypedExpr{expr:Expr::Void, r#type: Type::FakeVoid, is_const: true, loc: lookahead_item.location.clone()}); 
                     },
                     Keyword::If => self.parse_if(parser_func_context, parser_context),
-                    Keyword::Function => self.parse_named_function_decl(false, parser_func_context, parser_context),
+                    Keyword::Function => {
+                        let o_func = self.main_parse_named_function_decl(false, parser_func_context, parser_context);
+                        match o_func{
+                            Some(f) => Ok(f),
+                            None => Err(Error::Dummy(lookahead_item.location))
+                        }
+                    },
                     Keyword::Some => self.parse_some(parser_func_context, parser_context),
+                    Keyword::UnsafeSome => self.parse_unsafe_some(parser_func_context, parser_context),
                     _ => {
                         self.skip_next_item();
                         let o_type = self.parse_type_from_keyword(&k, &lookahead_item.location, parser_context);

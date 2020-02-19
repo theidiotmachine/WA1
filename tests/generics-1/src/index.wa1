@@ -1,0 +1,12 @@
+import {*} from "./option"
+import {*} from "./assert"
+
+__struct S1 {
+    x: int;
+}
+
+export function test(): void {
+    let s = __static S1{ x: 3 };
+    let oS = __Some(s);
+    assert.assert(option.__Option_unwrap<S1>(oS).x == 3);
+}

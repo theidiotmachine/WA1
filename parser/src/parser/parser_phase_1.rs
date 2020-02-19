@@ -17,6 +17,7 @@ fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
     let mut global_imports: Vec<GlobalVariableImport> = vec![];
     let mut func_decls: Vec<FuncDecl> = vec![];
     let mut func_imports: Vec<FuncDecl> = vec![];
+    let mut generic_func_decls: Vec<GenericFunc> = vec![];
     let mut types: Vec<TypeDecl> = vec![];
 
     for g in &parser_context.global_decls {
@@ -43,6 +44,12 @@ fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
         }
     }
 
+    for f in &parser_context.generic_func_decls {
+        if f.func.decl.export {
+            generic_func_decls.push(f.clone());
+        }
+    }
+
     for t in &parser_context.type_map {
         let td = t.1;
         match td{
@@ -59,7 +66,7 @@ fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
         }
     }
 
-    Exports{ global_imports, global_decls, func_imports, func_decls, types }
+    Exports{ global_imports, global_decls, func_imports, func_decls, generic_func_decls, types }
 }
 
 impl<'a> Parser<'a> {
@@ -84,14 +91,8 @@ impl<'a> Parser<'a> {
     fn parse_phase_1_func(&mut self,
         parser_context: &mut ParserContext,
     ) -> () {
-        let decl = self.parse_function_decl(true, parser_context);
-        should_be_ok!(decl);
-        let func = Func{
-            decl: decl, local_vars: vec![], closure: vec![], 
-            local_var_map: HashMap::new(), body: None, 
-        };
-
-        parser_context.func_decls.push(func); 
+        let mut fake_parser_func_context = ParserFuncContext::new();
+        self.export_parse_named_function_decl(true, &mut fake_parser_func_context, parser_context);
     }
 
     fn parse_phase_1_global(&mut self,

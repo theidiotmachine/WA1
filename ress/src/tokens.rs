@@ -23,6 +23,8 @@ pub enum Token<T> {
     Keyword(Keyword),
     /// A `null` literal value
     Null,
+    /// A `__null` literal value
+    UnsafeNull,
     /// A number, this includes integers (`1`), decimals (`0.1`),
     /// hex (`0x8f`), binary (`0b010011010`), and octal (`0o273`)
     Number(Number<T>),
@@ -131,6 +133,7 @@ impl<'a> ToString for Token<&'a str> {
             Token::Ident(ref i) => i.to_string(),
             Token::Keyword(ref k) => k.to_string(),
             Token::Null => "null".to_string(),
+            Token::UnsafeNull => "__null".to_string(),
             Token::Number(ref n) => n.to_string(),
             Token::Punct(ref p) => p.to_string(),
             Token::String(ref s) => s.to_string(),
@@ -1197,6 +1200,8 @@ pub enum Keyword {
     UnsafePtr,
     UnsafeSizeT,
     UnsafeStruct,
+    UnsafeOption,
+    UnsafeSome,
     Option,
     Some,
     UnsafeArray,
@@ -1269,8 +1274,10 @@ impl Keyword {
             "__ptr" => Keyword::UnsafePtr,
             "__size_t" => Keyword::UnsafeSizeT,
             "__struct" => Keyword::UnsafeStruct,
+            "__Option" => Keyword::UnsafeOption,
             "Option" => Keyword::Option,
             "Some" => Keyword::Some,
+            "__Some" => Keyword::UnsafeSome,
             "__array" => Keyword::UnsafeArray,
             "__static" => Keyword::UnsafeStatic,
             _ => return None,
@@ -1352,8 +1359,10 @@ impl Keyword {
             Keyword::Option => "Option",
             Keyword::UnsafeSizeT => "__size_t",
             Keyword::Some => "Some",
+            Keyword::UnsafeSome => "__Some",
             Keyword::UnsafeArray => "__array",
             Keyword::UnsafeStatic => "__static",
+            Keyword::UnsafeOption => "__Option",
         }
     }
 

@@ -20,10 +20,21 @@ pub enum StartFuncType{
 }
 
 
-/// assert that something from an inner call was ok. Usage `let sthing = self.parse_sthing(); assert_ok!(sthing);`
+/// assert that something from an inner call was ok. Usage `let x = self.parse_x(); assert_ok!(x);`
 #[macro_export]
 macro_rules! assert_ok {
     ($e:ident) => (if $e.is_err() { return Err($e.unwrap_err()) }; let $e = $e?;)
+}
+
+/// Bridge into the old Res<> signature functions. Usage `let x = self.parse_x(); expect_ok!(x, parser_context, None);`
+#[macro_export]
+macro_rules! expect_ok {
+    ($e:ident, $parser_context:ident, $error_return_value:ident) => (
+        if $e.is_err() { 
+            $parser_context.push_err($e.unwrap_err());
+            return $error_return_value;
+        } let $e = $e.unwrap();
+    )
 }
 
 #[macro_export]
@@ -54,12 +65,12 @@ macro_rules! assert_punct {
 
 #[macro_export]
 macro_rules! expect_punct {
-    ($self:ident, $parser_context:ident, $punct:path) => (
+    ($self:ident, $parser_context:ident, $punct:path, $error_return_value:ident) => (
         let e_next = $self.next_item();
         match e_next {
             Err(e) => {
                 $parser_context.push_err(e);
-                return None;
+                return $error_return_value;
             },
             Ok(next) => {
                 if !next.token.matches_punct($punct) {
@@ -75,12 +86,12 @@ macro_rules! expect_punct {
 
 #[macro_export]
 macro_rules! expect_keyword {
-    ($self:ident, $parser_context:ident, $keyword:path) => (
+    ($self:ident, $parser_context:ident, $keyword:path, $error_return_value:ident) => (
         let e_next = $self.next_item();
         match e_next {
             Err(e) => {
                 $parser_context.push_err(e);
-                return None;
+                return $error_return_value;
             },
             Ok(next) => {
                 if !next.token.matches_keyword($keyword) {
@@ -94,16 +105,16 @@ macro_rules! expect_keyword {
     )
 }
 
-/// Get the next token, returning if it is not ok. Usage: `let next = expect_next!(self, parser_context);`
+/// Get the next token, returning if it is not ok. Usage: `let next = expect_next!(self, parser_context, None);`
 #[macro_export]
 macro_rules! expect_next {
-    ($self:ident, $parser_context:ident) => (
+    ($self:ident, $parser_context:ident, $error_return_value:ident) => (
         {
             let e_next = $self.next_item();
             match e_next {
                 Err(e) => {
                     $parser_context.push_err(e);
-                    return None;
+                    return $error_return_value;
                 },
                 Ok(next) => {
                     next
@@ -196,10 +207,12 @@ fn try_create_cast(want: &Type, got: &TypedExpr, implicit: bool) -> Option<Typed
     create_cast(want, got, &type_cast)
 }
 
+/// Type to indicate if this is a speculative parse (i.e. it may fail gracefully) of a required parse (in which case we)
+/// must succeed
 #[derive(Debug, PartialEq)]
 pub enum Commitment{
     Speculative,
-    Commited
+    Committed
 }
 
 pub trait Importer{
@@ -213,6 +226,7 @@ struct ParserContext {
     pub global_imports: Vec<GlobalVariableImport>,
     pub func_decls: Vec<Func>,
     pub func_imports: Vec<FuncDecl>,
+    pub generic_func_decls: Vec<GenericFunc>,
     pub errors: Vec<Error>,
     pub type_map: HashMap<String, TypeDecl>,
     pub import_namespace_map: HashMap<String, String>,
@@ -227,6 +241,7 @@ impl ParserContext {
             global_imports: vec![],
             func_decls: vec![],
             func_imports: vec![],
+            generic_func_decls: vec![],
             errors: vec![],
             type_map: HashMap::new(),
             import_namespace_map: HashMap::new(),

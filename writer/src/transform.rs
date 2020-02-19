@@ -19,7 +19,6 @@ use crate::wasm::{WasmValueType, WasmResultType};
 use crate::wasm::wasm_code::{WasmLocals, WasmFunc, WasmExpr};
 use crate::wasm::wasm_instructions::{WasmInstr, opcodes};
 use crate::wasm::wasm_serialize::{serialize_i32, serialize_i64, serialize_f32, serialize_f64};
-use crate::wasm::wasm_object_file::{WasmObjectModuleFragment};
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum TranslationUnitType{

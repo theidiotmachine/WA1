@@ -276,6 +276,7 @@ impl<'b> Scanner<'b> {
                 RawToken::Ident => Token::Ident(Ident::from(s)),
                 RawToken::Keyword(k) => Token::Keyword(k),
                 RawToken::Null => Token::Null,
+                RawToken::UnsafeNull => Token::UnsafeNull,
                 RawToken::Number(_) => Token::Number(Number::from(s)),
                 RawToken::Punct(p) => Token::Punct(p),
                 RawToken::String {

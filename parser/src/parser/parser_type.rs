@@ -23,14 +23,14 @@ impl<'a> Parser<'a> {
         let token = &next.token;
         let type_args = vec![];
         if token.matches_punct(Punct::LessThan) {
-            if commitment == Commitment::Commited {
+            if commitment == Commitment::Committed {
                 parser_context.errors.push(Error::NotYetImplemented(next.location.clone(), String::from("type args")));
             }
             None
         } else {
             match o_type {
                 None => {
-                    if commitment == Commitment::Commited {
+                    if commitment == Commitment::Committed {
                         parser_context.errors.push(Error::InvalidTypeName(next.location.clone(), ident.as_str().to_owned()));
                     }
                     None
@@ -102,6 +102,16 @@ impl<'a> Parser<'a> {
                 assert_punct!(self, Punct::GreaterThan);
                 Ok(Type::Option(Box::new(inner)))
             },
+            Keyword::UnsafeOption => {
+                if !parser_context.is_unsafe {
+                    parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
+                }
+                assert_punct!(self, Punct::LessThan);
+                let inner = self.parse_type(parser_context);
+                assert_ok!(inner);
+                assert_punct!(self, Punct::GreaterThan);
+                Ok(Type::UnsafeOption(Box::new(inner)))
+            },
             _ => Err(Error::InvalidTypeName(loc.clone(), keyword.as_str().to_owned()))
         }
     }
@@ -113,7 +123,10 @@ impl<'a> Parser<'a> {
         let token = next.token;
         match token {
             Token::Keyword(keyword) => self.parse_type_from_keyword(&keyword, &next.location, parser_context),
-            Token::Ident(ident) => self.parse_type_from_ident(&ident, Commitment::Commited, parser_context).map_or_else(||Err(Error::Dummy), |x|Ok(x)),
+            Token::Ident(ident) => {
+                let loc = next.location.clone();
+                self.parse_type_from_ident(&ident, Commitment::Committed, parser_context).map_or_else(||Err(Error::Dummy(loc)), |x|Ok(x))
+            },
             Token::Number(n) => {
                 match n.kind() {
                     NumberKind::Hex => {

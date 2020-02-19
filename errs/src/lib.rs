@@ -42,9 +42,12 @@ pub enum Error {
     AsNeedsType(SourceLocation),
     RecursiveTypeDefinition(SourceLocation),
     UnsafeCodeNotAllowed(SourceLocation),
-    Dummy,
+    Dummy(SourceLocation),
     CompileFailed(String),
     ImportFailed(SourceLocation, String),
+    UnrecognizedTypeArg(SourceLocation),
+    UnrecognizedTypeArgConstraint(SourceLocation),
+    NoClosureInGenerics(SourceLocation),
 }
 
 impl Display for Error {
@@ -85,9 +88,12 @@ impl Display for Error {
             Error::AsNeedsType(ref loc) => write!(f, "ERROR {}: 'as' must have a type literal on its rhs", loc),
             Error::RecursiveTypeDefinition(ref loc) => write!(f, "ERROR {}: recursive type definition not allowed", loc),
             Error::UnsafeCodeNotAllowed(ref loc) => write!(f, "ERROR {}: unsafe code not allowed to be called without --unsafe", loc),
-            Error::Dummy => write!(f, "ERROR: internal error",),
+            Error::Dummy(ref loc) => write!(f, "ERROR {}: internal error", loc),
             Error::CompileFailed(ref err) => write!(f, "ERROR: could not compile because {}", err),
             Error::ImportFailed(ref loc, ref mes) => write!(f, "ERROR {}: import failed because {}", loc, mes),
+            Error::UnrecognizedTypeArg(ref loc) => write!(f, "ERROR {}: can't parse type arg", loc),
+            Error::UnrecognizedTypeArgConstraint(ref loc) => write!(f, "ERROR {}: unrecognized type arg constraint", loc),
+            Error::NoClosureInGenerics(ref loc) => write!(f, "ERROR {}: generic functions may not capture closures", loc),
         }
     }
 }

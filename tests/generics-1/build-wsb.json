@@ -1,0 +1,20 @@
+{
+    "entry_point": {
+        "file_name": "index.wa1",
+        "is_unsafe": false
+    },
+    "source_files": [
+        {
+            "file_name": "option.wa1",
+            "is_unsafe": true
+        },
+        {
+            "file_name": "assert.wa1",
+            "is_unsafe": false
+        }
+    ],
+    "src_path": "./src",
+    "out_path": "./out",
+    "module_name": "generics_1",
+    "wasm_exe": "wasm-ld-9"
+}

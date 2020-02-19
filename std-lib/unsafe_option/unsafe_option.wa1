@@ -1,0 +1,34 @@
+export function __Option_unwrap<T: __struct T>(x: __Option<T>): T {
+    let p: __ptr = x as __ptr;
+    if (p == 0) {
+        __trap();
+    } else {
+        p as T;
+    }
+}
+
+/*
+__struct S1{
+
+}
+
+export function __Option_unwrap_S1(x: __Option<S1>): S1 {
+    let p: __ptr = x as __ptr;
+    if (p == 0) {
+        __trap();
+    } else {
+        p as S1;
+    }
+}
+
+This is what gets compiled
+
+export function __Option_unwrap___ptr(x: __Option<__ptr>): __ptr {
+    let p: __ptr = x as __ptr;
+    if (p == 0) {
+        __trap();
+    } else {
+        p as __ptr;
+    }
+}
+*/

@@ -15,9 +15,9 @@ pub enum TypeCast{
     /// A free type widening that is legal in the system but costs nothing at runtime, e.g.
     /// from Type::IntLiteral(4) tp Type::Int
     FreeWiden,
-    /// One of the int widenings that we support. This is a cast from i32 to i64
+    /// One of the int casts that we support. This is a cast from i32 to i64
     IntToBigIntWiden,
-    /// One of the int widenings that we support. This is a cast from i32 to f64
+    /// One of the int casts that we support. This is a cast from i32 to f64
     IntToNumberWiden,
     /// Not possible to cast these types
     None,
@@ -33,7 +33,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
     }
 
     if *from == Type::Unknown {
-        // we can never widen from unknwon
+        // we can never widen from unknown
         return TypeCast::None;
     }
 
@@ -98,6 +98,21 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
                 Type::Option(inner_from) => {
                     if **inner_from == Type::Never {
                         // Option(Never) is 'null' which is None(T) in my language. Yes, I have somewhat abused the 
+                        // type system for options
+                        TypeCast::FreeWiden
+                    } else {
+                        TypeCast::None
+                    }
+                },
+                _ => TypeCast::None,
+            }
+        },
+
+        Type::UnsafeOption(_) => {
+            match from {
+                Type::UnsafeOption(inner_from) => {
+                    if **inner_from == Type::Never {
+                        // UnsafeOption(Never) is '__null' which is None(T) in my language. Yes, I have somewhat abused the 
                         // type system for options
                         TypeCast::FreeWiden
                     } else {
