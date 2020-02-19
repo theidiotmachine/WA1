@@ -1,16 +1,12 @@
 use crate::Parser;
 use crate::ParserContext;
-use crate::Res;
 
 use ress::prelude::*;
 use ast::prelude::*;
 use types::prelude::*;
 pub use errs::Error;
 use errs::prelude::*;
-use crate::assert_punct;
-use crate::assert_ok;
-use crate::assert_next;
-use crate::Commitment;
+use crate::{Commitment, expect_punct, expect_next};
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_type_from_ident(&mut self, 
@@ -25,15 +21,19 @@ impl<'a> Parser<'a> {
         if token.matches_punct(Punct::LessThan) {
             if commitment == Commitment::Committed {
                 parser_context.errors.push(Error::NotYetImplemented(next.location.clone(), String::from("type args")));
+                Some(Type::Undeclared)
+            } else {
+                None
             }
-            None
         } else {
             match o_type {
                 None => {
                     if commitment == Commitment::Committed {
                         parser_context.errors.push(Error::InvalidTypeName(next.location.clone(), ident.as_str().to_owned()));
+                        Some(Type::Undeclared)
+                    } else {
+                        None
                     }
-                    None
                 },
                 Some(user_type) => {
                     match user_type {
@@ -53,128 +53,132 @@ impl<'a> Parser<'a> {
         keyword: &Keyword,
         loc: &SourceLocation,
         parser_context: &mut ParserContext,
-    ) -> Res<Type> {
+    ) -> Type {
+        let err_ret = Type::Undeclared;
         match keyword {
-            Keyword::Void => Ok(Type::RealVoid),
-            Keyword::Boolean => Ok(Type::Boolean),
-            Keyword::Unknown => Ok(Type::Unknown),
-            Keyword::Never => Ok(Type::Never),
-            Keyword::Number => Ok(Type::Number),
-            Keyword::String => Ok(Type::String),
+            Keyword::Void => Type::RealVoid,
+            Keyword::Boolean => Type::Boolean,
+            Keyword::Unknown => Type::Unknown,
+            Keyword::Never => Type::Never,
+            Keyword::Number => Type::Number,
+            Keyword::String => Type::String,
             Keyword::Array => {
-                assert_punct!(self, Punct::LessThan);
+                expect_punct!(self, parser_context, Punct::LessThan, err_ret);
                 let inner = self.parse_type(parser_context);
-                assert_ok!(inner);
-                assert_punct!(self, Punct::GreaterThan);
-                Ok(Type::Array(Box::new(inner)))
+                expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
+                Type::Array(Box::new(inner))
             },
             Keyword::UnsafeArray => {
                 if !parser_context.is_unsafe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
-                assert_punct!(self, Punct::LessThan);
+                expect_punct!(self, parser_context, Punct::LessThan, err_ret);
                 let inner = self.parse_type(parser_context);
-                assert_ok!(inner);
-                assert_punct!(self, Punct::GreaterThan);
-                Ok(Type::UnsafeArray(Box::new(inner)))
+                expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
+                Type::UnsafeArray(Box::new(inner))
             },
-            Keyword::BigInt => Ok(Type::BigInt),
-            Keyword::Int => Ok(Type::Int),
+            Keyword::BigInt => Type::BigInt,
+            Keyword::Int => Type::Int,
             //Keyword::Tuple => Ok(Type::Tuple),
             //Keyword::Object => Ok(Type::Object),
-            Keyword::Any => Ok(Type::Any),
+            Keyword::Any => Type::Any,
             Keyword::UnsafePtr => {
                 if !parser_context.is_unsafe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
-                Ok(Type::UnsafePtr)
+                Type::UnsafePtr
             },
             Keyword::UnsafeSizeT => {
                 if !parser_context.is_unsafe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
-                Ok(Type::UnsafeSizeT)
+                Type::UnsafeSizeT
             },
             Keyword::Option => {
-                assert_punct!(self, Punct::LessThan);
+                expect_punct!(self, parser_context, Punct::LessThan, err_ret);
                 let inner = self.parse_type(parser_context);
-                assert_ok!(inner);
-                assert_punct!(self, Punct::GreaterThan);
-                Ok(Type::Option(Box::new(inner)))
+                expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
+                Type::Option(Box::new(inner))
             },
             Keyword::UnsafeOption => {
                 if !parser_context.is_unsafe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
-                assert_punct!(self, Punct::LessThan);
+                expect_punct!(self, parser_context, Punct::LessThan, err_ret);
                 let inner = self.parse_type(parser_context);
-                assert_ok!(inner);
-                assert_punct!(self, Punct::GreaterThan);
-                Ok(Type::UnsafeOption(Box::new(inner)))
+                expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
+                Type::UnsafeOption(Box::new(inner))
             },
-            _ => Err(Error::InvalidTypeName(loc.clone(), keyword.as_str().to_owned()))
+            _ => {
+                parser_context.errors.push(Error::InvalidTypeName(loc.clone(), keyword.as_str().to_owned()));
+                Type::Undeclared
+            }
         }
     }
 
     pub(crate) fn parse_type(&mut self, 
         parser_context: &mut ParserContext,
-    ) -> Res<Type> {
-        let next = assert_next!(self, "expecting type");
+    ) -> Type {
+        let err_ret = Type::Undeclared;
+        let next = expect_next!(self, parser_context, err_ret);
         let token = next.token;
         match token {
             Token::Keyword(keyword) => self.parse_type_from_keyword(&keyword, &next.location, parser_context),
             Token::Ident(ident) => {
                 let loc = next.location.clone();
-                self.parse_type_from_ident(&ident, Commitment::Committed, parser_context).map_or_else(||Err(Error::Dummy(loc)), |x|Ok(x))
+                self.parse_type_from_ident(&ident, Commitment::Committed, parser_context).unwrap()
             },
             Token::Number(n) => {
                 match n.kind() {
                     NumberKind::Hex => {
                         let number_i64 = n.parse_i64().unwrap();
                         if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Ok(Type::BigIntLiteral(number_i64));
+                            return Type::BigIntLiteral(number_i64);
                         } else {
                             let number_i32 = n.parse_i32().unwrap();
-                            return Ok(Type::IntLiteral(number_i32));
+                            return Type::IntLiteral(number_i32);
                         }
                     },
                     NumberKind::DecI => {
                         let number_i64 = n.parse_i64().unwrap();
                         if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Ok(Type::BigIntLiteral(number_i64));
+                            return Type::BigIntLiteral(number_i64);
                         } else {
                             let number_i32 = n.parse_i32().unwrap();
-                            return Ok(Type::IntLiteral(number_i32));
+                            return Type::IntLiteral(number_i32);
                         }
                     },
                     NumberKind::Bin => {
                         let number_i64 = n.parse_i64().unwrap();
                         if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Ok(Type::BigIntLiteral(number_i64));
+                            return Type::BigIntLiteral(number_i64);
                         } else {
                             let number_i32 = n.parse_i32().unwrap();
-                            return Ok(Type::IntLiteral(number_i32));
+                            return Type::IntLiteral(number_i32);
                         }                    
                     },
                     NumberKind::Oct => {
                         let number_i64 = n.parse_i64().unwrap();
                         if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Ok(Type::BigIntLiteral(number_i64));
+                            return Type::BigIntLiteral(number_i64);
                         } else {
                             let number_i32 = n.parse_i32().unwrap();
-                            return Ok(Type::IntLiteral(number_i32));
+                            return Type::IntLiteral(number_i32);
                         }
                     },
                     NumberKind::DecF => {
                         let number = n.parse_f64();
-                        return Ok(Type::FloatLiteral(number.unwrap()));
+                        return Type::FloatLiteral(number.unwrap());
                     },
                 }
             },
 
-            Token::String(s) => Ok(Type::StringLiteral(s.to_string())),
+            Token::String(s) => Type::StringLiteral(s.to_string()),
 
-            _ => Err(Error::InvalidType(self.current_position))
+            _ => {
+                parser_context.errors.push(Error::InvalidType(self.current_position));
+                Type::Undeclared
+            }
         }
     }
 }

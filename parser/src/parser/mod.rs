@@ -727,9 +727,7 @@ impl<'b> Parser<'b> {
         let mut var_type = match token {
             Token::Punct(Punct::Colon) => {
                 self.skip_next_item();
-                let arg_type = self.parse_type(parser_context);
-                assert_ok!(arg_type);
-                arg_type
+                self.parse_type(parser_context)
             },
             Token::Punct(Punct::Equal) => {
                 Type::Undeclared
@@ -1007,7 +1005,6 @@ impl<'b> Parser<'b> {
                     assert_punct!(self, Punct::Colon);
                     let member_type = self.parse_type(parser_context);
                     assert_semicolon!(self);
-                    assert_ok!(member_type);
                     members.push(ClassMember{name: i.to_string(), r#type: member_type.clone(), privacy: Privacy::Public});
                 },
                 _ => {
@@ -1331,7 +1328,6 @@ impl<'b> Parser<'b> {
         self.skip_next_item();
 
         let type_to_construct = self.parse_type(parser_context);
-        assert_ok!(type_to_construct);
 
         let lookahead_item = self.peek_next_item();
         let lookahead = lookahead_item.token;
@@ -1829,11 +1825,8 @@ impl<'b> Parser<'b> {
                     Keyword::UnsafeSome => self.parse_unsafe_some(parser_func_context, parser_context),
                     _ => {
                         self.skip_next_item();
-                        let o_type = self.parse_type_from_keyword(&k, &lookahead_item.location, parser_context);
-                        match o_type {
-                            Ok(t) => Ok(TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: lookahead_item.location.clone()}),
-                            Err(_) => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "unexpected keyword")
-                        }
+                        let t = self.parse_type_from_keyword(&k, &lookahead_item.location, parser_context);
+                        Ok(TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: lookahead_item.location.clone()})
                     },
                 }
             },

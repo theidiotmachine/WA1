@@ -82,7 +82,6 @@ impl<'a> Parser<'a> {
         self.skip_next_item();
 
         let type_to_construct = self.parse_type(parser_context);
-        assert_ok!(type_to_construct);
 
         let lookahead_item = self.peek_next_item();
         let lookahead = lookahead_item.token;
@@ -152,7 +151,6 @@ impl<'a> Parser<'a> {
                     self.skip_next_item();
                     assert_punct!(self, Punct::Colon);
                     let member_type = self.parse_type(parser_context);
-                    assert_ok!(member_type);
                     assert_semicolon!(self);
                     members.push(StructMember{name: i.to_string(), r#type: member_type.clone()});
                 },

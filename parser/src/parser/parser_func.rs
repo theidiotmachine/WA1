@@ -110,7 +110,6 @@ impl<'a> Parser<'a> {
             Token::Punct(Punct::Colon) => {
                 self.skip_next_item();
                 let arg_type = self.parse_type(parser_context);
-                expect_ok!(arg_type, parser_context, None);
                 
                 let next = self.peek_next_item();
                 let token = &next.token;
@@ -270,7 +269,6 @@ impl<'a> Parser<'a> {
         //and the return type
         expect_punct!(self, parser_context, Punct::Colon, err_ret);
         let return_type = self.parse_type(parser_context);
-        expect_ok!(return_type, parser_context, err_ret);
 
         //here's the decl
         let func_decl = FuncDecl{
