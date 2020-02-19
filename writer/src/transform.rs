@@ -861,6 +861,7 @@ fn compile_expr(
         }
 
         Expr::Null => wasm_expr.data.push(WasmInstr::I32Const(0)),
+        Expr::UnsafeNull => wasm_expr.data.push(WasmInstr::I32Const(0)),
 
         Expr::SizeOf(t) => {
             match t {
