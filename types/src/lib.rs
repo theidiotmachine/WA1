@@ -6,6 +6,7 @@ use cast::get_type_casts_for_function_set;
 use cast::FuncCallTypeCast;
 use cast::TypeCast;
 use cast::try_cast;
+use generics::TypeConstraint;
 use std::collections::HashMap;
 
 pub mod prelude {
@@ -148,7 +149,7 @@ pub enum Type {
     /// not yet known - will be filled in by the type system
     Undeclared,
     ///Unresolved type var
-    VariableUsage(String),
+    VariableUsage{name: String, constraint: TypeConstraint},
     ///numeric literal - 'number'
     FloatLiteral(f64),
     //numeric literal - big int
@@ -212,7 +213,7 @@ impl Display for Type {
             Type::UserClass{name, type_args: _} => write!(f, "{}", name),
             Type::UnsafeStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "undeclared"),
-            Type::VariableUsage(name) => write!(f, "{}", name),
+            Type::VariableUsage{name: name, constraint: _} => write!(f, "{}", name),
             Type::UnsafePtr => write!(f, "__ptr"),
             Type::UnsafeSizeT => write!(f, "__size_t"),
             Type::FloatLiteral(n) => write!(f, "{}", n),

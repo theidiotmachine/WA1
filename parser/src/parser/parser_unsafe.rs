@@ -122,7 +122,7 @@ impl<'a> Parser<'a> {
             parser_context.errors.push(Error::DuplicateTypeName(id.to_string()))
         }
 
-        self.context.push_empty_type_scope();
+        parser_context.push_empty_type_scope();
 
         let mut members: Vec<StructMember> = vec![];
 
@@ -160,7 +160,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.context.pop_type_scope();
+        parser_context.pop_type_scope();
 
         parser_context.type_map.insert(id.to_string(), TypeDecl::Struct{struct_type: StructType{members: members}, under_construction: false, export: export, name: id.to_string()});
 

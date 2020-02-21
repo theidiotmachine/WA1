@@ -1,3 +1,4 @@
+use crate::generics::TypeConstraint;
 use crate::Type;
 use crate::FuncType;
 use std::cmp;
@@ -81,6 +82,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
                 Type::Int => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::UnsafeStruct{name: _} => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::UnsafeSizeT => TypeCast::FreeWiden,
+                Type::UnsafeOption(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 _ => TypeCast::None,
             }
         },
@@ -127,6 +129,15 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
             match from {
                 Type::UnsafePtr => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 _ => TypeCast::None,
+            }
+        },
+
+        Type::VariableUsage{name: _, constraint} => {
+            match constraint{
+                TypeConstraint::None => TypeCast::None,
+                TypeConstraint::IsAStruct => {
+                    try_cast(from, &Type::UnsafeStruct{name: String::from("")}, implicit)
+                }
             }
         }
 

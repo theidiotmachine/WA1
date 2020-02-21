@@ -12,8 +12,7 @@ pub use errs::Error;
 
 use crate::assert_ok;
 use crate::try_create_cast;
-use crate::assert_next;
-use crate::{assert_ident, assert_punct, expect_keyword, expect_next, expect_ident, expect_ok, expect_punct};
+use crate::{expect_keyword, expect_next, expect_ident, expect_punct};
 
 impl<'a> Parser<'a> {
     /// If we are expecting a no arg function, call this.
@@ -26,17 +25,14 @@ impl<'a> Parser<'a> {
             parser_context.errors.push(self.expected_token_error_raw(&next, &[&"("]));
             return;
         }
-        let args = self.parse_function_call_args(&vec![], parser_func_context, parser_context);
-        if args.is_err() { 
-            return parser_context.errors.push(args.unwrap_err());
-        }
+        self.parse_function_call_args(&vec![], parser_func_context, parser_context);
     }
 
     pub(crate) fn parse_function_call_args(&mut self,
         arg_types: &Vec<Type>,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<Vec<TypedExpr>> {
+    ) -> Vec<TypedExpr> {
         let mut out: Vec<TypedExpr> = vec![];
         self.skip_next_item();
 
@@ -49,7 +45,7 @@ impl<'a> Parser<'a> {
                     if arg_types.len() != 0 {
                         parser_context.errors.push(Error::NotEnoughArgs);        
                     }
-                    return Ok(out);
+                    return out;
                 },
                 _ => {}
             },
@@ -58,7 +54,8 @@ impl<'a> Parser<'a> {
 
         loop{
             let expr = self.parse_expr(parser_func_context, parser_context);
-            assert_ok!(expr);
+            //remove this when parse_expr uses TSMGO error handling
+            if expr.is_err() { return out; }; let expr = expr.unwrap();
             
             if out.len() == arg_types.len() {
                 parser_context.errors.push(Error::TooManyArgs);
@@ -86,14 +83,20 @@ impl<'a> Parser<'a> {
                         if arg_types.len() != out.len() {
                             parser_context.errors.push(Error::NotEnoughArgs);        
                         }
-                        return Ok(out);
+                        return out;
                     },
                     Punct::Comma => {
                         self.skip_next_item();
                     },
-                    _ => return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "need expr or comma")
+                    _ => {
+                        parser_context.errors.push(Error::UnexpectedToken(lookahead_item.location.clone(), String::from("need expr or comma")));
+                        self.skip_next_item();
+                    }
                 },
-                _ => return self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "need expr or comma")
+                _ => {
+                    parser_context.errors.push(Error::UnexpectedToken(lookahead_item.location.clone(), String::from("need expr or comma")));
+                    self.skip_next_item();
+                }
             }
         }
     }
@@ -256,7 +259,7 @@ impl<'a> Parser<'a> {
         let mut generic = false;
         let type_args = if token.matches_punct(Punct::LessThan) {
             let type_args = self.parse_type_decl_args(parser_context);
-            self.context.push_type_scope(&type_args);
+            parser_context.push_type_scope(&type_args);
             generic = true;
             type_args
         } else {
@@ -288,7 +291,7 @@ impl<'a> Parser<'a> {
 
         //deal with the results
         if generic {
-            self.context.pop_type_scope();
+            parser_context.pop_type_scope();
             if func.closure.len() > 0 {
                 parser_context.push_err(Error::NoClosureInGenerics(loc))
             }

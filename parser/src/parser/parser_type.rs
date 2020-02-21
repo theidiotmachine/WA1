@@ -28,11 +28,19 @@ impl<'a> Parser<'a> {
         } else {
             match o_type {
                 None => {
-                    if commitment == Commitment::Committed {
-                        parser_context.errors.push(Error::InvalidTypeName(next.location.clone(), ident.as_str().to_owned()));
-                        Some(Type::Undeclared)
-                    } else {
-                        None
+                    let o_scoped_type = parser_context.get_scoped_type(&ident.to_string());
+                    match o_scoped_type {
+                        Some(scoped_type) => {
+                            Some(Type::VariableUsage{name: scoped_type.name.clone(), constraint: scoped_type.constraint.clone()})
+                        },
+                        None => {
+                            if commitment == Commitment::Committed {
+                                parser_context.errors.push(Error::InvalidTypeName(next.location.clone(), ident.as_str().to_owned()));
+                                Some(Type::Undeclared)
+                            } else {
+                                None
+                            }
+                        }
                     }
                 },
                 Some(user_type) => {
@@ -125,7 +133,6 @@ impl<'a> Parser<'a> {
         match token {
             Token::Keyword(keyword) => self.parse_type_from_keyword(&keyword, &next.location, parser_context),
             Token::Ident(ident) => {
-                let loc = next.location.clone();
                 self.parse_type_from_ident(&ident, Commitment::Committed, parser_context).unwrap()
             },
             Token::Number(n) => {

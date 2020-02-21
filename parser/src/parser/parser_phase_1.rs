@@ -2,15 +2,10 @@ use crate::Parser;
 use crate::ParserContext;
 use crate::ParserFuncContext;
 use ast::Exports;
-use std::collections::HashMap;
 
 use ress::prelude::*;
 use ast::prelude::*;
 pub use errs::Error;
-
-macro_rules! should_be_ok {
-    ($e:ident) => (if $e.is_err() { return; }; let $e = $e.unwrap();)
-}
 
 fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
     let mut global_decls: Vec<GlobalVariableDecl> = vec![];

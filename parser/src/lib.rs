@@ -219,6 +219,19 @@ pub trait Importer{
     fn import(&mut self, import_path_name: &String, from_path_name: &String) -> Result<Imports, String>;
 }
 
+#[derive(Debug)]
+struct TypeScope{
+    pub var_names: HashMap<String, TypeArg>,
+}
+
+impl<> Default for TypeScope<> {
+    fn default() -> Self {
+        Self {
+            var_names: HashMap::new(),
+        }
+    }
+}
+
 /// Running state of the parser. Used to collect the AST as we build it.
 #[derive(Debug)]
 struct ParserContext {
@@ -232,6 +245,12 @@ struct ParserContext {
     pub import_namespace_map: HashMap<String, String>,
     pub is_unsafe: bool,
     pub file_name: String,
+
+    /// type variables
+    type_var_stack: Vec<TypeScope>,
+
+    /// Uniqueness counter
+    counter: u64,
 }
 
 impl ParserContext {
@@ -246,7 +265,9 @@ impl ParserContext {
             type_map: HashMap::new(),
             import_namespace_map: HashMap::new(),
             is_unsafe: is_unsafe,
-            file_name: file_name.clone()
+            file_name: file_name.clone(),
+            type_var_stack: vec![],
+            counter: 0,
         }
     }
 
@@ -260,6 +281,50 @@ impl ParserContext {
 
     pub fn get_fn_decl_from_imports(&self, name: &String) -> Option<FuncDecl> {
         self.func_imports.iter().find(|&x| x.name == *name).map(|x| x.clone())
+    }
+
+    fn push_type_scope(&mut self, args: &Vec<TypeArg>) {
+        let mut v: HashMap<String, TypeArg> = match self.type_var_stack.last() {
+            None => HashMap::new(),
+            Some(s) => {
+                s.var_names.clone()
+            } 
+        };
+        
+        for arg in args {
+            v.insert(arg.name.clone(), TypeArg{name: self.get_unique_name(&arg.name), constraint: arg.constraint.clone()});
+        }
+        self.type_var_stack.push(TypeScope{var_names: v});
+    }
+
+    fn push_empty_type_scope(&mut self) {
+        let v: HashMap<String, TypeArg> = match self.type_var_stack.last() {
+            None => HashMap::new(),
+            Some(s) => {
+                s.var_names.clone()
+            } 
+        };
+        
+        self.type_var_stack.push(TypeScope{var_names: v});
+    }
+
+    fn pop_type_scope(&mut self) {
+        self.type_var_stack.pop();
+    }
+
+    fn get_scoped_type(&mut self, var_name: &String) -> Option<&TypeArg> {
+        match self.type_var_stack.last() {
+            None => None,
+            Some(s) => {
+                s.var_names.get(var_name)
+            } 
+        }
+    }
+
+    fn get_unique_name(&mut self, name: &String) -> String {
+        let counter = self.counter;
+        self.counter += 1;
+        format!("{}#{}", name, counter)
     }
 }
 

@@ -1,7 +1,7 @@
 {
     "entry_point": {
         "file_name": "index.wa1",
-        "is_unsafe": false
+        "is_unsafe": true
     },
     "source_files": [
         {
@@ -10,7 +10,7 @@
         },
         {
             "file_name": "assert.wa1",
-            "is_unsafe": false
+            "is_unsafe": true
         }
     ],
     "src_path": "./src",

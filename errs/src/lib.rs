@@ -77,7 +77,7 @@ impl Display for Error {
             Error::NotEnoughArgs => write!(f, "Not enough args"),
             Error::DuplicateTypeName(name) => write!(f, "Duplicate type name: {}", name),
             Error::NotInLoop(what) => write!(f, "Used loop keyword outside a loop: {}", what),
-            Error::TypeFailureIf(ref loc, ref then_type, ref else_type) => write!(f, "ERROR {}: Typed of branches of if statement do not match; then branch: {}, else branch: {}", loc, then_type, else_type),
+            Error::TypeFailureIf(ref loc, ref then_type, ref else_type) => write!(f, "ERROR {}: Types of branches of if statement do not match; then branch is of type {}, else branch is of type {}", loc, then_type, else_type),
             Error::WhileMayNotReturn => write!(f, "while loops may not have a return value"),
             Error::NoComponents(ref loc) => write!(f, "ERROR {}: object has no components", loc),
             Error::CantConstructUsingObjectLiteral(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {} from an object literal", loc, t),

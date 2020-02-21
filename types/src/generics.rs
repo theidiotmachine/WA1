@@ -28,7 +28,7 @@ pub struct AbstractTypeDecl{
 */
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub enum TypeArgConstraint{
+pub enum TypeConstraint{
     None,
     IsAStruct,
 }
@@ -36,5 +36,5 @@ pub enum TypeArgConstraint{
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct TypeArg{
     pub name: String,
-    pub constraint: TypeArgConstraint,
+    pub constraint: TypeConstraint,
 }
