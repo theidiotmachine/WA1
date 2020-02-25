@@ -6,8 +6,9 @@ use crate::Res;
 use ress::prelude::*;
 use ast::prelude::*;
 use types::prelude::*;
-pub use errs::Error;
-use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident};
+pub use errs::{Error};
+use errs::prelude::*;
+use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident, expect_ident};
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_mem_grow(&mut self,    
@@ -36,19 +37,19 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_mem_size(&mut self,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let loc = self.peek_next_location();
         self.parse_empty_function_call_args(parser_func_context, parser_context);
-        Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemorySize), is_const: true, r#type: Type::UnsafeSizeT, loc: loc})
+        TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemorySize), is_const: true, r#type: Type::UnsafeSizeT, loc: loc}
     }
 
     pub(crate) fn parse_trap(&mut self,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let loc = self.peek_next_location();
         self.parse_empty_function_call_args(parser_func_context, parser_context);
-        Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::Trap), is_const: true, r#type: Type::Never, loc: loc})
+        TypedExpr{expr: Expr::Intrinsic(Intrinsic::Trap), is_const: true, r#type: Type::Never, loc: loc}
     }
 
     pub(crate) fn parse_sizeof(&mut self,    
@@ -81,7 +82,6 @@ impl<'a> Parser<'a> {
         self.skip_next_item();
 
         let type_to_construct = self.parse_type(parser_context);
-        assert_ok!(type_to_construct);
 
         let lookahead_item = self.peek_next_item();
         let lookahead = lookahead_item.token;
@@ -122,7 +122,7 @@ impl<'a> Parser<'a> {
             parser_context.errors.push(Error::DuplicateTypeName(id.to_string()))
         }
 
-        self.context.push_empty_func_type_scope();
+        parser_context.push_empty_type_scope();
 
         let mut members: Vec<StructMember> = vec![];
 
@@ -151,7 +151,6 @@ impl<'a> Parser<'a> {
                     self.skip_next_item();
                     assert_punct!(self, Punct::Colon);
                     let member_type = self.parse_type(parser_context);
-                    assert_ok!(member_type);
                     assert_semicolon!(self);
                     members.push(StructMember{name: i.to_string(), r#type: member_type.clone()});
                 },
@@ -161,10 +160,111 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.context.pop_type_scope();
+        parser_context.pop_type_scope();
 
         parser_context.type_map.insert(id.to_string(), TypeDecl::Struct{struct_type: StructType{members: members}, under_construction: false, export: export, name: id.to_string()});
 
         Ok(TypedExpr{expr: Expr::StructDecl(id.to_string()), is_const: true, r#type: Type::RealVoid, loc: loc})
+    }
+
+    ///Helper function to create a '__null' expr
+    pub(crate) fn create_unsafe_null(
+        loc: &SourceLocation,
+    ) -> TypedExpr {
+        TypedExpr{expr:Expr::UnsafeNull, r#type: Type::UnsafeOption(Box::new(Type::Never)), is_const: true, loc: loc.clone()}
+    }
+
+    /// Parse '__Some(x)'. Because options are built in at a fairly low level, this is a parser function, not a library function.
+    pub(crate) fn parse_unsafe_some(&mut self, 
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> Res<TypedExpr>{
+        let loc = self.peek_next_location();
+        if !parser_context.is_unsafe {
+            parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
+        }
+
+        self.skip_next_item();
+        assert_punct!(self, Punct::OpenParen);
+        let inner = self.parse_expr(parser_func_context, parser_context);
+        assert_ok!(inner);
+        assert_punct!(self, Punct::CloseParen);
+        match inner.r#type {
+            Type::UnsafeStruct{name: _} => {
+
+            },
+            _ => {
+                parser_context.errors.push(Error::NotYetImplemented(inner.loc, String::from("Options on anything other than a __struct")));
+            }
+        }
+
+        let inner_loc = inner.loc.clone();
+        let inner_type = inner.r#type.clone();
+        Ok(TypedExpr{expr: Expr::FreeTypeWiden(Box::new(inner)), r#type: Type::UnsafeOption(Box::new(inner_type)), loc: inner_loc, is_const: true})
+    }
+
+    pub(crate) fn parse_unsafe_option_component(&mut self,
+        lhs: &TypedExpr,
+        //inner_type: &Type,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> TypedExpr {
+        let next_item = self.next_item();
+        if next_item.is_err() { 
+            parser_context.push_err(next_item.unwrap_err());
+            return lhs.clone();
+        } let next_item = next_item.unwrap();
+
+        let component = expect_ident!(next_item, parser_context, "Expecting int component to be an identifier");
+        
+        let loc = next_item.location;
+
+        match component.as_ref() {
+            "isSome" => {
+                self.parse_empty_function_call_args(parser_func_context, parser_context);
+                TypedExpr{
+                    expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::NotEqual, rhs: Box::new(Parser::create_unsafe_null(&loc))},
+                    r#type: Type::Boolean, is_const: true, loc: loc.clone()
+                }
+            },
+            "isNone" => {
+                self.parse_empty_function_call_args(parser_func_context, parser_context);
+                TypedExpr{
+                    expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_unsafe_null(&loc))},
+                    r#type: Type::Boolean, is_const: true, loc: loc.clone()
+                }
+            },
+            /*
+            "unwrap" => {  
+                self.parse_empty_function_call_args(parser_func_context, parser_context);
+                let expr = Expr::IfThenElse(
+                    //if empty
+                    Box::new(TypedExpr{
+                        expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_null(&loc))},
+                        r#type: Type::Boolean, is_const: true, loc: loc.clone()
+                    }),
+                    //then trap
+                    Box::new(TypedExpr{
+                        expr: Expr::Intrinsic(Intrinsic::Trap),
+                        r#type: Type::Never, is_const: true, loc: loc.clone()
+                    }),
+                    //else
+                    Box::new(TypedExpr{
+                        expr: Expr::FreeTypeWiden(Box::new(lhs.clone())),
+                        r#type: inner_type.clone(), is_const: true, loc: loc.clone()
+                    }),
+                );
+                
+                Ok(TypedExpr{
+                    expr: expr,
+                    r#type: inner_type.clone(), is_const: true, loc: loc.clone()
+                })
+            },
+            */
+            _ => {
+                parser_context.push_err(Error::ObjectHasNoMember(next_item.location.clone(), component));
+                lhs.clone()
+            }
+        }
     }
 }

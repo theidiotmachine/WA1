@@ -1,3 +1,4 @@
+use crate::generics::TypeConstraint;
 use crate::Type;
 use crate::FuncType;
 use std::cmp;
@@ -15,9 +16,9 @@ pub enum TypeCast{
     /// A free type widening that is legal in the system but costs nothing at runtime, e.g.
     /// from Type::IntLiteral(4) tp Type::Int
     FreeWiden,
-    /// One of the int widenings that we support. This is a cast from i32 to i64
+    /// One of the int casts that we support. This is a cast from i32 to i64
     IntToBigIntWiden,
-    /// One of the int widenings that we support. This is a cast from i32 to f64
+    /// One of the int casts that we support. This is a cast from i32 to f64
     IntToNumberWiden,
     /// Not possible to cast these types
     None,
@@ -33,7 +34,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
     }
 
     if *from == Type::Unknown {
-        // we can never widen from unknwon
+        // we can never widen from unknown
         return TypeCast::None;
     }
 
@@ -81,6 +82,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
                 Type::Int => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::UnsafeStruct{name: _} => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::UnsafeSizeT => TypeCast::FreeWiden,
+                Type::UnsafeOption(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 _ => TypeCast::None,
             }
         },
@@ -108,10 +110,34 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
             }
         },
 
+        Type::UnsafeOption(inner_to) => {
+            match from {
+                Type::UnsafeOption(inner_from) => {
+                    if **inner_from == Type::Never {
+                        // UnsafeOption(Never) is '__null' which is None(T) in my language. Yes, I have somewhat abused the 
+                        // type system for options
+                        TypeCast::FreeWiden
+                    } else {
+                        try_cast(inner_from, inner_to, implicit)
+                    }
+                },
+                _ => TypeCast::None,
+            }
+        },
+
         Type::UnsafeStruct{name: _} => {
             match from {
                 Type::UnsafePtr => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 _ => TypeCast::None,
+            }
+        },
+
+        Type::VariableUsage{name: _, constraint} => {
+            match constraint{
+                TypeConstraint::None => TypeCast::NotNeeded,
+                TypeConstraint::IsAStruct => {
+                    try_cast(from, &Type::UnsafeStruct{name: String::from("")}, implicit)
+                }
             }
         }
 

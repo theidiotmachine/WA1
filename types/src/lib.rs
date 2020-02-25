@@ -1,10 +1,12 @@
 use serde::{Serialize, Deserialize};
 
 pub mod cast;
+pub mod generics;
 use cast::get_type_casts_for_function_set;
 use cast::FuncCallTypeCast;
 use cast::TypeCast;
 use cast::try_cast;
+use generics::TypeConstraint;
 use std::collections::HashMap;
 
 pub mod prelude {
@@ -16,10 +18,10 @@ pub mod prelude {
     pub use super::Privacy;
     pub use super::get_unary_op_type;
     pub use super::get_binary_op_type_cast;
-    pub use super::AbstractTypeDecl;
     pub use super::StructType;
     pub use super::StructMember;
     pub use super::cast::prelude::*;
+    pub use super::generics::*;
 }
 
 use std::fmt::Display;
@@ -49,7 +51,7 @@ pub enum OpType{
     SimpleOpType(Vec<FuncType>),
     /// The type of an assignment operator. rhs must be the same type as lhs, rv is same type as lhs.
     AssignmentOpType,
-    /// The type of an assign and modify operator. This is, say +=. We onlt have an array of types
+    /// The type of an assign and modify operator. This is, say +=. We only have an array of types
     /// here because they represent the various things the lhs can be; the rhs must be cast to
     /// that.
     AssignModifyOpType(Vec<Type>),
@@ -67,7 +69,7 @@ pub enum Privacy{
     Public, Private, Protected
 }
 
-/// Data memeber of a class.
+/// Data member of a class.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClassMember{
     pub name: String,
@@ -104,32 +106,6 @@ impl StructType {
     }
 }
 
-/// This is part of the type system rewrite. I am not sure it's correct yet.
-/// This is the body of a type function that consumes type args and returns a type.
-#[derive(Debug, Clone, PartialEq)]
-pub enum AbstractTypeBody{
-    VariableUse(String),
-    Array(Box<AbstractTypeBody>),
-    Func(Vec<AbstractTypeBody>, Box<AbstractTypeBody>),
-    UserType,
-    Number,
-    String,
-    Boolean,
-    Any,
-    Unknown, //???
-    RealVoid,
-    FakeVoid,
-    Never,
-}
-
-/// This is part of the type system rewrite. I am not sure it's correct yet.
-/// This is a type function that conumes type args and returns a type.
-#[derive(Debug, Clone, PartialEq)]
-pub struct AbstractTypeDecl{
-    pub args: Vec<String>,
-    pub out: AbstractTypeBody,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Type {
     /// unit type that actually manifests as nothing
@@ -153,7 +129,7 @@ pub enum Type {
     ///boolean
     Boolean,
     ///Func
-    Func{func_type: Box<FuncType>, type_args: Vec<Type>},
+    Func{func_type: Box<FuncType>},
     ///Tuple
     Tuple(Vec<Type>),
     /// untyped object literal - can be cast to a matching struct or class
@@ -162,16 +138,18 @@ pub enum Type {
     Any,
     /// Options. This is built into the type system because I want a zero-cost abstraction of a null pointer.
     Option(Box<Type>),
+    /// The unsafe option type. May one day become the full option type.
+    UnsafeOption(Box<Type>),
     /// Option - some
     Some(Box<Type>),
     /// user type
-    UserClass{name: String, type_args: Vec<Type>},
+    UserClass{name: String},
     /// user struct type
     UnsafeStruct{name: String},
-    /// not yet known - will be filled in by the typer
+    /// not yet known - will be filled in by the type system
     Undeclared,
     ///Unresolved type var
-    VariableUsage(String),
+    VariableUsage{name: String, constraint: TypeConstraint},
     ///numeric literal - 'number'
     FloatLiteral(f64),
     //numeric literal - big int
@@ -200,8 +178,49 @@ impl Type{
 
     pub fn get_func_type(&self) -> Option<&FuncType> {
         match &self {
-            Type::Func{func_type, type_args: _} => Some(func_type),
+            Type::Func{func_type} => Some(func_type),
             _ => None
+        }
+    }
+
+    pub fn get_mangled_name(&self) -> String {
+        match self {
+            Type::RealVoid => String::from("!void"),
+            Type::FakeVoid => String::from("!fakeVoid"),
+            Type::Unknown => String::from("!unknown"),
+            Type::Never => String::from("!never"),
+            Type::Number => String::from("!number"),
+            Type::String => String::from("!string"),
+            Type::Array(inner) => format!("!Array<{}>", inner.get_mangled_name()),
+            Type::BigInt => String::from("!bigint"),
+            Type::Int => String::from("!int"),
+            Type::Boolean => String::from("!boolean"),
+            Type::Func{func_type} => format!("!func_{}", func_type),
+            Type::Tuple(types) => {
+                let mut vec: Vec<String> = vec![];
+                for inner in types {
+                    vec.push(format!("{}", inner.get_mangled_name()));
+                }
+                format!("!Tuple<{}>", vec.join(",")) 
+            },
+            //Type::Object => write!(f, "object"),
+            Type::Any => String::from("!any"),
+            Type::Option(inner) => format!("!Option<{}>", inner.get_mangled_name()),
+            Type::UnsafeOption(inner) => format!("!__Option<{}>", inner.get_mangled_name()),
+            Type::Some(inner) => format!("!Some<{}>", inner.get_mangled_name()),
+            Type::UserClass{name} => format!("!class_{}", name),
+            Type::UnsafeStruct{name} => format!("!__struct_{}", name),
+            Type::Undeclared => format!("!undeclared"),
+            Type::VariableUsage{name, constraint: _} => format!("!var_{}", name),
+            Type::UnsafePtr => format!("!__ptr"),
+            Type::UnsafeSizeT => format!( "!__size_t"),
+            Type::FloatLiteral(n) => format!("!fl_{}", n),
+            Type::IntLiteral(n) => format!("!il_{}", n),
+            Type::BigIntLiteral(n) => format!("!bil_{}", n),
+            Type::StringLiteral(n) => format!("!sl_\"{}\"", n),
+            Type::ObjectLiteral(_) => format!("!ol_{{}}"),
+            Type::TypeLiteral(inner) => format!("!TypeLiteral_{}", inner.get_mangled_name()),
+            Type::UnsafeArray(inner) => format!("!__array<{}>", inner.get_mangled_name()),
         }
     }
 }
@@ -219,7 +238,7 @@ impl Display for Type {
             Type::BigInt => write!(f, "bigint"),
             Type::Int => write!(f, "int"),
             Type::Boolean => write!(f, "boolean"),
-            Type::Func{func_type, type_args: _} => write!(f, "{}", func_type),
+            Type::Func{func_type} => write!(f, "{}", func_type),
             Type::Tuple(types) => {
                 let mut vec: Vec<String> = vec![];
                 for inner in types {
@@ -230,11 +249,12 @@ impl Display for Type {
             //Type::Object => write!(f, "object"),
             Type::Any => write!(f, "any"),
             Type::Option(inner) => write!(f, "Option<{}>", inner),
+            Type::UnsafeOption(inner) => write!(f, "__Option<{}>", inner),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
-            Type::UserClass{name, type_args: _} => write!(f, "{}", name),
+            Type::UserClass{name} => write!(f, "{}", name),
             Type::UnsafeStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "undeclared"),
-            Type::VariableUsage(name) => write!(f, "{}", name),
+            Type::VariableUsage{name, constraint: _} => write!(f, "{}", name),
             Type::UnsafePtr => write!(f, "__ptr"),
             Type::UnsafeSizeT => write!(f, "__size_t"),
             Type::FloatLiteral(n) => write!(f, "{}", n),

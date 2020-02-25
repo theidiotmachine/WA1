@@ -1,0 +1,28 @@
+import {*} from "./option"
+import {*} from "./assert"
+import {*} from "./basic"
+
+__struct S1 {
+    x: int;
+}
+
+__struct S2 {
+    y: number;
+}
+
+export function test(): void {
+    let s1_1 = __static S1{ x: 3 };
+    let s1_2 = basic.id<S1>(s1_1);
+    assert.assert(s1_1.x == s1_2.x);
+
+    let s2_1 = __static S2{ y: 3 };
+    let s2_2 = basic.id<S2>(s2_1);
+    assert.assert(s2_1.y == s2_2.y);
+
+    let n1: number = 4;
+    let n2 = basic.id<number>(n1);
+    assert.assert(n1 == n2);
+
+    let oS = __Some(s1_1);
+    assert.assert(option.__Option_unwrap<S1>(oS).x == 3);
+}

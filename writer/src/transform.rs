@@ -19,7 +19,6 @@ use crate::wasm::{WasmValueType, WasmResultType};
 use crate::wasm::wasm_code::{WasmLocals, WasmFunc, WasmExpr};
 use crate::wasm::wasm_instructions::{WasmInstr, opcodes};
 use crate::wasm::wasm_serialize::{serialize_i32, serialize_i64, serialize_f32, serialize_f64};
-use crate::wasm::wasm_object_file::{WasmObjectModuleFragment};
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum TranslationUnitType{
@@ -292,7 +291,8 @@ fn compile_binary_operator(
 }
 
 fn compile_unary_operator(
-    uo: &UnaryOperatorApplication,
+    op: &UnaryOperator,
+    expr: &TypedExpr,
     return_type: &Type,
     loc: &SourceLocation,
     context: &CompilerContext,
@@ -301,11 +301,11 @@ fn compile_unary_operator(
     wasm_expr: &mut WasmExpr,
     errors: &mut Vec<Error>
 ) {
-    compile_expr(&uo.expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
+    compile_expr(expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
     
     match return_type {
         Type::Int => {
-            match uo.op {
+            match op {
                 UnaryOperator::BitNot => {
                     wasm_expr.data.push(WasmInstr::I32Const(-1));
                     wasm_expr.data.push(WasmInstr::I32Xor);
@@ -323,7 +323,7 @@ fn compile_unary_operator(
         },
 
         Type::UnsafeSizeT => {
-            match uo.op {
+            match op {
                 UnaryOperator::BitNot => {
                     wasm_expr.data.push(WasmInstr::I32Const(-1));
                     wasm_expr.data.push(WasmInstr::I32Xor);
@@ -341,7 +341,7 @@ fn compile_unary_operator(
         },
 
         Type::Number => {
-            match uo.op {
+            match op {
                 UnaryOperator::Plus => {},
                 UnaryOperator::Minus => {
                     wasm_expr.data.push(WasmInstr::F64Neg);
@@ -353,7 +353,7 @@ fn compile_unary_operator(
         },
 
         Type::Boolean => {
-            match uo.op {
+            match op {
                 UnaryOperator::LogicalNot => {
                     wasm_expr.data.push(WasmInstr::I32Eqz);
                 },
@@ -611,9 +611,9 @@ fn compile_expr(
         
         Expr::BigIntLiteral(v) => wasm_expr.data.push(WasmInstr::I64Const(*v)),
 
-        Expr::BinaryOperator(bo) => compile_binary_operator(&bo.op, &bo.lhs, &bo.rhs, &typed_expr.r#type, &typed_expr.loc, context, local_var_map, wasm_module, wasm_expr, errors),
+        Expr::BinaryOperator{lhs, rhs, op} => compile_binary_operator(&op, &lhs, &rhs, &typed_expr.r#type, &typed_expr.loc, context, local_var_map, wasm_module, wasm_expr, errors),
 
-        Expr::UnaryOperator(uo) => compile_unary_operator(uo, &typed_expr.r#type, &typed_expr.loc, context, local_var_map, wasm_module, wasm_expr, errors),
+        Expr::UnaryOperator{expr, op} => compile_unary_operator(&op, &expr, &typed_expr.r#type, &typed_expr.loc, context, local_var_map, wasm_module, wasm_expr, errors),
 
         Expr::Parens(p) => compile_expr(&p, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
 
@@ -777,14 +777,14 @@ fn compile_expr(
                 Type::UnsafeStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
-                    let stml = match mem_layout_elem {
-                        UserMemLayout::Struct(stml) => {
-                            stml
+                    let sml = match mem_layout_elem {
+                        UserMemLayout::Struct(sml) => {
+                            sml
                         },
                     };
 
                     //push size, call malloc
-                    wasm_expr.data.push(WasmInstr::I32Const(stml.size.try_into().unwrap()));
+                    wasm_expr.data.push(WasmInstr::I32Const(sml.size.try_into().unwrap()));
                     compile_func_call(&String::from("malloc"), &typed_expr.loc, context, wasm_expr, errors);
 
                     //set the local variable called __scratch_malloc (this should have been created previously) and set the malloc size 
@@ -811,13 +811,13 @@ fn compile_expr(
                 Type::UnsafeStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
-                    let stml = match mem_layout_elem {
-                        UserMemLayout::Struct(stml) => {
-                            stml
+                    let sml = match mem_layout_elem {
+                        UserMemLayout::Struct(sml) => {
+                            sml
                         },
                     };
 
-                    let data_section_entry = wasm_module.data_section.allocate_new_data_section_entry(stml.size, stml.alignment);
+                    let data_section_entry = wasm_module.data_section.allocate_new_data_section_entry(sml.size, sml.alignment);
                     let addr = data_section_entry.addr;
 
                     //now set each member
@@ -862,19 +862,20 @@ fn compile_expr(
         }
 
         Expr::Null => wasm_expr.data.push(WasmInstr::I32Const(0)),
+        Expr::UnsafeNull => wasm_expr.data.push(WasmInstr::I32Const(0)),
 
         Expr::SizeOf(t) => {
             match t {
                 Type::UnsafeStruct{name: struct_name} => {
                     //first get the mem layout data
                     let mem_layout_elem = context.mem_layout_map.get(struct_name).unwrap();
-                    let stml = match mem_layout_elem {
-                        UserMemLayout::Struct(stml) => {
-                            stml
+                    let sml = match mem_layout_elem {
+                        UserMemLayout::Struct(sml) => {
+                            sml
                         },
                     };
 
-                    wasm_expr.data.push(WasmInstr::I32Const(stml.size.try_into().unwrap()));
+                    wasm_expr.data.push(WasmInstr::I32Const(sml.size.try_into().unwrap()));
                 },
                 _ => { errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("__sizeof on {}", t)))); }
             }
@@ -930,7 +931,11 @@ fn register_func(
                         wrf.linking_section.init_funcs.new_init_func(wrf.linking_section.symbol_table.funcs[func_idx as usize]);
                     }
                 } else {
-                    wrf.linking_section.symbol_table.new_local_function(func_idx, &func_decl.name);
+                    if func_decl.generic_impl {
+                        wrf.linking_section.symbol_table.new_weak_function(func_idx, &func_decl.name);
+                    } else {
+                        wrf.linking_section.symbol_table.new_local_function(func_idx, &func_decl.name);
+                    }
                 }
             },
             _ => {}
