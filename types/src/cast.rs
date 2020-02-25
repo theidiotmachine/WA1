@@ -110,7 +110,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
             }
         },
 
-        Type::UnsafeOption(_) => {
+        Type::UnsafeOption(inner_to) => {
             match from {
                 Type::UnsafeOption(inner_from) => {
                     if **inner_from == Type::Never {
@@ -118,7 +118,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
                         // type system for options
                         TypeCast::FreeWiden
                     } else {
-                        TypeCast::None
+                        try_cast(inner_from, inner_to, implicit)
                     }
                 },
                 _ => TypeCast::None,
@@ -134,7 +134,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
 
         Type::VariableUsage{name: _, constraint} => {
             match constraint{
-                TypeConstraint::None => TypeCast::None,
+                TypeConstraint::None => TypeCast::NotNeeded,
                 TypeConstraint::IsAStruct => {
                     try_cast(from, &Type::UnsafeStruct{name: String::from("")}, implicit)
                 }

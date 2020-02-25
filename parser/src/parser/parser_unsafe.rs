@@ -8,7 +8,7 @@ use ast::prelude::*;
 use types::prelude::*;
 pub use errs::{Error};
 use errs::prelude::*;
-use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident};
+use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident, expect_ident};
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_mem_grow(&mut self,    
@@ -37,19 +37,19 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_mem_size(&mut self,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let loc = self.peek_next_location();
         self.parse_empty_function_call_args(parser_func_context, parser_context);
-        Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemorySize), is_const: true, r#type: Type::UnsafeSizeT, loc: loc})
+        TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemorySize), is_const: true, r#type: Type::UnsafeSizeT, loc: loc}
     }
 
     pub(crate) fn parse_trap(&mut self,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let loc = self.peek_next_location();
         self.parse_empty_function_call_args(parser_func_context, parser_context);
-        Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::Trap), is_const: true, r#type: Type::Never, loc: loc})
+        TypedExpr{expr: Expr::Intrinsic(Intrinsic::Trap), is_const: true, r#type: Type::Never, loc: loc}
     }
 
     pub(crate) fn parse_sizeof(&mut self,    
@@ -208,28 +208,31 @@ impl<'a> Parser<'a> {
         //inner_type: &Type,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let next_item = self.next_item();
-        assert_ok!(next_item);
-        let id = assert_ident!(next_item, "Expecting int component to be an identifier");
+        if next_item.is_err() { 
+            parser_context.push_err(next_item.unwrap_err());
+            return lhs.clone();
+        } let next_item = next_item.unwrap();
+
+        let component = expect_ident!(next_item, parser_context, "Expecting int component to be an identifier");
         
-        let component = id.to_string();
         let loc = next_item.location;
 
         match component.as_ref() {
             "isSome" => {
                 self.parse_empty_function_call_args(parser_func_context, parser_context);
-                Ok(TypedExpr{
-                    expr: Expr::BinaryOperator(BinaryOperatorApplication{lhs: Box::new(lhs.clone()), op: BinaryOperator::NotEqual, rhs: Box::new(Parser::create_unsafe_null(&loc))}),
+                TypedExpr{
+                    expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::NotEqual, rhs: Box::new(Parser::create_unsafe_null(&loc))},
                     r#type: Type::Boolean, is_const: true, loc: loc.clone()
-                })
+                }
             },
             "isNone" => {
                 self.parse_empty_function_call_args(parser_func_context, parser_context);
-                Ok(TypedExpr{
-                    expr: Expr::BinaryOperator(BinaryOperatorApplication{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_unsafe_null(&loc))}),
+                TypedExpr{
+                    expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_unsafe_null(&loc))},
                     r#type: Type::Boolean, is_const: true, loc: loc.clone()
-                })
+                }
             },
             /*
             "unwrap" => {  
@@ -237,7 +240,7 @@ impl<'a> Parser<'a> {
                 let expr = Expr::IfThenElse(
                     //if empty
                     Box::new(TypedExpr{
-                        expr: Expr::BinaryOperator(BinaryOperatorApplication{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_null(&loc))}),
+                        expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_null(&loc))},
                         r#type: Type::Boolean, is_const: true, loc: loc.clone()
                     }),
                     //then trap
@@ -259,7 +262,8 @@ impl<'a> Parser<'a> {
             },
             */
             _ => {
-                Err(Error::ObjectHasNoMember(next_item.location.clone(), component))
+                parser_context.push_err(Error::ObjectHasNoMember(next_item.location.clone(), component));
+                lhs.clone()
             }
         }
     }

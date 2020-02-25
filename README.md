@@ -135,7 +135,6 @@ Currently the following features are supported.
 let a = 0;
 ```
 * boolean
-* Option<T> - very, very limited at the moment. Uses null as the None (and I think the typing might be wrong);
 
 #### Casting
 
@@ -146,11 +145,43 @@ As mentioned above, numeric types will auto-cast. If you need to manually invoke
 let a = 9 as number;
 ```
 
-### Control
+### Functions
 
-* Declare a function with `function`. The arguments and return value must be typed.
-* Function calling.
-* Local and global variables - type inference works here.
+Functions are declared as follows.
+
+```
+function name(arg: Type): Type {
+    body
+}
+```
+
+Astonishingly, generic functions are supported. Here is the identity function. Not all types can be applied, but that's a work in progress.
+
+```
+function id<T>(x: T): T { x; }
+```
+
+To use them you must provide the types.
+
+```
+let n1: number = 4;
+let n2 = id<number>(n1);
+```
+
+They are not actually true generics. They specialize for some types -- at the moment, the numeric types -- which means I can avoid a box. It also means
+they are sort of a mix between templates and generics. Some days I like saying 'genemplates', other days 'templerics' is more fun.
+
+### Variables
+
+Local and global variables are declared like this.
+
+```
+let s = expr;
+```
+
+The type of s is inferred from the expression you assign it.
+
+### Control
 * `if`, `else`, `while`, `continue`, `break`, `return`.
 
 ### Linker
@@ -220,7 +251,9 @@ cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 
 ### Unsafe mode
 
 Unsafe mode is designed to be a mode that library writers can write low-level code. It feels like C in that it is 
-not much more than structured WASM. In order to use it you need to somehow pass the unsafe arg to the compiler.
+not much more than structured WASM. In order to use it you need to somehow pass the unsafe arg to the compiler. Syntax is deliberately scary.
+
+A leading `__` is pronounced 'unsafe', by the way.
 
 * `__ptr` type - not yet finished
 * `__size_t` type - pretty much the same as a `__ptr`, but makes some things a bit type safer
@@ -228,6 +261,8 @@ not much more than structured WASM. In order to use it you need to somehow pass 
     * `__memorySize()` - `memory.size` instruction
     * `__memoryGrow(0, numPages)` - `memory.grow` instruction
     * `__trap()` - `unreachable` instruction
+* `__Option` - is a essentially a nullable pointer. You can have it be a `__null` or `__Some<T>`. It will end up being the core of the 
+    real option. It's kind of horrible because it's pretending to be a union but it really is a nullable pointer.
 * `__struct` type - works but you need either the super secret `malloc` function for them to be useful 
     (which doesn't exist, so good luck with that), cast from a `__ptr` (this is unsafe. The clue
     is in the name...), or use `__static` (which does actually work and is a C-style static allocation). 
@@ -311,9 +346,9 @@ not much more than structured WASM. In order to use it you need to somehow pass 
     1. [ ] closure capture
     1. [ ] call function with closure
     1. [ ] optimization - don't capture consts, you have all the information to roll them inline. This is awesome because I don't think JS can do this
-1. templates
-    1. [ ] generate meta code to turn into templates, type check against unknown
-    1. [ ] we are going to do this at compile time! Yes, thank me later
+1. templerics
+    1. [x] for funcs generate meta code to turn into templates
+    1. [ ] for types generate meta types
 1. containers
     1. [ ] arrays
     1. [ ] hashmaps (probably called 'objects' to be JS friendly)

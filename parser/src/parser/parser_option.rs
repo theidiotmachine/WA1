@@ -8,7 +8,6 @@ use ast::prelude::*;
 use types::prelude::*;
 pub use errs::Error;
 use errs::prelude::*;
-use crate::assert_ident;
 use crate::assert_ok;
 use crate::assert_punct;
 
@@ -42,66 +41,5 @@ impl<'a> Parser<'a> {
         let inner_loc = inner.loc.clone();
         let inner_type = inner.r#type.clone();
         Ok(TypedExpr{expr: Expr::FreeTypeWiden(Box::new(inner)), r#type: Type::Option(Box::new(inner_type)), loc: inner_loc, is_const: true})
-    }
-
-    pub(crate) fn parse_option_component(&mut self,
-        lhs: &TypedExpr,
-        //inner_type: &Type,
-        parser_func_context: &mut ParserFuncContext,
-        parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
-        let next_item = self.next_item();
-        assert_ok!(next_item);
-        let id = assert_ident!(next_item, "Expecting int component to be an identifier");
-        
-        let component = id.to_string();
-        let loc = next_item.location;
-
-        match component.as_ref() {
-            "isSome" => {
-                self.parse_empty_function_call_args(parser_func_context, parser_context);
-                Ok(TypedExpr{
-                    expr: Expr::BinaryOperator(BinaryOperatorApplication{lhs: Box::new(lhs.clone()), op: BinaryOperator::NotEqual, rhs: Box::new(Parser::create_null(&loc))}),
-                    r#type: Type::Boolean, is_const: true, loc: loc.clone()
-                })
-            },
-            "isNone" => {
-                self.parse_empty_function_call_args(parser_func_context, parser_context);
-                Ok(TypedExpr{
-                    expr: Expr::BinaryOperator(BinaryOperatorApplication{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_null(&loc))}),
-                    r#type: Type::Boolean, is_const: true, loc: loc.clone()
-                })
-            },
-            /*
-            "unwrap" => {  
-                self.parse_empty_function_call_args(parser_func_context, parser_context);
-                let expr = Expr::IfThenElse(
-                    //if empty
-                    Box::new(TypedExpr{
-                        expr: Expr::BinaryOperator(BinaryOperatorApplication{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_null(&loc))}),
-                        r#type: Type::Boolean, is_const: true, loc: loc.clone()
-                    }),
-                    //then trap
-                    Box::new(TypedExpr{
-                        expr: Expr::Intrinsic(Intrinsic::Trap),
-                        r#type: Type::Never, is_const: true, loc: loc.clone()
-                    }),
-                    //else
-                    Box::new(TypedExpr{
-                        expr: Expr::FreeTypeWiden(Box::new(lhs.clone())),
-                        r#type: inner_type.clone(), is_const: true, loc: loc.clone()
-                    }),
-                );
-                
-                Ok(TypedExpr{
-                    expr: expr,
-                    r#type: inner_type.clone(), is_const: true, loc: loc.clone()
-                })
-            },
-            */
-            _ => {
-                Err(Error::ObjectHasNoMember(next_item.location.clone(), component))
-            }
-        }
     }
 }

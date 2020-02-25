@@ -39,6 +39,7 @@ pub struct FuncDecl {
     pub return_type: Type,
     pub args: Vec<FuncArg>,
     pub export: bool,
+    pub generic_impl: bool,
 }
 
 impl FuncDecl{

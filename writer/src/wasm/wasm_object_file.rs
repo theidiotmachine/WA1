@@ -217,6 +217,15 @@ impl WasmSymbolTable{
         })
     }
 
+    /// A function that is not exported 
+    pub fn new_weak_function(&mut self, index: u32, name: &String) {
+        self.new_func_symbol_index(index);
+        self.infos.push(WasmSymInfo{
+            kind: WasmSymInfoKind::SymTabFunction, is_import: false, flags: WASM_SYM_BINDING_WEAK, name: Some(name.clone()), 
+            index, data_segment_index: 0, data_offset: 0, data_size: 0, section: 0
+        })
+    }
+
     /// The start function
     pub fn new_start_function(&mut self, index: u32, name: &String) {
         self.new_func_symbol_index(index);

@@ -129,7 +129,7 @@ pub enum Type {
     ///boolean
     Boolean,
     ///Func
-    Func{func_type: Box<FuncType>, type_args: Vec<Type>},
+    Func{func_type: Box<FuncType>},
     ///Tuple
     Tuple(Vec<Type>),
     /// untyped object literal - can be cast to a matching struct or class
@@ -143,7 +143,7 @@ pub enum Type {
     /// Option - some
     Some(Box<Type>),
     /// user type
-    UserClass{name: String, type_args: Vec<Type>},
+    UserClass{name: String},
     /// user struct type
     UnsafeStruct{name: String},
     /// not yet known - will be filled in by the type system
@@ -178,8 +178,49 @@ impl Type{
 
     pub fn get_func_type(&self) -> Option<&FuncType> {
         match &self {
-            Type::Func{func_type, type_args: _} => Some(func_type),
+            Type::Func{func_type} => Some(func_type),
             _ => None
+        }
+    }
+
+    pub fn get_mangled_name(&self) -> String {
+        match self {
+            Type::RealVoid => String::from("!void"),
+            Type::FakeVoid => String::from("!fakeVoid"),
+            Type::Unknown => String::from("!unknown"),
+            Type::Never => String::from("!never"),
+            Type::Number => String::from("!number"),
+            Type::String => String::from("!string"),
+            Type::Array(inner) => format!("!Array<{}>", inner.get_mangled_name()),
+            Type::BigInt => String::from("!bigint"),
+            Type::Int => String::from("!int"),
+            Type::Boolean => String::from("!boolean"),
+            Type::Func{func_type} => format!("!func_{}", func_type),
+            Type::Tuple(types) => {
+                let mut vec: Vec<String> = vec![];
+                for inner in types {
+                    vec.push(format!("{}", inner.get_mangled_name()));
+                }
+                format!("!Tuple<{}>", vec.join(",")) 
+            },
+            //Type::Object => write!(f, "object"),
+            Type::Any => String::from("!any"),
+            Type::Option(inner) => format!("!Option<{}>", inner.get_mangled_name()),
+            Type::UnsafeOption(inner) => format!("!__Option<{}>", inner.get_mangled_name()),
+            Type::Some(inner) => format!("!Some<{}>", inner.get_mangled_name()),
+            Type::UserClass{name} => format!("!class_{}", name),
+            Type::UnsafeStruct{name} => format!("!__struct_{}", name),
+            Type::Undeclared => format!("!undeclared"),
+            Type::VariableUsage{name, constraint: _} => format!("!var_{}", name),
+            Type::UnsafePtr => format!("!__ptr"),
+            Type::UnsafeSizeT => format!( "!__size_t"),
+            Type::FloatLiteral(n) => format!("!fl_{}", n),
+            Type::IntLiteral(n) => format!("!il_{}", n),
+            Type::BigIntLiteral(n) => format!("!bil_{}", n),
+            Type::StringLiteral(n) => format!("!sl_\"{}\"", n),
+            Type::ObjectLiteral(_) => format!("!ol_{{}}"),
+            Type::TypeLiteral(inner) => format!("!TypeLiteral_{}", inner.get_mangled_name()),
+            Type::UnsafeArray(inner) => format!("!__array<{}>", inner.get_mangled_name()),
         }
     }
 }
@@ -197,7 +238,7 @@ impl Display for Type {
             Type::BigInt => write!(f, "bigint"),
             Type::Int => write!(f, "int"),
             Type::Boolean => write!(f, "boolean"),
-            Type::Func{func_type, type_args: _} => write!(f, "{}", func_type),
+            Type::Func{func_type} => write!(f, "{}", func_type),
             Type::Tuple(types) => {
                 let mut vec: Vec<String> = vec![];
                 for inner in types {
@@ -210,10 +251,10 @@ impl Display for Type {
             Type::Option(inner) => write!(f, "Option<{}>", inner),
             Type::UnsafeOption(inner) => write!(f, "__Option<{}>", inner),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
-            Type::UserClass{name, type_args: _} => write!(f, "{}", name),
+            Type::UserClass{name} => write!(f, "{}", name),
             Type::UnsafeStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "undeclared"),
-            Type::VariableUsage{name: name, constraint: _} => write!(f, "{}", name),
+            Type::VariableUsage{name, constraint: _} => write!(f, "{}", name),
             Type::UnsafePtr => write!(f, "__ptr"),
             Type::UnsafeSizeT => write!(f, "__size_t"),
             Type::FloatLiteral(n) => write!(f, "{}", n),

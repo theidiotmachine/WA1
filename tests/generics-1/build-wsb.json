@@ -5,6 +5,10 @@
     },
     "source_files": [
         {
+            "file_name": "basic.wa1",
+            "is_unsafe": true
+        },
+        {
             "file_name": "option.wa1",
             "is_unsafe": true
         },

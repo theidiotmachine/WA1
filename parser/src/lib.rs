@@ -1,14 +1,17 @@
 mod parser;
 pub use parser::Parser;
 
+mod tree_transform;
+
 pub mod prelude {
     pub use super::{Parser, StartFuncType};
 }
 
 use types::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use ast::prelude::*;
 pub use errs::Error;
+use errs::prelude::*;
 use ast::Imports;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -240,6 +243,7 @@ struct ParserContext {
     pub func_decls: Vec<Func>,
     pub func_imports: Vec<FuncDecl>,
     pub generic_func_decls: Vec<GenericFunc>,
+    pub generic_func_impls: HashSet<String>,
     pub errors: Vec<Error>,
     pub type_map: HashMap<String, TypeDecl>,
     pub import_namespace_map: HashMap<String, String>,
@@ -261,6 +265,7 @@ impl ParserContext {
             func_decls: vec![],
             func_imports: vec![],
             generic_func_decls: vec![],
+            generic_func_impls: HashSet::new(),
             errors: vec![],
             type_map: HashMap::new(),
             import_namespace_map: HashMap::new(),
@@ -279,22 +284,31 @@ impl ParserContext {
         self.func_decls.iter().find(|&x| x.decl.name == *name).map(|x| x.decl.clone())
     }
 
+    pub fn get_generic_fn_from_generics(&self, name: &String) -> Option<GenericFunc> {
+        self.generic_func_decls.iter().find(|&x| x.func.decl.name == *name).map(|x| x.clone())
+    }
+
     pub fn get_fn_decl_from_imports(&self, name: &String) -> Option<FuncDecl> {
         self.func_imports.iter().find(|&x| x.name == *name).map(|x| x.clone())
     }
 
-    fn push_type_scope(&mut self, args: &Vec<TypeArg>) {
+    fn push_type_scope(&mut self, args: &Vec<TypeArg>) -> Vec<TypeArg> {
         let mut v: HashMap<String, TypeArg> = match self.type_var_stack.last() {
             None => HashMap::new(),
             Some(s) => {
                 s.var_names.clone()
             } 
         };
+
+        let mut out: Vec<TypeArg> = vec![];
         
         for arg in args {
-            v.insert(arg.name.clone(), TypeArg{name: self.get_unique_name(&arg.name), constraint: arg.constraint.clone()});
+            let type_arg = TypeArg{name: self.get_unique_name(&arg.name), constraint: arg.constraint.clone()};
+            out.push(type_arg.clone());
+            v.insert(arg.name.clone(), type_arg);
         }
         self.type_var_stack.push(TypeScope{var_names: v});
+        out
     }
 
     fn push_empty_type_scope(&mut self) {
@@ -325,6 +339,12 @@ impl ParserContext {
         let counter = self.counter;
         self.counter += 1;
         format!("{}#{}", name, counter)
+    }
+}
+
+impl ErrRecorder for ParserContext {
+    fn push_err(&mut self, err: Error) {
+        self.errors.push(err);
     }
 }
 

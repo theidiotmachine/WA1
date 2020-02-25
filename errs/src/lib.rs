@@ -3,6 +3,7 @@ use types::Type;
 pub mod source_location;
 pub mod prelude {
     pub use super::source_location::prelude::*;
+    pub use super::ErrRecorder;
 }
 use source_location::{SourceLocation, Position};
 
@@ -17,7 +18,7 @@ pub enum Error {
     NotYetImplemented(SourceLocation, String),
     VariableNotRecognized(SourceLocation, String),
     FuncNotRecognized(SourceLocation, String),
-    TypeFailureUnaryOperator,
+    TypeFailureUnaryOperator(SourceLocation),
     TypeFailureBinaryOperator(SourceLocation, String, String),
     TypeFailureVariableCreation(SourceLocation, String, String),
     TypeFailureMemberCreation(SourceLocation, String, Type, Type),
@@ -26,9 +27,9 @@ pub enum Error {
     TypeFailureReturn(Type, Type),
     NotAnLValue(SourceLocation),
     ConstFailure,
-    TypeFailureFuncCall,
+    TypeFailureFuncCall(SourceLocation),
     TooManyArgs,
-    NotEnoughArgs,
+    NotEnoughArgs(SourceLocation),
     DuplicateTypeName(String),
     NotInLoop(String),
     TypeFailureIf(SourceLocation, Type, Type),
@@ -48,6 +49,9 @@ pub enum Error {
     UnrecognizedTypeArg(SourceLocation),
     UnrecognizedTypeArgConstraint(SourceLocation),
     NoClosureInGenerics(SourceLocation),
+    MissingTypeArgs(SourceLocation),
+    FailedTypeArgConstraint(SourceLocation),
+    UnresolvedTypeArg(SourceLocation, String),
 }
 
 impl Display for Error {
@@ -62,7 +66,7 @@ impl Display for Error {
             Error::NotYetImplemented(ref loc, ref msg) => write!(f, "ERROR {}: not yet implemented: {}", loc, msg),
             Error::VariableNotRecognized(ref loc, ref var_name) => write!(f, "ERROR {}: identifier not recognized: {}", loc, var_name),
             Error::FuncNotRecognized(ref loc, ref func_name) => write!(f, "ERROR {}: function not recognized: {}", loc, func_name),
-            Error::TypeFailureUnaryOperator => write!(f, "Type failure unary operator"),
+            Error::TypeFailureUnaryOperator(ref loc) => write!(f, "ERROR {}: Type failure unary operator", loc),
             Error::TypeFailureBinaryOperator(ref loc, ref lhs_type, ref rhs_type) => 
                 write!(f, "ERROR {}: can't make type of lhs ({}) and rhs ({}) of binary operator agree", loc, lhs_type, rhs_type),
             Error::TypeFailureVariableCreation(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: initializer type {} doesn't match variable type {}", loc, got, wanted),
@@ -72,9 +76,9 @@ impl Display for Error {
             Error::TypeFailureReturn(ref wanted, ref got) => write!(f, "Expecting return value of type {}, found {}", wanted, got),
             Error::NotAnLValue(ref loc) => write!(f, "ERROR {}: expression is not a l value", loc),
             Error::ConstFailure => write!(f, "Expression is const and may not be assigned to"),
-            Error::TypeFailureFuncCall => write!(f, "Variable is not a function"),
+            Error::TypeFailureFuncCall(ref loc) => write!(f, "ERROR: {}, Variable is not a function", loc),
             Error::TooManyArgs => write!(f, "Too many args"),
-            Error::NotEnoughArgs => write!(f, "Not enough args"),
+            Error::NotEnoughArgs(ref loc) => write!(f, "ERROR: {}, not enough args for function call", loc),
             Error::DuplicateTypeName(name) => write!(f, "Duplicate type name: {}", name),
             Error::NotInLoop(what) => write!(f, "Used loop keyword outside a loop: {}", what),
             Error::TypeFailureIf(ref loc, ref then_type, ref else_type) => write!(f, "ERROR {}: Types of branches of if statement do not match; then branch is of type {}, else branch is of type {}", loc, then_type, else_type),
@@ -93,7 +97,10 @@ impl Display for Error {
             Error::ImportFailed(ref loc, ref mes) => write!(f, "ERROR {}: import failed because {}", loc, mes),
             Error::UnrecognizedTypeArg(ref loc) => write!(f, "ERROR {}: can't parse type arg", loc),
             Error::UnrecognizedTypeArgConstraint(ref loc) => write!(f, "ERROR {}: unrecognized type arg constraint", loc),
+            Error::FailedTypeArgConstraint(ref loc) => write!(f, "ERROR {}: failed type arg constraint", loc),
             Error::NoClosureInGenerics(ref loc) => write!(f, "ERROR {}: generic functions may not capture closures", loc),
+            Error::MissingTypeArgs(ref loc) => write!(f, "ERROR {}: not all type arguments supplied", loc),
+            Error::UnresolvedTypeArg(ref loc, ref name) => write!(f, "INTERNAL ERROR {}: unresolved type arg {}", loc, name),
         }
     }
 }
@@ -105,4 +112,8 @@ pub fn pretty_print_errs(errs: &Vec<Error>) -> () {
     for err in errs {
         println!("{}", err);    
     }
+}
+
+pub trait ErrRecorder{
+    fn push_err(&mut self, err: Error) -> ();
 }

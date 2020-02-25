@@ -10,14 +10,13 @@ use crate::{Commitment, expect_punct, expect_next};
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_type_from_ident(&mut self, 
-        ident: &Ident<&str>,
+        ident: &String,
         commitment: Commitment,
         parser_context: &mut ParserContext,
     ) -> Option<Type> {
-        let o_type = parser_context.type_map.get(&ident.to_string());
+        let o_type = parser_context.type_map.get(ident);
         let next = self.peek_next_item();
         let token = &next.token;
-        let type_args = vec![];
         if token.matches_punct(Punct::LessThan) {
             if commitment == Commitment::Committed {
                 parser_context.errors.push(Error::NotYetImplemented(next.location.clone(), String::from("type args")));
@@ -28,14 +27,14 @@ impl<'a> Parser<'a> {
         } else {
             match o_type {
                 None => {
-                    let o_scoped_type = parser_context.get_scoped_type(&ident.to_string());
+                    let o_scoped_type = parser_context.get_scoped_type(ident);
                     match o_scoped_type {
                         Some(scoped_type) => {
                             Some(Type::VariableUsage{name: scoped_type.name.clone(), constraint: scoped_type.constraint.clone()})
                         },
                         None => {
                             if commitment == Commitment::Committed {
-                                parser_context.errors.push(Error::InvalidTypeName(next.location.clone(), ident.as_str().to_owned()));
+                                parser_context.errors.push(Error::InvalidTypeName(next.location.clone(), ident.clone()));
                                 Some(Type::Undeclared)
                             } else {
                                 None
@@ -46,10 +45,10 @@ impl<'a> Parser<'a> {
                 Some(user_type) => {
                     match user_type {
                         TypeDecl::Class{name: _, class_type: _, export: _} => {
-                            Some(Type::UserClass{name: ident.to_string(), type_args})
+                            Some(Type::UserClass{name: ident.clone()})
                         },
                         TypeDecl::Struct{name: _, struct_type: _, under_construction: _, export: _} => {
-                            Some(Type::UnsafeStruct{name: ident.to_string()})
+                            Some(Type::UnsafeStruct{name: ident.clone()})
                         }
                     }
                 }
@@ -133,7 +132,7 @@ impl<'a> Parser<'a> {
         match token {
             Token::Keyword(keyword) => self.parse_type_from_keyword(&keyword, &next.location, parser_context),
             Token::Ident(ident) => {
-                self.parse_type_from_ident(&ident, Commitment::Committed, parser_context).unwrap()
+                self.parse_type_from_ident(&ident.to_string(), Commitment::Committed, parser_context).unwrap()
             },
             Token::Number(n) => {
                 match n.kind() {

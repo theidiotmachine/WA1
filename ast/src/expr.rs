@@ -9,9 +9,7 @@ pub mod prelude {
     pub use super::Expr;
     pub use super::TypedExpr;
     pub use super::BinaryOperator;
-    pub use super::BinaryOperatorApplication;
     pub use super::UnaryOperator;
-    pub use super::UnaryOperatorApplication;
     pub use super::AssignmentOperator;
     pub use super::TypedLValueExpr;
     pub use super::LValueExpr;
@@ -151,14 +149,7 @@ impl BinaryOperator{
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct BinaryOperatorApplication{
-    pub lhs: Box<TypedExpr>,
-    pub rhs: Box<TypedExpr>, 
-    pub op: BinaryOperator,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum UnaryOperator{
     LogicalNot,
     BitNot,
@@ -185,7 +176,7 @@ impl UnaryOperator{
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum AssignmentOperator{
     Assign,
     PlusAssign,
@@ -214,12 +205,6 @@ impl AssignmentOperator{
             AssignmentOperator::BitOrAssign => &BIT_ASSIGN_MODIFY_OP
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct UnaryOperatorApplication {
-    pub expr: Box<TypedExpr>,
-    pub op: UnaryOperator,
 }
 
 /// Variable decl
@@ -270,9 +255,9 @@ pub struct ObjectLiteralElem{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Expr {
     /// A binary operator
-    BinaryOperator(BinaryOperatorApplication),
+    BinaryOperator{lhs: Box<TypedExpr>, rhs: Box<TypedExpr>, op: BinaryOperator},
     /// unary operator
-    UnaryOperator(UnaryOperatorApplication),
+    UnaryOperator{expr: Box<TypedExpr>, op: UnaryOperator},
     /// float literal
     FloatLiteral(f64),
     /// big int literal
@@ -351,6 +336,8 @@ pub enum Expr {
     TypeLiteral(Type),
     ///__sizeof
     SizeOf(Type),
+    ///No op expression
+    NoOp,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
