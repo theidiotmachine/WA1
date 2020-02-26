@@ -267,7 +267,7 @@ fn compile_binary_operator(
             }
         },
 
-        Type::Option(_) => {
+        Type::UnsafeOption(_) => {
             match return_type {
                 Type::Boolean => {
                     match bin_op {
