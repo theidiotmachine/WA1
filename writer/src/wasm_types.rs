@@ -42,10 +42,12 @@ pub(crate) fn get_wasm_return_type(r#type: &Type) -> WasmResultType {
         Type::UnsafeSizeT => WasmResultType::I32,
         Type::UnsafeStruct{name: _} => WasmResultType::I32,
         Type::UnsafeArray(_) => WasmResultType::I32,
-        Type::Option(inner_type) => {
+        Type::UnsafeOption(inner_type) => {
             match **inner_type {
                 Type::UnsafeStruct{name: _} => WasmResultType::I32,
                 Type::Never => WasmResultType::I32,
+                //FIXME64BIT
+                Type::UnsafePtr => WasmResultType::I32,
                 _ => panic!()                
             }
         },

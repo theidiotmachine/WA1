@@ -1711,9 +1711,10 @@ impl<'b> Parser<'b> {
                                 continue;
                             },
                             _ => {
+                                let args = self.parse_function_call_args(&vec![], parser_func_context, parser_context);
                                 let loc = SourceLocation::new(lookahead_item.location.start.clone(), next.location.end.clone());
                                 parser_context.push_err(Error::TypeFailureFuncCall(loc.clone()));
-                                expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), vec![]), r#type: expr.r#type.clone(), is_const: true, loc: loc};
+                                expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: expr.r#type.clone(), is_const: true, loc: loc};
                                 continue;
                             }
                         }
