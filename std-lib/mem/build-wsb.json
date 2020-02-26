@@ -1,0 +1,16 @@
+{
+    "entry_point": {
+        "file_name": "malloc.wa1",
+        "is_unsafe": true
+    },
+    "source_files": [
+        {
+            "file_name": "option.wa1",
+            "is_unsafe": true
+        }
+    ],
+    "src_path": "./src",
+    "out_path": "./out",
+    "module_name": "mem",
+    "wasm_exe": "wasm-ld-9"
+}

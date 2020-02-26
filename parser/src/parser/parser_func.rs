@@ -665,4 +665,19 @@ impl<'a> Parser<'a> {
             None => return None
         }
     }
+
+    pub (crate) fn parse_static_func_call(
+        &mut self,
+        func_name: &String,
+        func_decl: &FuncDecl,
+        loc: &SourceLocation,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> TypedExpr {
+        let arg_types = func_decl.get_arg_types();
+        let args = self.parse_function_call_args(&arg_types, parser_func_context, parser_context);
+        let func_return_type = func_decl.return_type.clone();
+        let loc = SourceLocation::new(loc.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(loc.end.clone()));
+        TypedExpr{expr: Expr::StaticFuncCall(func_name.clone(), args), r#type: func_return_type, is_const: true, loc: loc}
+    }
 }

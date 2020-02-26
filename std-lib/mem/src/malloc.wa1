@@ -1,3 +1,5 @@
+import {*} from "./option"
+
 const PAGE_SIZE: __size_t = 65536 as __size_t;
 
 //this is the pointer to the first available free address
@@ -818,11 +820,23 @@ function segment_holds(s: malloc_segment, a: __ptr): boolean (a >= s.base && a <
 function segment_holding(m: malloc_state, addr: __ptr): __Option<malloc_segment> {
   let o_sp: __Option<malloc_segment> = m.seg;
   while(true) {
-    let sp = o_sp.unwrap();
-    if (addr >= sp->base && addr < sp->base + sp->size)
-      return Some(sp);
-    o_sp = sp->next;
+    let sp = option.__Option_unwrap<malloc_segment>(o_sp);
+    if (addr >= sp.base && addr < sp.base + sp.size)
+      return __Some(sp);
+    o_sp = sp.next;
     if (o_sp == __null)
       return __null;
+  }
+  return __null;
+}
+
+/* Return true if segment contains a segment link */
+function has_segment_link(m: malloc_state, ss: msegmentptr): boolean {
+  msegmentptr sp = &m->seg;
+  while(true) {
+    if (sp >= ss.base && sp < ss.base + ss.size)
+      return true;
+    if (sp != sp.next) 
+      return false;
   }
 }

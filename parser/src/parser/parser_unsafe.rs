@@ -234,33 +234,15 @@ impl<'a> Parser<'a> {
                     r#type: Type::Boolean, is_const: true, loc: loc.clone()
                 }
             },
-            /*
-            "unwrap" => {  
-                self.parse_empty_function_call_args(parser_func_context, parser_context);
-                let expr = Expr::IfThenElse(
-                    //if empty
-                    Box::new(TypedExpr{
-                        expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_null(&loc))},
-                        r#type: Type::Boolean, is_const: true, loc: loc.clone()
-                    }),
-                    //then trap
-                    Box::new(TypedExpr{
-                        expr: Expr::Intrinsic(Intrinsic::Trap),
-                        r#type: Type::Never, is_const: true, loc: loc.clone()
-                    }),
-                    //else
-                    Box::new(TypedExpr{
-                        expr: Expr::FreeTypeWiden(Box::new(lhs.clone())),
-                        r#type: inner_type.clone(), is_const: true, loc: loc.clone()
-                    }),
-                );
-                
-                Ok(TypedExpr{
-                    expr: expr,
-                    r#type: inner_type.clone(), is_const: true, loc: loc.clone()
-                })
+            "unwrap" => {
+                let o = self.try_parse_generic_func_call(&String::from("__Option_unwrap"), parser_func_context, parser_context);
+                match o {
+                    Some(out) => out,
+                    None => {
+                        panic!()        
+                    }
+                }
             },
-            */
             _ => {
                 parser_context.push_err(Error::ObjectHasNoMember(next_item.location.clone(), component));
                 lhs.clone()

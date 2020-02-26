@@ -1574,11 +1574,7 @@ impl<'b> Parser<'b> {
                                         match &o_f_d {
                                             Some(f_d) => {
                                                 //yep it's a function call
-                                                let arg_types = f_d.get_arg_types();
-                                                let args = self.parse_function_call_args(&arg_types, parser_func_context, parser_context);
-                                                let func_return_type = f_d.return_type.clone();
-                                                let loc = SourceLocation::new(next.location.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(next.location.end.clone()));
-                                                TypedExpr{expr: Expr::StaticFuncCall(id.clone(), args), r#type: func_return_type, is_const: true, loc: loc}
+                                                self.parse_static_func_call(&id, &f_d, &next.location, parser_func_context, parser_context)
                                             },
                                             None => {
                                                 //might be a built in, so check that
@@ -1621,11 +1617,7 @@ impl<'b> Parser<'b> {
                                                     match o_f_d {
                                                         Some(f_d) => {
                                                             //yep it's a function call
-                                                            let arg_types = f_d.get_arg_types();
-                                                            let args = self.parse_function_call_args(&arg_types, parser_func_context, parser_context);
-                                                            let func_return_type = f_d.return_type.clone();
-                                                            let loc = SourceLocation::new(next.location.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(next.location.end.clone()));
-                                                            TypedExpr{expr: Expr::StaticFuncCall(full_name.clone(), args), r#type: func_return_type, is_const: true, loc: loc}
+                                                            self.parse_static_func_call(&full_name, &f_d, &next.location, parser_func_context, parser_context)
                                                         },
                                                         
                                                         None => {
