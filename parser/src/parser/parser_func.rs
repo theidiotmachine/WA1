@@ -245,7 +245,7 @@ impl<'a> Parser<'a> {
             if expr.is_err() { return out; }; let expr = expr.unwrap();
             
             if out.len() == arg_types.len() {
-                parser_context.errors.push(Error::TooManyArgs);
+                parser_context.errors.push(Error::TooManyArgs(expr.loc.clone()));
             } else {
                 let arg_type = &arg_types[out.len()];
                 if *arg_type != expr.r#type {

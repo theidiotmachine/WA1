@@ -266,6 +266,10 @@ impl<'a> Parser<'a> {
         let component = id.to_string();
 
         match component.as_ref() {
+            "countLeadingZeros" => {
+                self.parse_empty_function_call_args(parser_func_context, parser_context);
+                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32Clz(Box::new(lhs.clone()))), r#type: Type::UnsafeSizeT, is_const: true, loc: next_item.location.clone()}
+            },
             "countTrailingZeros" => {
                 self.parse_empty_function_call_args(parser_func_context, parser_context);
                 TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32Ctz(Box::new(lhs.clone()))), r#type: Type::UnsafeSizeT, is_const: true, loc: next_item.location.clone()}

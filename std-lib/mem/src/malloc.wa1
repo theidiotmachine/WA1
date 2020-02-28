@@ -946,3 +946,16 @@ function smallbin_at(m: malloc_state, i: __size_t): __Option<malloc_chunk> m.sma
 
 //#define treebin_at(M,i)     (&((M)->treebins[i]))
 function treebin_at(m: malloc_state, i: __size_t): __Option<malloc_tree_chunk>  m.treebins[i as int];
+
+//#define compute_tree_index(S, I)\
+function compute_tree_index(s: __size_t) : __size_t {
+  const x: __size_t = s.shiftRight(8);
+  if (x == (0 as __size_t))
+    0 as __size_t;
+  else if (x > (0xFFFF as __size_t))
+    31 as __size_t;
+  else {
+    const k: int = 31 - (x.countLeadingZeros() as int);
+    (k.shiftLeft(1) as __size_t) + (s.shiftRight(k + 7) & (1 as __size_t));
+  }
+}
