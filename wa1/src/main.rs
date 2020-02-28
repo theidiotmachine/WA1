@@ -210,9 +210,9 @@ fn compile_ast(ast: &AST, tu_type: TranslationUnitType, output_type: OutputType,
     }
 }
 
-fn write_wasm(of_full_path: &PathBuf, module: &mut WasmModule) -> i32 {
+fn write_wasm(of_full_path: &PathBuf, module_name: &String, module: &mut WasmModule) -> i32 {
     let mut data: Vec<u8> = vec![];
-    module.serialize(&mut data);
+    module.serialize(module_name, &mut data);
     let r = fs::write(of_full_path, data);
             
     match r {
@@ -249,7 +249,7 @@ fn compile_if_changed(
                 Some(ast) => {
                     let o_module = compile_ast(&ast, tu_type, output_type, module_name);
                     match o_module {
-                        Some(mut module) => write_wasm(of_full_path, &mut module),
+                        Some(mut module) => write_wasm(of_full_path, module_name, &mut module),
                         None => 1
                     }
                 }
@@ -270,7 +270,7 @@ fn compile_if_changed(
                             Some(program) => {
                                 let o_module = compile_ast(&program, tu_type, output_type, module_name);
                                 match o_module {
-                                    Some(mut module) => write_wasm(of_full_path, &mut module),
+                                    Some(mut module) => write_wasm(of_full_path, module_name, &mut module),
                                     None => 1
                                 }
                             }

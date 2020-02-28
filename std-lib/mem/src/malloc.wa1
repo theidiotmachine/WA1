@@ -1,3 +1,5 @@
+import {*} from "./option"
+
 const PAGE_SIZE: __size_t = 65536 as __size_t;
 
 //this is the pointer to the first available free address
@@ -41,7 +43,17 @@ DLMALLOC_EXPORT: ???
 MALLOC_ALIGNMENT: 8
 MSPACES: 0
 ONLY_MSPACES: 0
+
+USE_LOCKS                default: 0 (false)
+  Causes each call to each public routine to be surrounded with
+  pthread or WIN32 mutex lock/unlock. (If set true, this can be
+  overridden on a per-mspace basis for mspace versions.) If set to a
+  non-zero value other than 1, locks are used, but their
+  implementation is left out, so lock functions must be supplied manually,
+  as described below.
+
 USE_LOCKS: 0
+
 USE_SPIN_LOCKS: 0
 USE_RECURSIVE_LOCKS: 0
 LOCK_AT_FORK: 0
@@ -50,14 +62,44 @@ INSECURE: 0 (*)
 USE_DL_PREFIX: undefined
 MALLOC_INSPECT_ALL: undefined
 ABORT: __trap()
+
+PROCEED_ON_ERROR           default: defined as 0 (false)
+  Controls whether detected bad addresses cause them to bypassed
+  rather than aborting. If set, detected bad arguments to free and
+  realloc are ignored. And all bookkeeping information is zeroed out
+  upon a detected overwrite of freed heap space, thus losing the
+  ability to ever return it from malloc again, but enabling the
+  application to proceed. If PROCEED_ON_ERROR is defined, the
+  static variable malloc_corruption_error_count is compiled in
+  and can be examined to see if errors have occurred. This option
+  generates slower code than the default abort policy.
+
 PROCEED_ON_ERROR: 0
+
 DEBUG: undefined
 ABORT_ON_ASSERT_FAILURE: 1
 MALLOC_FAILURE_ACTION: no op
 HAVE_MORECORE: 1
 MORECORE: sbrk
+
+MORECORE_CONTIGUOUS       default: 1 (true) if HAVE_MORECORE
+  If true, take advantage of fact that consecutive calls to MORECORE
+  with positive arguments always return contiguous increasing
+  addresses.  This is true of unix sbrk. It does not hurt too much to
+  set it true anyway, since malloc copes with non-contiguities.
+  Setting it false when definitely non-contiguous saves time
+  and possibly wasted space it would take to discover this though.
+
 MORECORE_CONTIGUOUS: 1
+
+MORECORE_CANNOT_TRIM      default: NOT defined
+  True if MORECORE cannot release space back to the system when given
+  negative arguments. This is generally necessary only if you are
+  using a hand-crafted MORECORE function that cannot handle negative
+  arguments.
+
 MORECORE_CANNOT_TRIM: 1 (*)
+
 NO_SEGMENT_TRAVERSAL: 0
 HAVE_MMAP: 0
 HAVE_MREMAP: 0
@@ -109,6 +151,7 @@ __struct mallinfo {
 function is_aligned(A: __ptr): boolean (A & (7 as __size_t)) == (0 as __size_t);
 
 /* the number of bytes to offset an address to align it */
+//#define align_offset(A) ((((size_t)(A) & CHUNK_ALIGN_MASK) == 0)? 0 : ((MALLOC_ALIGNMENT - ((size_t)(A) & CHUNK_ALIGN_MASK)) & CHUNK_ALIGN_MASK))
 function align_offset(A: __ptr): __ptr if((A & (7 as __size_t)) == (0 as __size_t)) 0 as __ptr; else (((8 as __ptr) - (A & (7 as __size_t))) & (7 as __size_t));
 function align_offset_size_t(A: __size_t): __size_t if((A & (7 as __size_t)) == (0 as __size_t)) 0 as __size_t; else (((8 as __size_t) - (A & (7 as __size_t))) & (7 as __size_t));
 
@@ -289,7 +332,7 @@ __struct malloc_chunk {
 typedef struct malloc_chunk  mchunk;
 typedef struct malloc_chunk* mchunkptr;
 typedef struct malloc_chunk* sbinptr;  // The type of bins of chunks
-typedef unsigned int bindex_t;         // Described below 
+typedef unsigned int bindex_t;         // using a __size_t because I don't have a u32
 typedef unsigned int binmap_t;         // Described below 
 typedef unsigned int flag_t;           // The type of various bit flag sets
 */
@@ -812,17 +855,94 @@ function is_granularity_aligned(s: __ptr): boolean ((s as __size_t) & (mparams.g
 
 /*  True if segment S holds address A */
 //#define segment_holds(S, A) ((char*)(A) >= S->base && (char*)(A) < S->base + S->size)
-function segment_holds(s: malloc_segment, a: __ptr): boolean (a >= s.base && a < s.base + s.size);
+//function segment_holds(s: malloc_segment, a: __ptr): boolean (a >= s.base && a < s.base + s.size);
 
 /* Return segment holding given address */
+/*
 function segment_holding(m: malloc_state, addr: __ptr): __Option<malloc_segment> {
   let o_sp: __Option<malloc_segment> = m.seg;
   while(true) {
-    let sp = o_sp.unwrap();
-    if (addr >= sp->base && addr < sp->base + sp->size)
-      return Some(sp);
-    o_sp = sp->next;
+    let sp = option.__Option_unwrap<malloc_segment>(o_sp);
+    if (addr >= sp.base && addr < sp.base + sp.size)
+      return __Some(sp);
+    o_sp = sp.next;
     if (o_sp == __null)
       return __null;
   }
+  return __null;
 }
+*/
+
+/* Return true if segment contains a segment link */
+/*
+function has_segment_link(m: malloc_state, ss: malloc_segment): boolean {
+  let o_sp: __Option<malloc_segment> = m.seg;
+  while(true) {
+    let sp = option.__Option_unwrap<malloc_segment>(o_sp);
+    if ((sp as __ptr) >= ss.base && (sp as __ptr) < ss.base + ss.size)
+      return true;
+    if (sp != sp.next) 
+      return false;
+  }
+}
+*/
+
+//#define should_trim(M,s)  (0)
+
+/*
+  TOP_FOOT_SIZE is padding at the end of a segment, including space
+  that may be needed to place segment records and fenceposts when new
+  noncontiguous segments are added.
+*/
+//#define TOP_FOOT_SIZE  (align_offset(chunk2mem(0))+pad_request(sizeof(struct malloc_segment))+MIN_CHUNK_SIZE)
+const TOP_FOOT_SIZE = align_offset(8 as __ptr)+pad_request(__sizeof(malloc_segment))+MIN_CHUNK_SIZE;
+
+/* -------------------------------  Hooks -------------------------------- */
+
+/*
+  PREACTION should be defined to return 0 on success, and nonzero on
+  failure. If you are not using locking, you can redefine these to do
+  anything you like.
+*/
+//#define PREACTION(M) (0)
+//#define POSTACTION(M)
+
+/*
+  CORRUPTION_ERROR_ACTION is triggered upon detected bad addresses.
+  USAGE_ERROR_ACTION is triggered on detected bad frees and
+  reallocs. The argument p is an address that might have triggered the
+  fault. It is ignored by the two predefined actions, but might be
+  useful in custom actions that try to help diagnose errors.
+*/
+
+//#define CORRUPTION_ERROR_ACTION(m) ABORT
+//#define USAGE_ERROR_ACTION(m,p) ABORT
+
+/* -------------------------- Debugging setup ---------------------------- */
+
+//#define check_free_chunk(M,P)
+//#define check_inuse_chunk(M,P)
+//#define check_malloced_chunk(M,P,N)
+//#define check_mmapped_chunk(M,P)
+//#define check_malloc_state(M)
+//#define check_top_chunk(M,P)
+
+/* ---------------------------- Indexing Bins ---------------------------- */
+//#define is_small(s)         (((s) >> SMALLBIN_SHIFT) < NSMALLBINS)
+function is_small(s: __size_t): boolean s.shiftRight(3) < (32 as __size_t);
+
+//#define small_index(s)      (bindex_t)((s)  >> SMALLBIN_SHIFT)
+function small_index(s: __size_t): __size_t s.shiftRight(3);
+
+//#define small_index2size(i) ((i)  << SMALLBIN_SHIFT)
+function small_index2size(i: __size_t): __size_t i.shiftLeft(3);
+
+//#define MIN_SMALL_INDEX     (small_index(MIN_CHUNK_SIZE))
+const MIN_SMALL_INDEX = small_index(MIN_CHUNK_SIZE);
+
+/* addressing by index. See above about smallbin repositioning */
+//#define smallbin_at(M, i)   ((sbinptr)((char*)&((M)->smallbins[(i)<<1])))
+function smallbin_at(m: malloc_state, i: __size_t): __Option<malloc_chunk> m.smallbins[i.shiftLeft(1)]);
+
+//#define treebin_at(M,i)     (&((M)->treebins[i]))
+function treebin_at(m: malloc_state, i: __size_t) m.treebins[i];

@@ -27,9 +27,10 @@ pub fn transform_lvalue_expr(
             Box::new(transform_typed_lvalue_expr(tle, transform, parser_context)),
             s.clone(),
         ),
-        LValueExpr::StaticU32MemberAssign(tle, i) => LValueExpr::StaticU32MemberAssign(
+        LValueExpr::DynamicMemberAssign(te1, tle, te2) => LValueExpr::DynamicMemberAssign(
+            Box::new(transform_typed_expr(te1, transform, parser_context)),
             Box::new(transform_typed_lvalue_expr(tle, transform, parser_context)),
-            *i
+            Box::new(transform_typed_expr(te2, transform, parser_context)),
         )
     }
 }
@@ -112,6 +113,8 @@ pub fn transform_expr(
         },
         Expr::DynamicFuncCall(te, v) => 
             Expr::DynamicFuncCall(Box::new(transform_typed_expr(te, transform, parser_context)), transform_typed_exprs(v, transform, parser_context)),
+        Expr::DynamicMember(te1, te2) =>
+            Expr::DynamicMember(Box::new(transform_typed_expr(te1, transform, parser_context)), Box::new(transform_typed_expr(te2, transform, parser_context))),
         Expr::FreeTypeWiden(te) => Expr::FreeTypeWiden(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::FuncDecl(foc) => Expr::FuncDecl(foc.clone()),
         Expr::GlobalVariableDecl(gvd) => 
@@ -129,6 +132,12 @@ pub fn transform_expr(
         Expr::Intrinsic(i) => {
             match i {
                 Intrinsic::I32Ctz(te) => Expr::Intrinsic(Intrinsic::I32Ctz(Box::new(transform_typed_expr(te, transform, parser_context)))),
+                Intrinsic::I32ShL(te1, te2) => Expr::Intrinsic(Intrinsic::I32ShL(Box::new(transform_typed_expr(te1, transform, parser_context)),
+                    Box::new(transform_typed_expr(te2, transform, parser_context)))),
+                Intrinsic::I32ShRS(te1, te2) => Expr::Intrinsic(Intrinsic::I32ShRS(Box::new(transform_typed_expr(te1, transform, parser_context)),
+                    Box::new(transform_typed_expr(te2, transform, parser_context)))),
+                Intrinsic::I32ShRU(te1, te2) => Expr::Intrinsic(Intrinsic::I32ShRU(Box::new(transform_typed_expr(te1, transform, parser_context)),
+                    Box::new(transform_typed_expr(te2, transform, parser_context)))),
                 Intrinsic::I64Ctz(te) => Expr::Intrinsic(Intrinsic::I64Ctz(Box::new(transform_typed_expr(te, transform, parser_context)))),
                 Intrinsic::MemoryGrow(te) => Expr::Intrinsic(Intrinsic::MemoryGrow(Box::new(transform_typed_expr(te, transform, parser_context)))),
                 Intrinsic::MemorySize => Expr::Intrinsic(Intrinsic::MemorySize),

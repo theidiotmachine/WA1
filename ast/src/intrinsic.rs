@@ -18,4 +18,10 @@ pub enum Intrinsic {
     I32Ctz(Box<TypedExpr>),
     ///i64 count trailing zeros
     I64Ctz(Box<TypedExpr>),
+    //left shift
+    I32ShL(Box<TypedExpr>, Box<TypedExpr>),
+    //signed right shift
+    I32ShRS(Box<TypedExpr>, Box<TypedExpr>),
+    //unsigned right shift
+    I32ShRU(Box<TypedExpr>, Box<TypedExpr>),
 }

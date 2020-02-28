@@ -856,6 +856,7 @@ pub enum Punct {
     Caret,
     CaretEqual,
     CloseBrace,
+    /// ']'
     CloseBracket,
     CloseParen,
     Colon,

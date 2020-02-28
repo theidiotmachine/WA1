@@ -324,6 +324,8 @@ pub enum Expr {
     Intrinsic(Intrinsic),
     /// Member of a thing, such as a.b
     NamedMember(Box<TypedExpr>, String),
+    /// Member of a thing, such as a[b]
+    DynamicMember(Box<TypedExpr>, Box<TypedExpr>),
     /// object literal
     ObjectLiteral(Vec<ObjectLiteralElem>),
     /// constructor - dynamic
@@ -385,6 +387,19 @@ impl TypedExpr{
                     }
                 }
             },
+            Expr::DynamicMember(outer, inner) => {
+                if self.is_const {
+                    None
+                } else {
+                    let o_outer_lvalue = outer.as_l_value();
+                    match o_outer_lvalue {
+                        None => None,
+                        Some(outer_lvalue) => {
+                            Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::DynamicMemberAssign(outer.clone(), Box::new(outer_lvalue), inner.clone()), loc: self.loc})
+                        }
+                    }
+                }
+            },
             Expr::Parens(inner) => {
                 inner.as_l_value()
             },
@@ -402,10 +417,10 @@ pub enum LValueExpr{
     LocalVariableAssign(String),
     //Assign a closure variable
     ClosureVariableAssign(String),
-    //Assign a static named member of some data, so e.g. a.b
+    //Assign a static named member of some data, so e.g. a.b = c
     StaticNamedMemberAssign(Box<TypedExpr>, Box<TypedLValueExpr>, String),
-    //Assign a static numeric member of some data, so e.g. a[2]
-    StaticU32MemberAssign(Box<TypedLValueExpr>, u32),
+    //Assign a dynamic member of some data e.g. a[b] = c
+    DynamicMemberAssign(Box<TypedExpr>, Box<TypedLValueExpr>, Box<TypedExpr>),
 }
 
 
