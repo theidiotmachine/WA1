@@ -8,7 +8,7 @@ use ast::prelude::*;
 use types::prelude::*;
 pub use errs::{Error};
 use errs::prelude::*;
-use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident, expect_ident};
+use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident, expect_ident, expect_punct, cast_typed_expr};
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_mem_grow(&mut self,    
@@ -247,6 +247,65 @@ impl<'a> Parser<'a> {
                 parser_context.push_err(Error::ObjectHasNoMember(next_item.location.clone(), component));
                 lhs.clone()
             }
+        }
+    }
+
+    pub(crate) fn parse_unsafe_size_t_component(&mut self,
+        lhs: &TypedExpr,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> TypedExpr {
+        let next_item = self.next_item();
+        if next_item.is_err() { 
+            parser_context.push_err(next_item.unwrap_err());
+            return lhs.clone();
+        } let next_item = next_item.unwrap();
+
+        let id = expect_ident!(next_item, parser_context, "Expecting __size_t component to be an identifier");
+        
+        let component = id.to_string();
+
+        match component.as_ref() {
+            "countTrailingZeros" => {
+                self.parse_empty_function_call_args(parser_func_context, parser_context);
+                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32Ctz(Box::new(lhs.clone()))), r#type: Type::UnsafeSizeT, is_const: true, loc: next_item.location.clone()}
+            },
+            "shiftLeft" => {
+                let args = self.parse_function_call_args(&vec![Type::Int], parser_func_context, parser_context);
+                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32ShL(Box::new(lhs.clone()), Box::new(args[0].clone()))), r#type: Type::UnsafeSizeT, is_const: true, loc: next_item.location.clone()}
+            },
+            "shiftRight" => {
+                let args = self.parse_function_call_args(&vec![Type::Int], parser_func_context, parser_context);
+                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32ShRU(Box::new(lhs.clone()), Box::new(args[0].clone()))), r#type: Type::UnsafeSizeT, is_const: true, loc: next_item.location.clone()}
+            },
+            _ => {
+                parser_context.push_err(Error::ObjectHasNoMember(next_item.location.clone(), component));
+                lhs.clone()
+            }
+        }
+    }
+
+    pub(crate) fn parse_unsafe_array_dynamic_component(&mut self,
+        lhs: &TypedExpr,
+        inner_type: &Type,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> TypedExpr {
+        let loc = self.peek_next_location();
+        let r_expr = self.parse_expr(parser_func_context, parser_context);
+        if r_expr.is_err() { 
+            parser_context.push_err(r_expr.unwrap_err());
+            return lhs.clone();
+        } 
+        let expr = r_expr.unwrap();
+        let lhs_clone = lhs.clone();
+        let cast_expr = cast_typed_expr(&Type::Int, Box::new(expr), true, parser_context);
+        expect_punct!(self, parser_context, Punct::CloseBracket, lhs_clone);
+        TypedExpr{
+            expr: Expr::DynamicMember(Box::new(lhs_clone), Box::new(cast_expr)),
+            r#type: inner_type.clone(),
+            is_const: lhs.is_const,
+            loc: loc,
         }
     }
 }

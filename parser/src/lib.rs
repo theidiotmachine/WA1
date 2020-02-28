@@ -210,6 +210,22 @@ fn try_create_cast(want: &Type, got: &TypedExpr, implicit: bool) -> Option<Typed
     create_cast(want, got, &type_cast)
 }
 
+fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, implicit: bool, parser_context: &mut ParserContext) -> TypedExpr {
+    let type_cast = types::cast::try_cast(&got.r#type, want, implicit);
+    let loc = got.loc.clone();
+    let got_is_const = got.is_const;
+    match type_cast {
+        TypeCast::FreeWiden => TypedExpr{expr: Expr::FreeTypeWiden(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
+        TypeCast::IntToBigIntWiden => TypedExpr{expr: Expr::IntToBigInt(got), r#type: Type::BigInt, is_const: true, loc: loc},
+        TypeCast::IntToNumberWiden => TypedExpr{expr: Expr::IntToNumber(got), r#type: Type::Number, is_const: true, loc: loc},
+        TypeCast::None => {
+            parser_context.errors.push(Error::TypeFailure(loc, want.clone(), got.r#type.clone()));
+            got.as_ref().clone()
+        },
+        TypeCast::NotNeeded => got.as_ref().clone(),
+    }
+}
+
 /// Type to indicate if this is a speculative parse (i.e. it may fail gracefully) of a required parse (in which case we)
 /// must succeed
 #[derive(Debug, PartialEq)]

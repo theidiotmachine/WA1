@@ -425,7 +425,35 @@ fn compile_array_member_set(
     }
 }
 
-/// Because a memory set is (add, val), we need to compute the address first. 
+fn compile_array_member_get(
+    inner_value_type: &WasmValueType,
+    inner_value_type_size: u32,
+    idx: u32,
+    wasm_expr: &mut WasmExpr,
+) -> () {
+    match inner_value_type {
+        WasmValueType::I32 => wasm_expr.data.push(WasmInstr::I32Load(inner_value_type_size, inner_value_type_size * idx)),
+        WasmValueType::I64 => wasm_expr.data.push(WasmInstr::I64Load(inner_value_type_size, inner_value_type_size * idx)),
+        WasmValueType::F32 => wasm_expr.data.push(WasmInstr::F32Load(inner_value_type_size, inner_value_type_size * idx)),
+        WasmValueType::F64 => wasm_expr.data.push(WasmInstr::F64Load(inner_value_type_size, inner_value_type_size * idx)),
+    }
+}
+
+fn compile_array_offset(
+    index_expr: &TypedExpr,
+    elem_size: u32,
+    context: &CompilerContext,
+    local_var_map: &HashMap<String, u32>,
+    wasm_module: &mut WasmModule,
+    wasm_expr: &mut WasmExpr,
+    errors: &mut Vec<Error>
+) {
+    compile_expr(index_expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
+    wasm_expr.data.push(WasmInstr::I32Const(elem_size as i32));
+    wasm_expr.data.push(WasmInstr::I32Mul);
+}
+
+/// Because a memory set is (address, value), we need to compute the address first. 
 fn compile_l_value_pre(
     l_value: &TypedLValueExpr, 
     context: &CompilerContext,
@@ -438,10 +466,27 @@ fn compile_l_value_pre(
         LValueExpr::StaticNamedMemberAssign(lhs, _, _) => {
             compile_expr(lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
         },
+        LValueExpr::DynamicMemberAssign(lhs, inner_l_value, member_expr) => {
+            match &inner_l_value.r#type {
+                Type::UnsafeArray(t) => {
+                    let elem_value_type = get_wasm_value_type(&t);
+                    let elem_size = get_size_for_value_type(&elem_value_type);
+                    
+                    //First calculate the offset. 
+                    compile_array_offset(member_expr, elem_size, context, local_var_map, wasm_module, wasm_expr, errors);
+                    //now get the lvalue pointer
+                    compile_expr(lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
+                    //and add the two together.
+                    wasm_expr.data.push(WasmInstr::I32Add);
+                },
+                _ => {}
+            }
+        },
         _ => {}
     }
 }
 
+/// This writes the actual instruction for an l value
 fn compile_l_value_post(
     lhs: &TypedExpr,
     l_value: &TypedLValueExpr, 
@@ -485,6 +530,22 @@ fn compile_l_value_post(
                 Type::UnsafeStruct{name: type_name} => {
                     compile_struct_member_set(type_name, member_name, context, wasm_expr);
 
+                    if consume_result {
+                        compile_expr(lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
+                    }
+                },
+                _ => errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from(format!("expr{:#?}", l_value)))),
+            }
+        },
+
+        LValueExpr::DynamicMemberAssign(_, inner_l_value, _) => {
+            match &inner_l_value.r#type {
+                Type::UnsafeArray(t) => {
+                    let elem_value_type = get_wasm_value_type(&t);
+                    let elem_size = get_size_for_value_type(&elem_value_type);
+                    
+                    //we do a store. Because we already calculated the address we give it an index of zero.
+                    compile_array_member_set(&elem_value_type, elem_size, 0, wasm_expr);
                     if consume_result {
                         compile_expr(lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
                     }
@@ -573,6 +634,21 @@ fn compile_intrinsic(
         Intrinsic::I64Ctz(expr) => {
             compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
             wasm_expr.data.push(WasmInstr::I64Ctz);
+        },
+        Intrinsic::I32ShL(l, r) => {
+            compile_expr(&l, context, local_var_map, true, wasm_module, wasm_expr, errors);
+            compile_expr(&r, context, local_var_map, true, wasm_module, wasm_expr, errors);
+            wasm_expr.data.push(WasmInstr::I32Shl);
+        },
+        Intrinsic::I32ShRS(l, r) => {
+            compile_expr(&l, context, local_var_map, true, wasm_module, wasm_expr, errors);
+            compile_expr(&r, context, local_var_map, true, wasm_module, wasm_expr, errors);
+            wasm_expr.data.push(WasmInstr::I32ShrS);
+        },
+        Intrinsic::I32ShRU(l, r) => {
+            compile_expr(&l, context, local_var_map, true, wasm_module, wasm_expr, errors);
+            compile_expr(&r, context, local_var_map, true, wasm_module, wasm_expr, errors);
+            wasm_expr.data.push(WasmInstr::I32ShrU);
         },
     }
 }
@@ -770,6 +846,28 @@ fn compile_expr(
                 Type::UnsafeStruct{name: type_name} => compile_struct_member_get(type_name, member_name, context, wasm_expr),
                 _ => errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))),
             }
+        },
+
+        Expr::DynamicMember(inner, member_expr) => {
+            compile_expr(&inner, context, local_var_map, true, wasm_module, wasm_expr, errors);
+            match &inner.r#type {
+                Type::UnsafeArray(t) => {
+
+                    let elem_value_type = get_wasm_value_type(&t);
+                    let elem_size = get_size_for_value_type(&elem_value_type);
+                    
+                    //First calculate the offset. 
+                    compile_array_offset(member_expr, elem_size, context, local_var_map, wasm_module, wasm_expr, errors);
+                    //now get the lvalue pointer
+                    compile_expr(inner, context, local_var_map, true, wasm_module, wasm_expr, errors);
+                    //and add the two together.
+                    wasm_expr.data.push(WasmInstr::I32Add);
+
+                    compile_array_member_get(&elem_value_type, elem_size, 0, wasm_expr)
+                },
+                _ => errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))),
+            }
+
         },
 
         Expr::ConstructFromObjectLiteral(new_type, oles) => {

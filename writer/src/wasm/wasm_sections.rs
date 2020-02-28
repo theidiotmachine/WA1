@@ -378,8 +378,8 @@ impl WasmDataSection{
         }
     }
 
-    pub fn register_data_symbol(&self, reloc: &mut WasmObjectModuleFragment) {
-        reloc.linking_section.symbol_table.new_data(&String::from(".data"), 0, 0, self.size);
+    pub fn register_data_symbol(&self, module_name: &String, reloc: &mut WasmObjectModuleFragment) {
+        reloc.linking_section.symbol_table.new_data(&format!(".data.{}", module_name), 0, 0, self.size);
     }
 
     pub fn is_empty(&self) -> bool {

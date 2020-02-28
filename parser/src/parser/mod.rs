@@ -1373,8 +1373,28 @@ impl<'b> Parser<'b> {
             },
             Type::Int | Type::IntLiteral(_)  => self.parse_int_component(lhs, parser_func_context, parser_context),
             //FIXME64BIT
-            Type::UnsafePtr | Type::UnsafeSizeT => self.parse_int_component(lhs, parser_func_context, parser_context),
+            Type::UnsafeSizeT => self.parse_unsafe_size_t_component(lhs, parser_func_context, parser_context),
             Type::UnsafeOption(_/*inner*/) => self.parse_unsafe_option_component(lhs, /*&inner,*/ parser_func_context, parser_context),
+            _ => {
+                parser_context.push_err(Error::NoComponents(lhs.loc.clone()));
+                lhs.clone()
+            }
+        }
+    }
+
+    ///A square bracket member access.
+    fn parse_dynamic_component(&mut self, 
+        lhs: &TypedExpr,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> TypedExpr {
+        //expect_punct!(self, parser_context, Punct::OpenBracket);
+        self.skip_next_item();
+        let lhs_type = &lhs.r#type;
+        match lhs_type {
+            Type::UnsafeArray(inner_type) => {
+                self.parse_unsafe_array_dynamic_component(lhs, inner_type, parser_func_context, parser_context)
+            },
             _ => {
                 parser_context.push_err(Error::NoComponents(lhs.loc.clone()));
                 lhs.clone()
@@ -1693,34 +1713,31 @@ impl<'b> Parser<'b> {
 
             //now, other things it could be
             match lookahead {
-                Token::Punct(p) => match p {
-                    Punct::OpenParen => { 
-                        match &expr.r#type {
-                            Type::Func{func_type} => {
-                                let args = self.parse_function_call_args(&func_type.in_types, parser_func_context, parser_context);
-                                let loc = SourceLocation::new(lookahead_item.location.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(next.location.end.clone()));
-                                expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: func_type.out_type.clone(), is_const: true, loc: loc};
-                                continue;
-                            },
-                            _ => {
-                                let args = self.parse_function_call_args(&vec![], parser_func_context, parser_context);
-                                let loc = SourceLocation::new(lookahead_item.location.start.clone(), next.location.end.clone());
-                                parser_context.push_err(Error::TypeFailureFuncCall(loc.clone()));
-                                expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: expr.r#type.clone(), is_const: true, loc: loc};
-                                continue;
-                            }
+                Token::Punct(Punct::OpenParen) => {
+                    match &expr.r#type {
+                        Type::Func{func_type} => {
+                            let args = self.parse_function_call_args(&func_type.in_types, parser_func_context, parser_context);
+                            let loc = SourceLocation::new(lookahead_item.location.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(next.location.end.clone()));
+                            expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: func_type.out_type.clone(), is_const: true, loc: loc};
+                            continue;
+                        },
+                        _ => {
+                            let args = self.parse_function_call_args(&vec![], parser_func_context, parser_context);
+                            let loc = SourceLocation::new(lookahead_item.location.start.clone(), next.location.end.clone());
+                            parser_context.push_err(Error::TypeFailureFuncCall(loc.clone()));
+                            expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: expr.r#type.clone(), is_const: true, loc: loc};
+                            continue;
                         }
-                    },
-                    Punct::Period => { 
-                        expr = self.parse_component(&expr, parser_func_context, parser_context);
-                        continue;
-                    },
-
-                    Punct::OpenBracket => {
-                        let loc = lookahead_item.location.clone();
-                        parser_context.push_err(Error::NotYetImplemented(loc, String::from("dynamic member")));
                     }
-                    _ => { break; }
+                },
+                Token::Punct(Punct::Period) => {
+                    expr = self.parse_component(&expr, parser_func_context, parser_context);
+                    continue;
+                },
+
+                Token::Punct(Punct::OpenBracket) => {
+                    expr = self.parse_dynamic_component(&expr, parser_func_context, parser_context);
+                    continue;
                 },
                 _ => { break;}
             }

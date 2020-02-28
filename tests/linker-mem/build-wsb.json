@@ -11,10 +11,14 @@
         {
             "file_name": "assert.wa1",
             "is_unsafe": false
+        },
+        {
+            "file_name": "array.wa1",
+            "is_unsafe": true
         }
     ],
     "src_path": "./src",
     "out_path": "./out",
     "module_name": "linker_mem",
-    "wasm_exe": "wasm-ld-9"
+    "wasm_exe": "/home/tim/Code/Ext/LLVM/llvm-build/bin/wasm-ld"
 }

@@ -33,7 +33,7 @@ impl WasmModule{
         }
     }
 
-    pub fn serialize(&mut self, out: &mut Vec<u8>) {
+    pub fn serialize(&mut self, module_name: &String, out: &mut Vec<u8>) {
         let mut dumb = vec![0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00];
         out.append(&mut dumb);
         
@@ -75,7 +75,7 @@ impl WasmModule{
             match &mut self.object_file_sections {
                 None => {},
                 Some(reloc) => {
-                    self.data_section.register_data_symbol(reloc);
+                    self.data_section.register_data_symbol(module_name, reloc);
                 }
             }
         }
