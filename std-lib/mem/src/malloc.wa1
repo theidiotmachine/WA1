@@ -942,7 +942,7 @@ const MIN_SMALL_INDEX = small_index(MIN_CHUNK_SIZE);
 
 /* addressing by index. See above about smallbin repositioning */
 //#define smallbin_at(M, i)   ((sbinptr)((char*)&((M)->smallbins[(i)<<1])))
-function smallbin_at(m: malloc_state, i: __size_t): __Option<malloc_chunk> m.smallbins[i.shiftLeft(1)]);
+function smallbin_at(m: malloc_state, i: __size_t): __Option<malloc_chunk> m.smallbins[i.shiftLeft(1) as int];
 
 //#define treebin_at(M,i)     (&((M)->treebins[i]))
-function treebin_at(m: malloc_state, i: __size_t) m.treebins[i];
+function treebin_at(m: malloc_state, i: __size_t): __Option<malloc_tree_chunk>  m.treebins[i as int];

@@ -253,7 +253,7 @@ impl<'a> Parser<'a> {
                     let o_cast = try_create_cast(arg_type, &expr, true);
                     match o_cast {
                         None => {
-                            parser_context.errors.push(Error::TypeFailure(expr.loc.clone(), arg_type.clone(), expr_type));
+                            parser_context.push_err(Error::TypeFailure(expr.loc.clone(), arg_type.clone(), expr_type));
                             out.push(expr);
                         },
                         Some(new_expr) => out.push(new_expr)
