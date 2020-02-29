@@ -942,7 +942,48 @@ const MIN_SMALL_INDEX = small_index(MIN_CHUNK_SIZE);
 
 /* addressing by index. See above about smallbin repositioning */
 //#define smallbin_at(M, i)   ((sbinptr)((char*)&((M)->smallbins[(i)<<1])))
-function smallbin_at(m: malloc_state, i: __size_t): __Option<malloc_chunk> m.smallbins[i.shiftLeft(1)]);
+function smallbin_at(m: malloc_state, i: __size_t): __Option<malloc_chunk> m.smallbins[i.shiftLeft(1) as int];
 
 //#define treebin_at(M,i)     (&((M)->treebins[i]))
-function treebin_at(m: malloc_state, i: __size_t) m.treebins[i];
+function treebin_at(m: malloc_state, i: __size_t): __Option<malloc_tree_chunk>  m.treebins[i as int];
+
+//#define compute_tree_index(S, I)\
+function compute_tree_index(s: __size_t) : __size_t {
+  const x: __size_t = s.shiftRight(8);
+  if (x == (0 as __size_t))
+    0 as __size_t;
+  else if (x > (0xFFFF as __size_t))
+    31 as __size_t;
+  else {
+    const k: int = 31 - (x.countLeadingZeros() as int);
+    (k.shiftLeft(1) as __size_t) + (s.shiftRight(k + 7) & (1 as __size_t));
+  }
+}
+
+/* Shift placing maximum resolved bit in a treebin at i as sign bit */
+//#define leftshift_for_tree_index(i) ((i == NTREEBINS-1)? 0 : ((SIZE_T_BITSIZE-SIZE_T_ONE) - (((i) >> 1) + TREEBIN_SHIFT - 2)))
+function leftshift_for_tree_index(i: __size_t): int {
+  if (i == (31 as __size_t)) 0; else 31 - ((i.shiftRight(1) as int) + 6);
+}
+
+/* The size of the smallest chunk held in bin with index i */
+//#define minsize_for_tree_index(i) (SIZE_T_ONE << (((i) >> 1) + TREEBIN_SHIFT)) | (((size_t)((i) & SIZE_T_ONE)) << (((i) >> 1) + TREEBIN_SHIFT - 1))
+
+/* ------------------------ Operations on bin maps ----------------------- */
+
+/* bit corresponding to given index */
+//#define idx2bit(i)              ((binmap_t)(1) << (i))
+function idx2bit(i: __size_t): __size_t (1 as __size_t).shiftLeft(i as int);
+
+/* Mark/Clear bits with given index */
+//#define mark_smallmap(M,i)      ((M)->smallmap |=  idx2bit(i))
+//#define clear_smallmap(M,i)     ((M)->smallmap &= ~idx2bit(i))
+//#define smallmap_is_marked(M,i) ((M)->smallmap &   idx2bit(i))
+
+//#define mark_treemap(M,i)       ((M)->treemap  |=  idx2bit(i))
+//#define clear_treemap(M,i)      ((M)->treemap  &= ~idx2bit(i))
+//#define treemap_is_marked(M,i)  ((M)->treemap  &   idx2bit(i))
+
+/* isolate the least set bit of a bitmap */
+//#define least_bit(x)         ((x) & -(x))
+

@@ -245,7 +245,7 @@ impl<'a> Parser<'a> {
             if expr.is_err() { return out; }; let expr = expr.unwrap();
             
             if out.len() == arg_types.len() {
-                parser_context.errors.push(Error::TooManyArgs);
+                parser_context.errors.push(Error::TooManyArgs(expr.loc.clone()));
             } else {
                 let arg_type = &arg_types[out.len()];
                 if *arg_type != expr.r#type {
@@ -253,7 +253,7 @@ impl<'a> Parser<'a> {
                     let o_cast = try_create_cast(arg_type, &expr, true);
                     match o_cast {
                         None => {
-                            parser_context.errors.push(Error::TypeFailure(expr.loc.clone(), arg_type.clone(), expr_type));
+                            parser_context.push_err(Error::TypeFailure(expr.loc.clone(), arg_type.clone(), expr_type));
                             out.push(expr);
                         },
                         Some(new_expr) => out.push(new_expr)

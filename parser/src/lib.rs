@@ -219,8 +219,12 @@ fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, implicit: bool, parser_cont
         TypeCast::IntToBigIntWiden => TypedExpr{expr: Expr::IntToBigInt(got), r#type: Type::BigInt, is_const: true, loc: loc},
         TypeCast::IntToNumberWiden => TypedExpr{expr: Expr::IntToNumber(got), r#type: Type::Number, is_const: true, loc: loc},
         TypeCast::None => {
-            parser_context.errors.push(Error::TypeFailure(loc, want.clone(), got.r#type.clone()));
-            got.as_ref().clone()
+            if implicit {
+                parser_context.push_err(Error::TypeFailure(loc, want.clone(), got.r#type.clone()));
+            } else {
+                parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone()));
+            }
+            TypedExpr{expr: Expr::FreeTypeWiden(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
         },
         TypeCast::NotNeeded => got.as_ref().clone(),
     }

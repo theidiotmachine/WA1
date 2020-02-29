@@ -14,6 +14,8 @@ pub enum Intrinsic {
     MemorySize,
     ///unreachable
     Trap,
+    ///i32 count leading zeros
+    I32Clz(Box<TypedExpr>),
     ///i32 count trailing zeros
     I32Ctz(Box<TypedExpr>),
     ///i64 count trailing zeros

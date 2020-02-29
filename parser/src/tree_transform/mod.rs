@@ -131,6 +131,7 @@ pub fn transform_expr(
             ),
         Expr::Intrinsic(i) => {
             match i {
+                Intrinsic::I32Clz(te) => Expr::Intrinsic(Intrinsic::I32Clz(Box::new(transform_typed_expr(te, transform, parser_context)))),
                 Intrinsic::I32Ctz(te) => Expr::Intrinsic(Intrinsic::I32Ctz(Box::new(transform_typed_expr(te, transform, parser_context)))),
                 Intrinsic::I32ShL(te1, te2) => Expr::Intrinsic(Intrinsic::I32ShL(Box::new(transform_typed_expr(te1, transform, parser_context)),
                     Box::new(transform_typed_expr(te2, transform, parser_context)))),

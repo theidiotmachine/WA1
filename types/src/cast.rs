@@ -49,6 +49,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
         Type::Int => {
             match from {
                 Type::IntLiteral(_) => TypeCast::FreeWiden,
+                Type::UnsafeSizeT => if implicit{ TypeCast::None } else {TypeCast::FreeWiden}
                 _ => TypeCast::None,
             }
         },

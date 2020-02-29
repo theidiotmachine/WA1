@@ -25,17 +25,21 @@ impl<'a> Parser<'a> {
         let component = id.to_string();
 
         match component.as_ref() {
+            "countLeadingZeros" => {
+                self.parse_empty_function_call_args(parser_func_context, parser_context);
+                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32Clz(Box::new(lhs.clone()))), r#type: Type::Int, is_const: true, loc: next_item.location.clone()}
+            },
             "countTrailingZeros" => {
                 self.parse_empty_function_call_args(parser_func_context, parser_context);
                 TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32Ctz(Box::new(lhs.clone()))), r#type: Type::Int, is_const: true, loc: next_item.location.clone()}
             },
             "shiftLeft" => {
                 let args = self.parse_function_call_args(&vec![Type::Int], parser_func_context, parser_context);
-                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32ShL(Box::new(lhs.clone()), Box::new(args[0].clone()))), r#type: Type::UnsafeSizeT, is_const: true, loc: next_item.location.clone()}
+                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32ShL(Box::new(lhs.clone()), Box::new(args[0].clone()))), r#type: Type::Int, is_const: true, loc: next_item.location.clone()}
             },
             "shiftRight" => {
                 let args = self.parse_function_call_args(&vec![Type::Int], parser_func_context, parser_context);
-                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32ShRS(Box::new(lhs.clone()), Box::new(args[0].clone()))), r#type: Type::UnsafeSizeT, is_const: true, loc: next_item.location.clone()}
+                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32ShRS(Box::new(lhs.clone()), Box::new(args[0].clone()))), r#type: Type::Int, is_const: true, loc: next_item.location.clone()}
             },
             _ => {
                 parser_context.push_err(Error::ObjectHasNoMember(next_item.location.clone(), component));

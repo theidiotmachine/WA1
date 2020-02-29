@@ -23,7 +23,7 @@ use crate::ParserContext;
 use crate::ParserFuncContext;
 use crate::Res;
 use crate::{assert_punct, assert_ok,assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_ident, expect_string_literal, expect_keyword, StartFuncType};
-use crate::try_create_cast;
+use crate::{try_create_cast, cast_typed_expr};
 use crate::create_cast;
 use crate::Commitment;
 use crate::Importer;
@@ -863,7 +863,7 @@ impl<'b> Parser<'b> {
         let condition = self.parse_expr(parser_func_context, parser_context);
         assert_ok!(condition);
         if condition.r#type != Type::Boolean {
-            parser_context.errors.push(Error::TypeFailure(condition.loc.clone(), Type::Boolean,  condition.r#type.clone()));
+            parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Boolean,  condition.r#type.clone()));
         }
         assert_punct!(self, Punct::CloseParen);
 
@@ -922,7 +922,7 @@ impl<'b> Parser<'b> {
         let condition = self.parse_expr(parser_func_context, parser_context);
         assert_ok!(condition);
         if condition.r#type != Type::Boolean {
-            parser_context.errors.push(Error::TypeFailure(condition.loc.clone(), Type::Boolean, condition.r#type.clone()));
+            parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Boolean, condition.r#type.clone()));
         }
         assert_punct!(self, Punct::CloseParen);
 
@@ -1939,21 +1939,13 @@ impl<'b> Parser<'b> {
                     //as is just a straight cast; so 
                     match &rhs.r#type {
                         Type::TypeLiteral(t) => {
-                            let o_cast = try_create_cast(&t, lhs, false);
-                            match o_cast {
-                                Some(c) => c,
-                                None => {
-                                    parser_context.errors.push(Error::TypeFailure(loc, lhs.r#type.clone(), (**t).clone()));
-                                    lhs.clone()
-                                }
-                            }
+                            cast_typed_expr(&t, Box::new(lhs.clone()), false, parser_context)
                         },
                         _ => {
                             parser_context.errors.push(Error::AsNeedsType(loc));
                             lhs.clone()
                         }
                     }
-                    
                 } else {
                     let o_bin_op_type_cast = types::get_binary_op_type_cast(op_type, &lhs.r#type, &rhs.r#type);
                     match o_bin_op_type_cast {

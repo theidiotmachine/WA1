@@ -627,6 +627,10 @@ fn compile_intrinsic(
         Intrinsic::Trap => {
             wasm_expr.data.push(WasmInstr::Unreachable)
         },
+        Intrinsic::I32Clz(expr) => {
+            compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
+            wasm_expr.data.push(WasmInstr::I32Clz);
+        },
         Intrinsic::I32Ctz(expr) => {
             compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
             wasm_expr.data.push(WasmInstr::I32Ctz);
