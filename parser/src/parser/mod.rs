@@ -1939,24 +1939,13 @@ impl<'b> Parser<'b> {
                     //as is just a straight cast; so 
                     match &rhs.r#type {
                         Type::TypeLiteral(t) => {
-
                             cast_typed_expr(&t, Box::new(lhs.clone()), false, parser_context)
-                            /*
-                            let o_cast = try_create_cast(&t, lhs, false);
-                            match o_cast {
-                                Some(c) => c,
-                                None => {
-                                    parser_context.push_err(Error::TypeFailure(loc, lhs.r#type.clone(), (**t).clone()));
-                                    lhs.clone()
-                                }
-                            }*/
                         },
                         _ => {
                             parser_context.errors.push(Error::AsNeedsType(loc));
                             lhs.clone()
                         }
                     }
-                    
                 } else {
                     let o_bin_op_type_cast = types::get_binary_op_type_cast(op_type, &lhs.r#type, &rhs.r#type);
                     match o_bin_op_type_cast {

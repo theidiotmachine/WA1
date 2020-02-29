@@ -959,3 +959,31 @@ function compute_tree_index(s: __size_t) : __size_t {
     (k.shiftLeft(1) as __size_t) + (s.shiftRight(k + 7) & (1 as __size_t));
   }
 }
+
+/* Shift placing maximum resolved bit in a treebin at i as sign bit */
+//#define leftshift_for_tree_index(i) ((i == NTREEBINS-1)? 0 : ((SIZE_T_BITSIZE-SIZE_T_ONE) - (((i) >> 1) + TREEBIN_SHIFT - 2)))
+function leftshift_for_tree_index(i: __size_t): int {
+  if (i == (31 as __size_t)) 0; else 31 - ((i.shiftRight(1) as int) + 6);
+}
+
+/* The size of the smallest chunk held in bin with index i */
+//#define minsize_for_tree_index(i) (SIZE_T_ONE << (((i) >> 1) + TREEBIN_SHIFT)) | (((size_t)((i) & SIZE_T_ONE)) << (((i) >> 1) + TREEBIN_SHIFT - 1))
+
+/* ------------------------ Operations on bin maps ----------------------- */
+
+/* bit corresponding to given index */
+//#define idx2bit(i)              ((binmap_t)(1) << (i))
+function idx2bit(i: __size_t): __size_t (1 as __size_t).shiftLeft(i as int);
+
+/* Mark/Clear bits with given index */
+//#define mark_smallmap(M,i)      ((M)->smallmap |=  idx2bit(i))
+//#define clear_smallmap(M,i)     ((M)->smallmap &= ~idx2bit(i))
+//#define smallmap_is_marked(M,i) ((M)->smallmap &   idx2bit(i))
+
+//#define mark_treemap(M,i)       ((M)->treemap  |=  idx2bit(i))
+//#define clear_treemap(M,i)      ((M)->treemap  &= ~idx2bit(i))
+//#define treemap_is_marked(M,i)  ((M)->treemap  &   idx2bit(i))
+
+/* isolate the least set bit of a bitmap */
+//#define least_bit(x)         ((x) & -(x))
+
