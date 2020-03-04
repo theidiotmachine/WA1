@@ -20,6 +20,9 @@ use crate::wasm::wasm_code::{WasmLocals, WasmFunc, WasmExpr};
 use crate::wasm::wasm_instructions::{WasmInstr, opcodes};
 use crate::wasm::wasm_serialize::{serialize_i32, serialize_i64, serialize_f32, serialize_f64};
 
+use crate::compile_int::compile_int_member_func;
+use crate::compile_unsafe::compile_unsafe_size_t_member_func;
+
 #[derive(PartialEq, Copy, Clone)]
 pub enum TranslationUnitType{
     Simple,
@@ -33,7 +36,7 @@ pub enum OutputType{
     StaticLibrary
 }
 
-struct CompilerContext{
+pub (crate) struct CompilerContext{
     pub mem_layout_map: HashMap<String, UserMemLayout>,
     pub global_var_map: HashMap<String, u32>,
     pub func_map: HashMap<String, u32>,
@@ -466,8 +469,8 @@ fn compile_l_value_pre(
         LValueExpr::StaticNamedMemberAssign(lhs, _, _) => {
             compile_expr(lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
         },
-        LValueExpr::DynamicMemberAssign(lhs, inner_l_value, member_expr) => {
-            match &inner_l_value.r#type {
+        LValueExpr::DynamicMemberAssign(lhs, inner_l_value_type, member_expr) => {
+            match &inner_l_value_type {
                 Type::UnsafeArray(t) => {
                     let elem_value_type = get_wasm_value_type(&t);
                     let elem_size = get_size_for_value_type(&elem_value_type);
@@ -525,8 +528,8 @@ fn compile_l_value_post(
             };
         },
 
-        LValueExpr::StaticNamedMemberAssign(_, inner_l_value, member_name) => {
-            match &inner_l_value.r#type {
+        LValueExpr::StaticNamedMemberAssign(_, inner_l_value_type, member_name) => {
+            match &inner_l_value_type {
                 Type::UnsafeStruct{name: type_name} => {
                     compile_struct_member_set(type_name, member_name, context, wasm_expr);
 
@@ -537,9 +540,9 @@ fn compile_l_value_post(
                 _ => errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from(format!("expr{:#?}", l_value)))),
             }
         },
-
-        LValueExpr::DynamicMemberAssign(_, inner_l_value, _) => {
-            match &inner_l_value.r#type {
+        
+        LValueExpr::DynamicMemberAssign(_, inner_l_value_type, _) => {
+            match &inner_l_value_type {
                 Type::UnsafeArray(t) => {
                     let elem_value_type = get_wasm_value_type(&t);
                     let elem_size = get_size_for_value_type(&elem_value_type);
@@ -627,37 +630,27 @@ fn compile_intrinsic(
         Intrinsic::Trap => {
             wasm_expr.data.push(WasmInstr::Unreachable)
         },
-        Intrinsic::I32Clz(expr) => {
-            compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            wasm_expr.data.push(WasmInstr::I32Clz);
-        },
-        Intrinsic::I32Ctz(expr) => {
-            compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            wasm_expr.data.push(WasmInstr::I32Ctz);
-        },
-        Intrinsic::I64Ctz(expr) => {
-            compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            wasm_expr.data.push(WasmInstr::I64Ctz);
-        },
-        Intrinsic::I32ShL(l, r) => {
-            compile_expr(&l, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            compile_expr(&r, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            wasm_expr.data.push(WasmInstr::I32Shl);
-        },
-        Intrinsic::I32ShRS(l, r) => {
-            compile_expr(&l, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            compile_expr(&r, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            wasm_expr.data.push(WasmInstr::I32ShrS);
-        },
-        Intrinsic::I32ShRU(l, r) => {
-            compile_expr(&l, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            compile_expr(&r, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            wasm_expr.data.push(WasmInstr::I32ShrU);
-        },
     }
 }
 
-fn compile_expr(
+fn compile_member_func_call(
+    lhs: &TypedExpr, 
+    component: &String, 
+    args: &Vec<TypedExpr>, 
+    context: &CompilerContext,
+    local_var_map: &HashMap<String, u32>,
+    wasm_module: &mut WasmModule,
+    wasm_expr: &mut WasmExpr,
+    errors: &mut Vec<Error>
+) {
+    match lhs.r#type {
+        Type::Int | Type::IntLiteral(_) => compile_int_member_func(lhs, component, args, context, local_var_map, wasm_module, wasm_expr, errors), 
+        Type::UnsafeSizeT => compile_unsafe_size_t_member_func(lhs, component, args, context, local_var_map, wasm_module, wasm_expr, errors), 
+        _ => unreachable!()
+    }
+}
+
+pub(crate) fn compile_expr(
     typed_expr: &TypedExpr,
     context: &CompilerContext,
     local_var_map: &HashMap<String, u32>,
@@ -981,6 +974,10 @@ fn compile_expr(
                 },
                 _ => { errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("__sizeof on {}", t)))); }
             }
+        },
+
+        Expr::MemberFuncCall(lhs, component, args) => {
+            compile_member_func_call(lhs, component, args, context, local_var_map, wasm_module, wasm_expr, errors);
         },
         
         _ => { errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("{:#?}", typed_expr.expr)))); },

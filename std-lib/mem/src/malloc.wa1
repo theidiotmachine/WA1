@@ -44,6 +44,7 @@ MALLOC_ALIGNMENT: 8
 MSPACES: 0
 ONLY_MSPACES: 0
 
+USE_LOCKS: 0
 USE_LOCKS                default: 0 (false)
   Causes each call to each public routine to be surrounded with
   pthread or WIN32 mutex lock/unlock. (If set true, this can be
@@ -52,17 +53,24 @@ USE_LOCKS                default: 0 (false)
   implementation is left out, so lock functions must be supplied manually,
   as described below.
 
-USE_LOCKS: 0
-
 USE_SPIN_LOCKS: 0
 USE_RECURSIVE_LOCKS: 0
 LOCK_AT_FORK: 0
 FOOTERS: 0
+FOOTERS                  default: 0
+  If true, provide extra checking and dispatching by placing
+  information in the footers of allocated chunks. This adds
+  space and time overhead.
+
 INSECURE: 0 (*)
+INSECURE                 default: 0
+  If true, omit checks for usage errors and heap space overwrites.
+
 USE_DL_PREFIX: undefined
 MALLOC_INSPECT_ALL: undefined
 ABORT: __trap()
 
+PROCEED_ON_ERROR: 0
 PROCEED_ON_ERROR           default: defined as 0 (false)
   Controls whether detected bad addresses cause them to bypassed
   rather than aborting. If set, detected bad arguments to free and
@@ -74,7 +82,6 @@ PROCEED_ON_ERROR           default: defined as 0 (false)
   and can be examined to see if errors have occurred. This option
   generates slower code than the default abort policy.
 
-PROCEED_ON_ERROR: 0
 
 DEBUG: undefined
 ABORT_ON_ASSERT_FAILURE: 1
@@ -977,13 +984,94 @@ function idx2bit(i: __size_t): __size_t (1 as __size_t).shiftLeft(i as int);
 
 /* Mark/Clear bits with given index */
 //#define mark_smallmap(M,i)      ((M)->smallmap |=  idx2bit(i))
+function mark_smallmap(m: malloc_state, i: __size_t): void m.smallmap |= idx2bit(i);
 //#define clear_smallmap(M,i)     ((M)->smallmap &= ~idx2bit(i))
+function clear_smallmap(m: malloc_state, i: __size_t): void m.smallmap &= ~idx2bit(i);
 //#define smallmap_is_marked(M,i) ((M)->smallmap &   idx2bit(i))
+function smallmap_is_marked(m: malloc_state, i: __size_t): boolean (m.smallmap & idx2bit(i)) != (0 as __size_t);
 
 //#define mark_treemap(M,i)       ((M)->treemap  |=  idx2bit(i))
+function mark_treemap(m: malloc_state, i: __size_t): void m.treemap  |=  idx2bit(i);
 //#define clear_treemap(M,i)      ((M)->treemap  &= ~idx2bit(i))
+function clear_treemap(m: malloc_state, i: __size_t): void m.treemap  &= ~idx2bit(i);
 //#define treemap_is_marked(M,i)  ((M)->treemap  &   idx2bit(i))
+function treemap_is_marked(m: malloc_state, i: __size_t): boolean (m.treemap  &   idx2bit(i)) != (0 as __size_t);
 
 /* isolate the least set bit of a bitmap */
 //#define least_bit(x)         ((x) & -(x))
+function least_bit(x: __size_t): __size_t x & -x;
 
+/* mask with all bits to left of least bit of x on */
+//#define left_bits(x)         ((x<<1) | -(x<<1))
+function left_bits(x: __size_t): __size_t x.shiftLeft(1) | -(x.shiftLeft(1));
+
+/* mask with all bits to left of or equal to least bit of x on */
+//#define same_or_left_bits(x) ((x) | -(x))
+function same_or_left_bits(x: __size_t): __size_t x | -x;
+
+/* index corresponding to given bit. Use x86 asm if possible */
+//#define compute_bit2idx(X, I) { unsigned int J; J = __builtin_ctz(X); I = (bindex_t)J; }
+function compute_bit2idx(x: __size_t): __size_t x.countTrailingZeros();
+
+/* ----------------------- Runtime Check Support ------------------------- */
+
+/*
+  For security, the main invariant is that malloc/free/etc never
+  writes to a static address other than malloc_state, unless static
+  malloc_state itself has been corrupted, which cannot occur via
+  malloc (because of these checks). In essence this means that we
+  believe all pointers, sizes, maps etc held in malloc_state, but
+  check all of those linked or offsetted from other embedded data
+  structures.  These checks are interspersed with main code in a way
+  that tends to minimize their run-time cost.
+
+  When FOOTERS is defined, in addition to range checking, we also
+  verify footer fields of inuse chunks, which can be used guarantee
+  that the mstate controlling malloc/free is intact.  This is a
+  streamlined version of the approach described by William Robertson
+  et al in "Run-time Detection of Heap-based Overflows" LISA'03
+  http://www.usenix.org/events/lisa03/tech/robertson.html The footer
+  of an inuse chunk holds the xor of its mstate and a random seed,
+  that is checked upon calls to free() and realloc().  This is
+  (probabalistically) unguessable from outside the program, but can be
+  computed by any code successfully malloc'ing any chunk, so does not
+  itself provide protection against code that has already broken
+  security through some other means.  Unlike Robertson et al, we
+  always dynamically check addresses of all offset chunks (previous,
+  next, etc). This turns out to be cheaper than relying on hashes.
+*/
+
+//*_* note: these are all under the 'INSECURE' macro. In a release build, we should probably not include them.
+
+/* Check if address a is at least as high as any from MORECORE or MMAP */
+//#define ok_address(M, a) ((char*)(a) >= (M)->least_addr)
+function ok_address(m: malloc_state, a: __ptr): boolean a >= m.least_addr;
+
+/* Check if address of next chunk n is higher than base chunk p */
+//#define ok_next(p, n)    ((char*)(p) < (char*)(n))
+function ok_next(p: __ptr, n: __ptr): boolean p < n;
+
+/* Check if p has inuse status */
+//#define ok_inuse(p)     is_inuse(p)
+function ok_inuse(p: malloc_chunk): boolean is_inuse(p);
+
+/* Check if p has its pinuse bit on */
+//#define ok_pinuse(p)     pinuse(p)
+function ok_pinuse(p: malloc_chunk): boolean pinuse(p); 
+
+//#define ok_magic(M)      (1)
+
+//#define mark_inuse_foot(M,p,s)
+
+/* Set cinuse bit and pinuse bit of next chunk */
+//#define set_inuse(M,p,s)  ((p)->head = (((p)->head & PINUSE_BIT)|s|CINUSE_BIT), ((mchunkptr)(((char*)(p)) + (s)))->head |= PINUSE_BIT)
+function set_inuse(m: malloc_state, p: malloc_chunk, s: __size_t): void {
+  p.head = (p.head & (1 as __size_t)) | s | (2 as __size_t);
+  (((p as __ptr) + s) as malloc_chunk).head |= (1 as __size_t);
+}
+
+/* Set cinuse and pinuse of this chunk and pinuse of next chunk */
+//#define set_inuse_and_pinuse(M,p,s)  ((p)->head = (s|PINUSE_BIT|CINUSE_BIT),  ((mchunkptr)(((char*)(p)) + (s)))->head |= PINUSE_BIT)
+
+/* Set size, cinuse and pinuse bit of this chunk */
+//#define set_size_and_pinuse_of_inuse_chunk(M, p, s)  ((p)->head = (s|PINUSE_BIT|CINUSE_BIT))

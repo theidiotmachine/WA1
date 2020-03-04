@@ -20,8 +20,6 @@ pub mod prelude {
     pub use super::ObjectLiteralElem;
 }
 
-use lazy_static;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum BinaryOperator{
     Dot,
@@ -49,105 +47,6 @@ pub enum BinaryOperator{
     As,
 }
 
-lazy_static!{
-static ref COMPARISON_OP: OpType = OpType::SimpleOpType(vec![
-    FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::Boolean},
-    FuncType{in_types: vec![Type::UnsafeSizeT, Type::UnsafeSizeT], out_type: Type::Boolean},
-]);
-
-static ref MATHS_BIN_OP: OpType = OpType::SimpleOpType(vec![
-    FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
-    FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Number},
-    FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
-    FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::UnsafePtr},
-    FuncType{in_types: vec![Type::UnsafeSizeT, Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
-]);
-
-static ref MATHS_UN_OP: OpType = OpType::SimpleOpType(vec![
-    FuncType{in_types: vec![Type::Int], out_type: Type::Int},
-    FuncType{in_types: vec![Type::Number], out_type: Type::Number},
-    FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt},
-    FuncType{in_types: vec![Type::UnsafePtr], out_type: Type::UnsafePtr},
-    FuncType{in_types: vec![Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
-]);
-
-static ref BIT_BIN_OP: OpType = OpType::SimpleOpType(vec![
-    FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
-    FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
-    FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::UnsafePtr},
-    FuncType{in_types: vec![Type::UnsafeSizeT, Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
-]);
-
-static ref EQUALITY_OP: OpType = OpType::EqualityOpType;
-
-static ref AS_OP: OpType = OpType::AsOpType;
-
-static ref BOOL_BIN_OP: OpType = OpType::SimpleOpType(vec![
-    FuncType{in_types: vec![Type::Boolean, Type::Boolean], out_type: Type::Boolean},
-]);
-
-static ref BOOL_UN_OP: OpType = OpType::SimpleOpType(vec![
-    FuncType{in_types: vec![Type::Boolean], out_type: Type::Boolean},
-]);
-
-static ref BIT_UN_OP: OpType = OpType::SimpleOpType(vec![
-    FuncType{in_types: vec![Type::Int], out_type: Type::Int},
-    FuncType{in_types: vec![Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
-    FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt},
-]);
-
-static ref MATHS_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
-    Type::Int,
-    Type::Number,
-    Type::BigInt,
-    Type::UnsafePtr,
-    Type::UnsafeSizeT,
-]);
-
-static ref BIT_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
-    Type::Int,
-    Type::BigInt,
-    Type::UnsafeSizeT,
-]);
-
-static ref ASSIGN_OP: OpType = OpType::AssignmentOpType;
-
-/// clearly it would be nice to get these types
-static ref NO_IDEA_OP: OpType = OpType::NotImplementedOpType;
-}
-
-impl BinaryOperator{
-    pub fn get_op_type(&self) -> &OpType {
-        match self {
-            BinaryOperator::Dot => &NO_IDEA_OP,
-            BinaryOperator::GreaterThan => &COMPARISON_OP,
-            BinaryOperator::LessThan => &COMPARISON_OP,
-            BinaryOperator::Plus => &MATHS_BIN_OP,
-            BinaryOperator::Minus => &MATHS_BIN_OP,
-            BinaryOperator::Multiply => &MATHS_BIN_OP,
-            BinaryOperator::Mod => &MATHS_BIN_OP,
-            BinaryOperator::BitOr => &BIT_BIN_OP,
-            BinaryOperator::BitAnd => &BIT_BIN_OP,
-            BinaryOperator::BitXor => &BIT_BIN_OP,
-            BinaryOperator::Divide => &MATHS_BIN_OP,
-            BinaryOperator::StrictEqual => &EQUALITY_OP,
-            BinaryOperator::StrictNotEqual => &EQUALITY_OP,
-            BinaryOperator::LogicalAnd => &BOOL_BIN_OP,
-            BinaryOperator::LogicalOr => &BOOL_BIN_OP,
-            BinaryOperator::Equal => &EQUALITY_OP,
-            BinaryOperator::NotEqual => &EQUALITY_OP,
-            BinaryOperator::GreaterThanEqual => &COMPARISON_OP,
-            BinaryOperator::LessThanEqual => &COMPARISON_OP,
-            BinaryOperator::Exponent => &MATHS_BIN_OP,
-            BinaryOperator::In => &NO_IDEA_OP,
-            BinaryOperator::InstanceOf => &NO_IDEA_OP,
-            BinaryOperator::As => &AS_OP,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum UnaryOperator{
@@ -161,20 +60,6 @@ pub enum UnaryOperator{
     PrefixDecrement,
 }
 
-impl UnaryOperator{
-    pub fn get_op_type(&self) -> &OpType {
-        match self {
-            UnaryOperator::LogicalNot => &BOOL_UN_OP,
-            UnaryOperator::BitNot => &BIT_UN_OP,
-            UnaryOperator::PostfixIncrement => &MATHS_UN_OP,
-            UnaryOperator::PostfixDecrement=> &MATHS_UN_OP,
-            UnaryOperator::Minus => &MATHS_UN_OP,
-            UnaryOperator::Plus => &MATHS_UN_OP,
-            UnaryOperator::PrefixIncrement => &MATHS_UN_OP,
-            UnaryOperator::PrefixDecrement => &MATHS_UN_OP,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum AssignmentOperator{
@@ -188,23 +73,6 @@ pub enum AssignmentOperator{
     BitAndAssign,
     BitXorAssign,
     BitOrAssign
-}
-
-impl AssignmentOperator{
-    pub fn get_op_type(&self) -> &OpType {
-        match self {
-            AssignmentOperator::Assign => &ASSIGN_OP,
-            AssignmentOperator::PlusAssign => &MATHS_ASSIGN_MODIFY_OP,
-            AssignmentOperator::MinusAssign => &MATHS_ASSIGN_MODIFY_OP,
-            AssignmentOperator::ExponentAssign => &MATHS_ASSIGN_MODIFY_OP,
-            AssignmentOperator::MultiplyAssign => &MATHS_ASSIGN_MODIFY_OP,
-            AssignmentOperator::DivideAssign => &MATHS_ASSIGN_MODIFY_OP,
-            AssignmentOperator::ModAssign => &MATHS_ASSIGN_MODIFY_OP,
-            AssignmentOperator::BitAndAssign => &BIT_ASSIGN_MODIFY_OP,
-            AssignmentOperator::BitXorAssign => &BIT_ASSIGN_MODIFY_OP,
-            AssignmentOperator::BitOrAssign => &BIT_ASSIGN_MODIFY_OP
-        }
-    }
 }
 
 /// Variable decl
@@ -290,6 +158,8 @@ pub enum Expr {
     StaticFuncCall(String, Vec<TypedExpr>),
     /// dynamic func call.
     DynamicFuncCall(Box<TypedExpr>, Vec<TypedExpr>),
+    /// Member func call.
+    MemberFuncCall(Box<TypedExpr>, String, Vec<TypedExpr>),
     /// Implicit i32 -> f64 cast
     IntToNumber(Box<TypedExpr>),
     /// Implicit i32 -> i64 cast
@@ -378,26 +248,14 @@ impl TypedExpr{
                 if self.is_const {
                     None
                 } else {
-                    let o_lhs = lhs.as_l_value();
-                    match o_lhs {
-                        None => None,
-                        Some(lhs_lhs) => {
-                            Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(lhs.clone(), Box::new(lhs_lhs), name.clone()), loc: self.loc})
-                        }
-                    }
+                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(lhs.clone(), lhs.r#type.clone(), name.clone()), loc: self.loc})
                 }
             },
             Expr::DynamicMember(outer, inner) => {
                 if self.is_const {
                     None
                 } else {
-                    let o_outer_lvalue = outer.as_l_value();
-                    match o_outer_lvalue {
-                        None => None,
-                        Some(outer_lvalue) => {
-                            Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::DynamicMemberAssign(outer.clone(), Box::new(outer_lvalue), inner.clone()), loc: self.loc})
-                        }
-                    }
+                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::DynamicMemberAssign(outer.clone(), outer.r#type.clone(), inner.clone()), loc: self.loc})
                 }
             },
             Expr::Parens(inner) => {
@@ -418,9 +276,9 @@ pub enum LValueExpr{
     //Assign a closure variable
     ClosureVariableAssign(String),
     //Assign a static named member of some data, so e.g. a.b = c
-    StaticNamedMemberAssign(Box<TypedExpr>, Box<TypedLValueExpr>, String),
+    StaticNamedMemberAssign(Box<TypedExpr>, Type, String),
     //Assign a dynamic member of some data e.g. a[b] = c
-    DynamicMemberAssign(Box<TypedExpr>, Box<TypedLValueExpr>, Box<TypedExpr>),
+    DynamicMemberAssign(Box<TypedExpr>, Type, Box<TypedExpr>),
 }
 
 

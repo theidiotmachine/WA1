@@ -44,7 +44,6 @@ name = "ast"
 version = "0.4.0"
 dependencies = [
  "errs 0.1.0",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "types 0.1.0",
 ]
@@ -616,6 +615,7 @@ dependencies = [
  "ast 0.4.0",
  "backtrace 0.3.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "errs 0.1.0",
+ "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "ress 0.8.1",
  "types 0.1.0",
