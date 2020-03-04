@@ -248,26 +248,14 @@ impl TypedExpr{
                 if self.is_const {
                     None
                 } else {
-                    let o_lhs = lhs.as_l_value();
-                    match o_lhs {
-                        None => None,
-                        Some(lhs_lhs) => {
-                            Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(lhs.clone(), Box::new(lhs_lhs), name.clone()), loc: self.loc})
-                        }
-                    }
+                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(lhs.clone(), lhs.r#type.clone(), name.clone()), loc: self.loc})
                 }
             },
             Expr::DynamicMember(outer, inner) => {
                 if self.is_const {
                     None
                 } else {
-                    let o_outer_lvalue = outer.as_l_value();
-                    match o_outer_lvalue {
-                        None => None,
-                        Some(outer_lvalue) => {
-                            Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::DynamicMemberAssign(outer.clone(), Box::new(outer_lvalue), inner.clone()), loc: self.loc})
-                        }
-                    }
+                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::DynamicMemberAssign(outer.clone(), outer.r#type.clone(), inner.clone()), loc: self.loc})
                 }
             },
             Expr::Parens(inner) => {
@@ -288,9 +276,9 @@ pub enum LValueExpr{
     //Assign a closure variable
     ClosureVariableAssign(String),
     //Assign a static named member of some data, so e.g. a.b = c
-    StaticNamedMemberAssign(Box<TypedExpr>, Box<TypedLValueExpr>, String),
+    StaticNamedMemberAssign(Box<TypedExpr>, Type, String),
     //Assign a dynamic member of some data e.g. a[b] = c
-    DynamicMemberAssign(Box<TypedExpr>, Box<TypedLValueExpr>, Box<TypedExpr>),
+    DynamicMemberAssign(Box<TypedExpr>, Type, Box<TypedExpr>),
 }
 
 

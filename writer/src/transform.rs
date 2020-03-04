@@ -469,8 +469,8 @@ fn compile_l_value_pre(
         LValueExpr::StaticNamedMemberAssign(lhs, _, _) => {
             compile_expr(lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
         },
-        LValueExpr::DynamicMemberAssign(lhs, inner_l_value, member_expr) => {
-            match &inner_l_value.r#type {
+        LValueExpr::DynamicMemberAssign(lhs, inner_l_value_type, member_expr) => {
+            match &inner_l_value_type {
                 Type::UnsafeArray(t) => {
                     let elem_value_type = get_wasm_value_type(&t);
                     let elem_size = get_size_for_value_type(&elem_value_type);
@@ -528,8 +528,8 @@ fn compile_l_value_post(
             };
         },
 
-        LValueExpr::StaticNamedMemberAssign(_, inner_l_value, member_name) => {
-            match &inner_l_value.r#type {
+        LValueExpr::StaticNamedMemberAssign(_, inner_l_value_type, member_name) => {
+            match &inner_l_value_type {
                 Type::UnsafeStruct{name: type_name} => {
                     compile_struct_member_set(type_name, member_name, context, wasm_expr);
 
@@ -541,8 +541,8 @@ fn compile_l_value_post(
             }
         },
         
-        LValueExpr::DynamicMemberAssign(_, inner_l_value, _) => {
-            match &inner_l_value.r#type {
+        LValueExpr::DynamicMemberAssign(_, inner_l_value_type, _) => {
+            match &inner_l_value_type {
                 Type::UnsafeArray(t) => {
                     let elem_value_type = get_wasm_value_type(&t);
                     let elem_size = get_size_for_value_type(&elem_value_type);

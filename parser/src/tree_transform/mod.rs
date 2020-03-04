@@ -22,14 +22,14 @@ pub fn transform_lvalue_expr(
     }
     match expr {
         LValueExpr::ClosureVariableAssign(_) | LValueExpr::GlobalVariableAssign(_) | LValueExpr::LocalVariableAssign(_) => expr.clone(),
-        LValueExpr::StaticNamedMemberAssign(te, tle, s) => LValueExpr::StaticNamedMemberAssign(
+        LValueExpr::StaticNamedMemberAssign(te, t, s) => LValueExpr::StaticNamedMemberAssign(
             Box::new(transform_typed_expr(te, transform, parser_context)),
-            Box::new(transform_typed_lvalue_expr(tle, transform, parser_context)),
+            t.clone(),
             s.clone(),
         ),
-        LValueExpr::DynamicMemberAssign(te1, tle, te2) => LValueExpr::DynamicMemberAssign(
+        LValueExpr::DynamicMemberAssign(te1, t, te2) => LValueExpr::DynamicMemberAssign(
             Box::new(transform_typed_expr(te1, transform, parser_context)),
-            Box::new(transform_typed_lvalue_expr(tle, transform, parser_context)),
+            t.clone(),
             Box::new(transform_typed_expr(te2, transform, parser_context)),
         )
     }
