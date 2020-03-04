@@ -18,5 +18,6 @@ ress = { path = "../ress" }
 ast = { path = "../ast" }
 errs = { path = "../errs" }
 types = {path = "../types"}
+lazy_static = "1.4.0"
 log = "0.4"
 backtrace = "0"

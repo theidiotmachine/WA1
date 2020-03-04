@@ -35,3 +35,11 @@ Are basically
 ## Switch
 
 Switch is a branch table for values 0 - n, where n is the last contiguous value? after than it is nested ifs.
+
+## interfaces
+
+Have a vtable but classes don't? That means boxing interfaces?
+
+## type classes
+
+compil

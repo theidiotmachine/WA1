@@ -12,8 +12,7 @@ pub use errs::prelude::*;
 
 use crate::tree_transform::{Transform, transform_expr, transform_lvalue_expr, transform_typed_expr};
 
-use crate::try_create_cast;
-use crate::{expect_keyword, expect_next, expect_ident, expect_punct};
+use crate::{expect_keyword, expect_next, expect_ident, expect_punct, cast_typed_expr};
 
 /// Take a generic func, and a set of values for the type variables, and instantiate a
 /// resolved func decl. 
@@ -55,7 +54,7 @@ fn transform_type(t: &Type,
 ) -> Type {
     match t {
         Type::Any | Type::BigInt | Type::BigIntLiteral(_) | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) 
-        | Type::Int | Type::IntLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
+        | Type::Int | Type::IntLiteral(_) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
         | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeSizeT
         | Type::UnsafeStruct{name: _} | Type::UserClass{name: _}
             => t.clone(),
@@ -248,19 +247,8 @@ impl<'a> Parser<'a> {
                 parser_context.errors.push(Error::TooManyArgs(expr.loc.clone()));
             } else {
                 let arg_type = &arg_types[out.len()];
-                if *arg_type != expr.r#type {
-                    let expr_type = expr.r#type.clone();
-                    let o_cast = try_create_cast(arg_type, &expr, true);
-                    match o_cast {
-                        None => {
-                            parser_context.push_err(Error::TypeFailure(expr.loc.clone(), arg_type.clone(), expr_type));
-                            out.push(expr);
-                        },
-                        Some(new_expr) => out.push(new_expr)
-                    }
-                } else {
-                    out.push(expr);
-                }
+                let cast = cast_typed_expr(arg_type, Box::new(expr), true, parser_context);
+                out.push(cast);
             }
 
             let lookahead_item = self.peek_next_item();
@@ -627,29 +615,14 @@ impl<'a> Parser<'a> {
         let mut idx = 0;
         let runtime_arg_types = runtime_func_decl.get_arg_types();
         for arg in args {
-            let o_cast_expr = try_create_cast(&(runtime_arg_types[idx]), &arg, false);
-            match o_cast_expr {
-                Some(cast_expr) => runtime_args.push(cast_expr),
-                None => {
-                    //this means our choice of runtime type was a mistake
-                    parser_context.push_err(Error::TypeFailure(next.location.clone(), runtime_arg_types[idx].clone(), arg.r#type.clone()));
-                    runtime_args.push(arg)
-                }
-            }
+            let cast_expr = cast_typed_expr(&(runtime_arg_types[idx]), Box::new(arg), false, parser_context);
+            runtime_args.push(cast_expr);
             idx += 1;
         }
 
         let runtime_call = TypedExpr{expr: Expr::StaticFuncCall(runtime_name.clone(), runtime_args), r#type: runtime_func_decl.return_type.clone(), is_const: true, 
             loc: next.location.clone()};
-        let o_cast_expr = try_create_cast(&resolved_func_decl.return_type, &runtime_call, false);
-        match o_cast_expr {
-            Some(cast_expr) => cast_expr,
-            None => {
-                //this means our choice of runtime return type was a mistake
-                parser_context.push_err(Error::TypeFailure(next.location.clone(), resolved_func_decl.return_type.clone(), runtime_call.r#type.clone()));
-                runtime_call
-            }
-        }
+        cast_typed_expr(&resolved_func_decl.return_type, Box::new(runtime_call), false, parser_context)
     }
 
     pub(crate) fn try_parse_generic_func_call(

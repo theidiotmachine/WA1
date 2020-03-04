@@ -2,48 +2,45 @@ use crate::Parser;
 use crate::ParserContext;
 use crate::ParserFuncContext;
 
-use ress::prelude::*;
 use ast::prelude::*;
 use types::prelude::*;
 pub use errs::Error;
-use crate::expect_ident;
+pub use errs::prelude::*;
+
+
+use lazy_static;
+
+lazy_static!{
+    static ref INT_METHODS: Vec<FuncDecl> = vec![
+        FuncDecl{name: String::from("countLeadingZeros"), return_type: Type::Int, args: vec![], export: false, generic_impl: false},
+        FuncDecl{name: String::from("countTrailingZeros"), return_type: Type::Int, args: vec![], export: false, generic_impl: false},
+        FuncDecl{name: String::from("shiftLeft"), return_type: Type::Int, args: vec![FuncArg{name: String::from("n"), r#type: Type::Int}], export: false, generic_impl: false},
+        FuncDecl{name: String::from("shiftRight"), return_type: Type::Int, args: vec![FuncArg{name: String::from("n"), r#type: Type::Int}], export: false, generic_impl: false},
+    ];
+}
+
+fn get_func_decl(name: &String) -> Option<&FuncDecl> {
+    INT_METHODS.iter().find(|x| x.name == *name)
+}
 
 impl<'a> Parser<'a> {
-    pub(crate) fn parse_int_component(&mut self,
-        lhs: &TypedExpr,
+    pub (crate) fn parse_int_component(&mut self,
+        holding: &TypedExpr,
+        id: &String,
+        loc: &SourceLocation,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
-        let next_item = self.next_item();
-        if next_item.is_err() { 
-            parser_context.push_err(next_item.unwrap_err());
-            return lhs.clone();
-        } let next_item = next_item.unwrap();
-
-        let id = expect_ident!(next_item, parser_context, "Expecting int component to be an identifier");
-        
-        let component = id.to_string();
-
-        match component.as_ref() {
-            "countLeadingZeros" => {
-                self.parse_empty_function_call_args(parser_func_context, parser_context);
-                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32Clz(Box::new(lhs.clone()))), r#type: Type::Int, is_const: true, loc: next_item.location.clone()}
+        let o_func_decl = get_func_decl(id);
+        match o_func_decl {
+            Some(func_decl) => {
+                let arg_types = func_decl.get_arg_types();
+                let args = self.parse_function_call_args(&arg_types, parser_func_context, parser_context);
+                TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), args), r#type: func_decl.return_type.clone(), is_const: true, loc: loc.clone()}
             },
-            "countTrailingZeros" => {
-                self.parse_empty_function_call_args(parser_func_context, parser_context);
-                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32Ctz(Box::new(lhs.clone()))), r#type: Type::Int, is_const: true, loc: next_item.location.clone()}
-            },
-            "shiftLeft" => {
-                let args = self.parse_function_call_args(&vec![Type::Int], parser_func_context, parser_context);
-                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32ShL(Box::new(lhs.clone()), Box::new(args[0].clone()))), r#type: Type::Int, is_const: true, loc: next_item.location.clone()}
-            },
-            "shiftRight" => {
-                let args = self.parse_function_call_args(&vec![Type::Int], parser_func_context, parser_context);
-                TypedExpr{expr: Expr::Intrinsic(Intrinsic::I32ShRS(Box::new(lhs.clone()), Box::new(args[0].clone()))), r#type: Type::Int, is_const: true, loc: next_item.location.clone()}
-            },
-            _ => {
-                parser_context.push_err(Error::ObjectHasNoMember(next_item.location.clone(), component));
-                lhs.clone()
+            None => {
+                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), id.clone()));
+                TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: Type::Int, is_const: true, loc: loc.clone()}
             }
         }
     }

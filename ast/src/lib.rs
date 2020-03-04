@@ -22,9 +22,6 @@ pub mod prelude {
     pub use super::GenericFunc;
 }
 
-#[macro_use]
-extern crate lazy_static;
-
 /// A generic function that consumes type arguments and can generate a concrete function
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct GenericFunc{

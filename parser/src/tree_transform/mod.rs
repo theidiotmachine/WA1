@@ -131,15 +131,6 @@ pub fn transform_expr(
             ),
         Expr::Intrinsic(i) => {
             match i {
-                Intrinsic::I32Clz(te) => Expr::Intrinsic(Intrinsic::I32Clz(Box::new(transform_typed_expr(te, transform, parser_context)))),
-                Intrinsic::I32Ctz(te) => Expr::Intrinsic(Intrinsic::I32Ctz(Box::new(transform_typed_expr(te, transform, parser_context)))),
-                Intrinsic::I32ShL(te1, te2) => Expr::Intrinsic(Intrinsic::I32ShL(Box::new(transform_typed_expr(te1, transform, parser_context)),
-                    Box::new(transform_typed_expr(te2, transform, parser_context)))),
-                Intrinsic::I32ShRS(te1, te2) => Expr::Intrinsic(Intrinsic::I32ShRS(Box::new(transform_typed_expr(te1, transform, parser_context)),
-                    Box::new(transform_typed_expr(te2, transform, parser_context)))),
-                Intrinsic::I32ShRU(te1, te2) => Expr::Intrinsic(Intrinsic::I32ShRU(Box::new(transform_typed_expr(te1, transform, parser_context)),
-                    Box::new(transform_typed_expr(te2, transform, parser_context)))),
-                Intrinsic::I64Ctz(te) => Expr::Intrinsic(Intrinsic::I64Ctz(Box::new(transform_typed_expr(te, transform, parser_context)))),
                 Intrinsic::MemoryGrow(te) => Expr::Intrinsic(Intrinsic::MemoryGrow(Box::new(transform_typed_expr(te, transform, parser_context)))),
                 Intrinsic::MemorySize => Expr::Intrinsic(Intrinsic::MemorySize),
                 Intrinsic::Trap => Expr::Intrinsic(Intrinsic::Trap),
@@ -147,6 +138,7 @@ pub fn transform_expr(
         },
         Expr::IntToBigInt(te) => Expr::IntToBigInt(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::IntToNumber(te) => Expr::IntToNumber(Box::new(transform_typed_expr(te, transform, parser_context))),
+        Expr::MemberFuncCall(te, s, vs) => Expr::MemberFuncCall(Box::new(transform_typed_expr(te, transform, parser_context)), s.clone(), transform_typed_exprs(vs, transform, parser_context)),
         Expr::ModifyAssignment(ao, te1, tle, te2) =>
             Expr::ModifyAssignment(*ao, 
                 Box::new(transform_typed_expr(te1, transform, parser_context)), 

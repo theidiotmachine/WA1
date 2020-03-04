@@ -18,15 +18,17 @@ mod parser_func;
 mod parser_type;
 mod parser_option;
 mod parser_phase_1;
+mod parser_op;
 
 use crate::ParserContext;
 use crate::ParserFuncContext;
 use crate::Res;
 use crate::{assert_punct, assert_ok,assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_ident, expect_string_literal, expect_keyword, StartFuncType};
-use crate::{try_create_cast, cast_typed_expr};
-use crate::create_cast;
+use crate::{try_create_cast};
+use crate::parser::parser_op::{get_unary_operator_data, Fix, get_binary_operator_data, Association, get_op_type_for_unop};
 use crate::Commitment;
 use crate::Importer;
+
 
 #[derive(Debug, Clone, PartialEq)]
 enum ScopedVar{
@@ -1325,35 +1327,34 @@ impl<'b> Parser<'b> {
 
     fn parse_struct_component(&mut self,
         lhs: &TypedExpr,
+        component: &String,
         struct_type: &StructType,
+        loc: &SourceLocation,
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
-        let next_item = self.next_item();
-        if next_item.is_err() { 
-            parser_context.push_err(next_item.unwrap_err());
-            return lhs.clone();
-        } let next_item = next_item.unwrap();
-        let next_loc = next_item.location.clone();
-
-        let id = expect_ident!(next_item, parser_context, "Expecting __struct component to be an identifier");
-        let component = id;
-        let o_mem = struct_type.members.iter().find(|x| x.name == component);
+        let o_mem = struct_type.members.iter().find(|x| x.name == *component);
         match o_mem {
             None => {
-                parser_context.push_err(Error::ObjectHasNoMember(next_loc, component.clone()));
-                lhs.clone()
+                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), component.clone()));
+                TypedExpr{
+                    expr: Expr::NamedMember(Box::new(lhs.clone()), component.clone()),
+                    r#type: Type::Undeclared,
+                    is_const: false,
+                    loc: loc.clone()
+                }
             },
             Some(mem) => {
                 TypedExpr{
-                    expr: Expr::NamedMember(Box::new(lhs.clone()), component),
+                    expr: Expr::NamedMember(Box::new(lhs.clone()), component.clone()),
                     r#type: mem.r#type.clone(),
-                    is_const: lhs.is_const,
-                    loc: SourceLocation::new(lhs.loc.start.clone(), next_loc.end.clone())
+                    is_const: false,
+                    loc: loc.clone()
                 }
             }
         }
     }
 
+    /*
     fn parse_component(&mut self, 
         lhs: &TypedExpr,
         parser_func_context: &mut ParserFuncContext,
@@ -1381,6 +1382,7 @@ impl<'b> Parser<'b> {
             }
         }
     }
+    */
 
     ///A square bracket member access.
     fn parse_dynamic_component(&mut self, 
@@ -1562,6 +1564,7 @@ impl<'b> Parser<'b> {
     }
 
     fn parse_ident_expr(&mut self,
+        o_holding: &Option<TypedExpr>,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
@@ -1569,117 +1572,129 @@ impl<'b> Parser<'b> {
         let next = expect_next!(self, parser_context, err_ret);
 
         let id = expect_ident!(next, parser_context, "Expecting identifier declaration");
-
-        let o_sv = self.context.get_scoped_var(&id.to_string());
-        let mut expr = match o_sv {
+        let mut expr = match o_holding{
             None => {
-                let o_g = parser_context.global_decls.iter().find(|&x| x.name == id.to_string());
-                match o_g {
-                    Some(g_var) => 
-                        TypedExpr{expr: Expr::GlobalVariableUse(id.to_string()), r#type: g_var.r#type.clone(), is_const: g_var.constant, loc: next.location.clone()},
-                    None => { 
-                        //might be a type literal
-                        let o_type = self.parse_type_from_ident(&id, Commitment::Speculative, parser_context);
-                        match o_type {
-                            Some(t) => 
-                                TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: next.location.clone()},
-                            _ => {
-                                // peek to see if this is a function call. 
-                                let lookahead_item = self.peek_next_item();
-                                let lookahead = lookahead_item.token;
-
-                                match lookahead {
-                                    Token::Punct(Punct::OpenParen) => {
-                                        let o_f_d = parser_context.get_fn_decl_from_decls(&id);
-                                        match &o_f_d {
-                                            Some(f_d) => {
-                                                //yep it's a function call
-                                                self.parse_static_func_call(&id, &f_d, &next.location, parser_func_context, parser_context)
-                                            },
-                                            None => {
-                                                //might be a built in, so check that
-                                                let o_built_in = self.try_parse_built_in(&id, parser_func_context, parser_context);
-                                                match o_built_in {
-                                                    None => {
-                                                        //generic check 
-                                                        let o_g_f_c = self.try_parse_generic_func_call(&id, parser_func_context, parser_context);
-                                                        match o_g_f_c {
-                                                            Some(g_f_c) => g_f_c,
-                                                            None => {
-                                                                parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone()));
-                                                                err_ret
-                                                            }
-                                                        }
-                                                    },
-                                                    Some(built_in) => built_in
-                                                }
-                                            }
-                                        }
-                                    },
-                                    Token::Punct(Punct::Period) => {
-                                        //if it's not a type or variable, and is followed by a '.' it might be an import 
-                                        if parser_context.import_namespace_map.contains_key(&id) {
-                                            self.skip_next_item();
-                                            //ok, it's in the namespace map, so peek some more
-                                            let namespace_member_next = expect_next!(self, parser_context, err_ret);
-                                            let namespace_member_id = expect_ident!(namespace_member_next, parser_context, "Expecting member of namespace to be an identifier");
-                                            //I expect there are better ways of doing this
-                                            let full_name = format!("{}.{}", id, namespace_member_id);
-                                            let o_g = parser_context.global_imports.iter().find(|&x| x.name == full_name);
-                                            match o_g {
-                                                Some(g_var) => {
-                                                    TypedExpr{expr: Expr::GlobalVariableUse(full_name), r#type: g_var.r#type.clone(), is_const: g_var.constant, 
-                                                        loc: SourceLocation::new(next.location.start.clone(), namespace_member_next.location.end.clone())
-                                                    }
-                                                }, 
-                                                None => {
-                                                    let o_f_d = parser_context.get_fn_decl_from_imports(&full_name);
-                                                    match o_f_d {
-                                                        Some(f_d) => {
-                                                            //yep it's a function call
-                                                            self.parse_static_func_call(&full_name, &f_d, &next.location, parser_func_context, parser_context)
-                                                        },
-                                                        
-                                                        None => {
-                                                            //generic check 
-                                                            let o_g_f_c = self.try_parse_generic_func_call(&full_name, parser_func_context, parser_context);
-                                                            match o_g_f_c {
-                                                                Some(g_f_c) => g_f_c,
-                                                                None => {
-                                                                    parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), full_name.clone()));
-                                                                    //give up
-                                                                    return err_ret;
-                                                                }
-                                                            }
-                                                        },
-                                                    }
-                                                }
-                                            }
-                                        } else {
-                                            parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone()));
-                                            return err_ret
-                                        }
-                                    },
+                let o_sv = self.context.get_scoped_var(&id.to_string());
+                match o_sv {
+                    Some(sv) => match sv {
+                        ScopedVar::ClosureRef{internal_name, r#type, constant} => {
+                            let is_new = !parser_func_context.closure.iter().any(|x| x.internal_name.eq(internal_name));
+                            if is_new {
+                                parser_func_context.closure.push(ClosureRef{internal_name: internal_name.clone(), r#type: r#type.clone(), constant: *constant})
+                            }
+                            
+                            TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()}
+                        },
+                        ScopedVar::Local{internal_name, r#type, constant} => TypedExpr{expr: Expr::LocalVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()},
+                    },
+                    None => {
+                        let o_g = parser_context.global_decls.iter().find(|&x| x.name == id.to_string());
+                        match o_g {
+                            Some(g_var) => 
+                                TypedExpr{expr: Expr::GlobalVariableUse(id.to_string()), r#type: g_var.r#type.clone(), is_const: g_var.constant, loc: next.location.clone()},
+                            None => {
+                                //might be a type literal
+                                let o_type = self.parse_type_from_ident(&id, Commitment::Speculative, parser_context);
+                                match o_type {
+                                    Some(t) => 
+                                        TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: next.location.clone()},
                                     _ => {
-                                        parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone()));
-                                        return err_ret
-                                    },
+                                        // peek to see if this is a function call. 
+                                        let lookahead_item = self.peek_next_item();
+                                        let lookahead = lookahead_item.token;
+            
+                                        match lookahead {
+                                            Token::Punct(Punct::OpenParen) => {
+                                                let o_f_d = parser_context.get_fn_decl_from_decls(&id);
+                                                match &o_f_d {
+                                                    Some(f_d) => {
+                                                        //yep it's a function call
+                                                        self.parse_static_func_call(&id, &f_d, &next.location, parser_func_context, parser_context)
+                                                    },
+                                                    None => {
+                                                        //might be a built in, so check that
+                                                        let o_built_in = self.try_parse_built_in(&id, parser_func_context, parser_context);
+                                                        match o_built_in {
+                                                            Some(built_in) => built_in,
+                                                            None => {
+                                                                //generic check 
+                                                                let o_g_f_c = self.try_parse_generic_func_call(&id, parser_func_context, parser_context);
+                                                                match o_g_f_c {
+                                                                    Some(g_f_c) => g_f_c,
+                                                                    None => {
+                                                                        parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone()));
+                                                                        err_ret
+                                                                    }
+                                                                }
+                                                            },
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            _ => {
+                                                //module check
+                                                if parser_context.import_namespace_map.contains_key(&id) {
+                                                    TypedExpr{expr: Expr::NoOp, r#type: Type::ModuleLiteral(id.clone()), is_const: true, loc: next.location.clone()}
+                                                } else {
+                                                    parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone()));
+                                                    err_ret
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             },
-            Some(sv) => match sv {
-                ScopedVar::ClosureRef{internal_name, r#type, constant} => {
-                    let is_new = !parser_func_context.closure.iter().any(|x| x.internal_name.eq(internal_name));
-                    if is_new {
-                        parser_func_context.closure.push(ClosureRef{internal_name: internal_name.clone(), r#type: r#type.clone(), constant: *constant})
+            Some(holding) => {
+                match &holding.r#type {
+                    Type::ModuleLiteral(m) => {
+                        let full_name = format!("{}.{}", m, id);
+                        let o_g = parser_context.global_imports.iter().find(|&x| x.name == full_name);
+                        match o_g {
+                            Some(g_var) => 
+                                TypedExpr{expr: Expr::GlobalVariableUse(full_name), r#type: g_var.r#type.clone(), is_const: g_var.constant, 
+                                    loc: next.location.clone()},
+                            None => {
+                                let o_f_d = parser_context.get_fn_decl_from_imports(&full_name);
+                                match o_f_d {
+                                    Some(f_d) => 
+                                        //yep it's a function call
+                                        self.parse_static_func_call(&full_name, &f_d, &next.location, parser_func_context, parser_context),
+                                    None => {
+                                        //generic check 
+                                        let o_g_f_c = self.try_parse_generic_func_call(&full_name, parser_func_context, parser_context);
+                                        match o_g_f_c {
+                                            Some(g_f_c) => g_f_c,
+                                            None => {
+                                                parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), full_name.clone()));
+                                                //give up
+                                                return err_ret;
+                                            },
+                                        }
+                                    },
+                                }
+                            },
+                        }
+                    },
+                    Type::Int | Type::IntLiteral(_) => self.parse_int_component(&holding, &id, &next.location, parser_func_context, parser_context),
+                    Type::UnsafeStruct{name} => {
+                        let tm_entry = parser_context.type_map.get(name).unwrap().clone();
+                        match tm_entry {
+                            TypeDecl::Struct{struct_type: st, under_construction: _, export: _, name: _} => self.parse_struct_component(&holding, &id, &st, &next.location, parser_context),
+                            _ => unreachable!()
+                        }
+                    },
+                    Type::UnsafeSizeT => self.parse_unsafe_size_t_component(&holding, &id, &next.location, parser_func_context, parser_context),
+                    Type::UnsafeOption(_) => self.parse_unsafe_option_component(&holding, &id, &next.location, parser_func_context, parser_context),
+                    _ => {
+                        parser_context.push_err(Error::NoComponents(next.location.clone()));
+                        //give up
+                        return err_ret;
                     }
-                    
-                    TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()}
-                },
-                ScopedVar::Local{internal_name, r#type, constant} => TypedExpr{expr: Expr::LocalVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()},
+                }
             }
         };
 
@@ -1689,13 +1704,13 @@ impl<'b> Parser<'b> {
             let lookahead = lookahead_item.token;
          
             //first peek for postfix operators
-            let o_uod = lookahead.get_unary_operator_data();
+            let o_uod = get_unary_operator_data(&lookahead);
             match o_uod {
                 Some(uod) => {
                     if uod.fix == Fix::Postfix || uod.fix == Fix::Both {
                         let op = self.get_postfix_unary_operator_for_token(lookahead_item.span, lookahead_item.location, &lookahead, parser_context);
                         self.skip_next_item();
-                        let o_outer_type = types::get_unary_op_type(op.get_op_type(), &expr.r#type);
+                        let o_outer_type = types::get_unary_op_type(get_op_type_for_unop(&op), &expr.r#type);
                         let loc = SourceLocation::new(expr.loc.start.clone(), lookahead_item.location.end.clone());
                         let outer_type = match o_outer_type {
                             Some(outer_type) => outer_type,
@@ -1730,10 +1745,6 @@ impl<'b> Parser<'b> {
                         }
                     }
                 },
-                Token::Punct(Punct::Period) => {
-                    expr = self.parse_component(&expr, parser_func_context, parser_context);
-                    continue;
-                },
 
                 Token::Punct(Punct::OpenBracket) => {
                     expr = self.parse_dynamic_component(&expr, parser_func_context, parser_context);
@@ -1751,7 +1762,7 @@ impl<'b> Parser<'b> {
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
-        let expr = self.parse_primary(parser_func_context, parser_context);
+        let expr = self.parse_primary(&None, parser_func_context, parser_context);
         assert_ok!(expr);
         self.parse_expr_1(&expr, 0, parser_func_context, parser_context)
     }
@@ -1773,12 +1784,13 @@ impl<'b> Parser<'b> {
 
     /// Parse a simple atomic expression.
     fn parse_primary(&mut self,
+        holding: &Option<TypedExpr>,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let lookahead_item = self.peek_next_item();
         let lookahead = lookahead_item.token;
-        let o_uod = lookahead.get_unary_operator_data();
+        let o_uod = get_unary_operator_data(&lookahead);
         match o_uod {
             Some(uod) => {
                 if uod.fix == Fix::Prefix || uod.fix == Fix::Both {
@@ -1789,7 +1801,7 @@ impl<'b> Parser<'b> {
                     let inner = self.parse_expr(parser_func_context, parser_context);
                     assert_ok!(inner);
                     loc.end = inner.loc.end.clone();
-                    let o_outer_type = types::get_unary_op_type(op.get_op_type(), &inner.r#type);
+                    let o_outer_type = types::get_unary_op_type(get_op_type_for_unop(&op), &inner.r#type);
                     match o_outer_type {
                         Some(outer_type) => 
                             return Ok(TypedExpr{expr: Expr::UnaryOperator{op: op, expr: Box::new(inner)}, r#type: outer_type, is_const: true, loc: loc}),
@@ -1854,7 +1866,7 @@ impl<'b> Parser<'b> {
                 }
             },
 
-            Token::Ident(_) => Ok(self.parse_ident_expr(parser_func_context, parser_context)),
+            Token::Ident(_) => Ok(self.parse_ident_expr(holding, parser_func_context, parser_context)),
 
             Token::Punct(p) => match p {
                 Punct::OpenParen => self.parse_paren_expr(parser_func_context, parser_context),
@@ -1863,166 +1875,6 @@ impl<'b> Parser<'b> {
             },
 
             _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "unexpected token"),
-        }
-    }
-
-    fn get_binary_operator_for_token(&self, token: &Token<&'b str>) -> Option<BinaryOperator> {
-        match token {
-            Token::Keyword(ref k) => match k {
-                Keyword::In => Some(BinaryOperator::In),
-                Keyword::InstanceOf => Some(BinaryOperator::InstanceOf),
-                Keyword::As => Some(BinaryOperator::As),
-                _ => None
-            },
-            Token::Punct(ref p) => match p {
-                Punct::Ampersand => Some(BinaryOperator::BitAnd),
-                Punct::Asterisk => Some(BinaryOperator::Multiply),
-                Punct::Period => Some(BinaryOperator::Dot),
-                Punct::GreaterThan => Some(BinaryOperator::GreaterThan),
-                Punct::LessThan => Some(BinaryOperator::LessThan),
-                Punct::Plus => Some(BinaryOperator::Plus),
-                Punct::Dash => Some(BinaryOperator::Minus),
-                Punct::Percent => Some(BinaryOperator::Mod),
-                Punct::Pipe => Some(BinaryOperator::BitOr),
-                Punct::Caret => Some(BinaryOperator::BitXor),
-                Punct::ForwardSlash => Some(BinaryOperator::Divide),
-                Punct::TripleEqual => Some(BinaryOperator::StrictEqual),
-                Punct::BangDoubleEqual => Some(BinaryOperator::StrictNotEqual),
-                Punct::DoubleAmpersand => Some(BinaryOperator::LogicalAnd),
-                Punct::DoublePipe => Some(BinaryOperator::LogicalOr),
-                Punct::DoubleEqual => Some(BinaryOperator::Equal),
-                Punct::BangEqual => Some(BinaryOperator::NotEqual),
-                Punct::GreaterThanEqual => Some(BinaryOperator::GreaterThanEqual),
-                Punct::LessThanEqual => Some(BinaryOperator::LessThanEqual),
-                Punct::DoubleAsterisk => Some(BinaryOperator::Exponent),
-                _ => None
-            },
-            _ => None
-        }
-    }
-
-    fn get_assignment_operator_for_token(&self, token: &Token<&'b str>) -> Option<AssignmentOperator> {
-        match token {
-            Token::Punct(ref p) => match p {
-                Punct::AmpersandEqual => Some(AssignmentOperator::BitAndAssign),
-                Punct::AsteriskEqual => Some(AssignmentOperator::MultiplyAssign),
-                Punct::CaretEqual => Some(AssignmentOperator::BitXorAssign),
-                Punct::DashEqual => Some(AssignmentOperator::MinusAssign),
-                Punct::DoubleAsteriskEqual => Some(AssignmentOperator::ExponentAssign),
-                Punct::ForwardSlashEqual => Some(AssignmentOperator::DivideAssign),
-                Punct::PercentEqual => Some(AssignmentOperator::ModAssign),
-                Punct::PipeEqual => Some(AssignmentOperator::BitOrAssign),
-                Punct::PlusEqual => Some(AssignmentOperator::PlusAssign),
-                Punct::Equal => Some(AssignmentOperator::Assign),
-                _ => None
-            },
-            _ => None
-        }
-    }
-
-    /// Parse a binary operator.
-    fn parse_binary_op(&mut self,
-        op: &Token<&str>,
-        lhs: &TypedExpr,
-        rhs: &TypedExpr,
-        parser_context: &mut ParserContext,
-    ) -> TypedExpr {
-        let loc = SourceLocation::new(lhs.loc.start.clone(), rhs.loc.end.clone());
-
-        //first see if it's a simple binary operator
-        let o_bin_op = self.get_binary_operator_for_token(&op);
-        match o_bin_op {
-            Some(bin_op) => {
-                //type check the binary operator
-                let op_type = bin_op.get_op_type();
-                if *op_type == OpType::AsOpType {
-                    //as is just a straight cast; so 
-                    match &rhs.r#type {
-                        Type::TypeLiteral(t) => {
-                            cast_typed_expr(&t, Box::new(lhs.clone()), false, parser_context)
-                        },
-                        _ => {
-                            parser_context.errors.push(Error::AsNeedsType(loc));
-                            lhs.clone()
-                        }
-                    }
-                } else {
-                    let o_bin_op_type_cast = types::get_binary_op_type_cast(op_type, &lhs.r#type, &rhs.r#type);
-                    match o_bin_op_type_cast {
-                        Some(bin_op_type_cast) => {
-                            let o_cast = create_cast(&bin_op_type_cast.lhs_type, lhs, &bin_op_type_cast.lhs_type_cast);
-                            let lhs_out = match o_cast {
-                                Some(cast) => Box::new(cast),
-                                None => {
-                                    parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
-                                    Box::new(lhs.clone())
-                                }
-                            };
-
-                            let o_cast = create_cast(&bin_op_type_cast.rhs_type, rhs, &bin_op_type_cast.rhs_type_cast);
-                            let rhs_out = match o_cast {
-                                Some(cast) => Box::new(cast),
-                                None => {
-                                    parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
-                                    Box::new(rhs.clone())
-                                }
-                            };
-                            
-                            TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: lhs_out, rhs: rhs_out}, r#type: bin_op_type_cast.out_type, is_const: true, loc: loc}
-                        },
-                        None => {
-                            parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
-                            TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone())}, r#type: Type::Unknown, is_const: true, loc: loc}
-                        }
-                    }
-                }
-            },
-
-            //it's not a regular binary op; so let's see if it's an assignment operator
-            None => {
-                let o_ass_op = self.get_assignment_operator_for_token(&op);
-                match o_ass_op {
-                    Some(ass_op) => {
-                        //get an l-value. This will do const checking
-                        let o_l_value = lhs.as_l_value();
-                        match o_l_value {
-                            None => {
-                                parser_context.errors.push(Error::NotAnLValue(loc));
-                                lhs.clone()
-                            },
-                            Some(l_value) => {
-                                //now type check the assignment operator. Note that we only need a type check from the rhs
-                                let o_bin_op_type_cast = types::get_binary_op_type_cast(ass_op.get_op_type(), &lhs.r#type, &rhs.r#type);
-                                match o_bin_op_type_cast {
-                                    Some(bin_op_type_cast) => {
-                                        let o_cast = create_cast(&bin_op_type_cast.rhs_type, rhs, &bin_op_type_cast.rhs_type_cast);
-                                        let rhs_out = match o_cast {
-                                            Some(cast) => Box::new(cast),
-                                            None => {
-                                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
-                                                Box::new(rhs.clone())
-                                            }
-                                        };
-                                        if ass_op == AssignmentOperator::Assign {
-                                            TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, is_const: false, loc: loc}
-                                        } else {
-                                            TypedExpr{expr: Expr::ModifyAssignment(ass_op, Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, is_const: false, loc: loc}
-                                        } 
-                                    },
-                                    None => {
-                                        parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
-                                        TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, Box::new(rhs.clone())), r#type: Type::Unknown, is_const: false, loc: loc}
-                                    }
-                                }
-                            }
-                        }
-                    }, 
-                    None => {
-                        parser_context.errors.push(Error::NotYetImplemented(loc, format!("{:#?}", op)));
-                        lhs.clone()
-                    }
-                }
-            }
         }
     }
 
@@ -2055,7 +1907,7 @@ impl<'b> Parser<'b> {
         
         // while lookahead is a binary operator whose precedence is >= min_precedence
         loop {
-            let o_lookahead_data = lookahead.get_binary_operator_data();
+            let o_lookahead_data = get_binary_operator_data(&lookahead);
             match o_lookahead_data {
                 None => break,
                 Some(lookahead_data) => {
@@ -2066,7 +1918,18 @@ impl<'b> Parser<'b> {
                         // advance to next token
                         self.skip_next_item();
                         // rhs := parse_primary ()
-                        let r_rhs = self.parse_primary(parser_func_context, parser_context);
+                        // OK, I will not lie this is a teeeeny bit bad. For dot operators we pass the
+                        // lhs in so that the rhs can validate itself against the thing it is a member of.
+                        // because we are precedence climbing, actually this could be wrong because the lhs
+                        // and rhs might be some way away. BUT because dot is the highest of all the precedences...
+                        // it won't be. 
+                        // Yes I am ashamed, I will weep tiny tears like dancing giraffes
+                        let holding = if lookahead_data.is_member {
+                            Some(lhs.clone())
+                        } else {
+                            None
+                        };
+                        let r_rhs = self.parse_primary(&holding, parser_func_context, parser_context);
                         if r_rhs.is_err() { return Err(r_rhs.unwrap_err()) }; 
                         let mut rhs = r_rhs?;
                         // lookahead := peek next token
@@ -2076,7 +1939,7 @@ impl<'b> Parser<'b> {
                         // than op's, or a right-associative operator
                         // whose precedence is equal to op's
                         loop {
-                            let o_lookahead_data = lookahead.get_binary_operator_data();
+                            let o_lookahead_data = get_binary_operator_data(&lookahead);
                             match o_lookahead_data {
                                 None => break,
                                 Some(lookahead_data) => {

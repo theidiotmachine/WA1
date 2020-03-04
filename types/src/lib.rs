@@ -62,6 +62,8 @@ pub enum OpType{
     NotImplementedOpType,
     ///the cast operator
     AsOpType,
+    ///the static member operator, '.'
+    StaticMemberOpType,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -162,8 +164,10 @@ pub enum Type {
     UnsafePtr,
     ///
     UnsafeSizeT,
-    ///type literal
+    ///type literal. Not something that will ever appear at runtime, but is useful for parts of the AST
     TypeLiteral(Box<Type>),
+    ///Type of a module. Not something that will ever appear at runtime.
+    ModuleLiteral(String),
     /// __array type
     UnsafeArray(Box<Type>),
 }
@@ -221,6 +225,7 @@ impl Type{
             Type::ObjectLiteral(_) => format!("!ol_{{}}"),
             Type::TypeLiteral(inner) => format!("!TypeLiteral_{}", inner.get_mangled_name()),
             Type::UnsafeArray(inner) => format!("!__array<{}>", inner.get_mangled_name()),
+            Type::ModuleLiteral(name) => format!("!ModuleLiteral_{}", name),
         }
     }
 }
@@ -264,6 +269,7 @@ impl Display for Type {
             Type::ObjectLiteral(_) => write!(f, "{{}}"),
             Type::TypeLiteral(t) => write!(f, "type: {}", t),
             Type::UnsafeArray(t) => write!(f, "__array<{}>", t),
+            Type::ModuleLiteral(n) => write!(f, "module: {}", n),
         }
     }
 }
@@ -395,6 +401,9 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
 
         //this is just a simple cast, so no need for all the fancy bin op stuff
         OpType::AsOpType => None,
+
+        //member casting is done somewhere else
+        OpType::StaticMemberOpType => None, 
 
         OpType::NotImplementedOpType => None,
     }

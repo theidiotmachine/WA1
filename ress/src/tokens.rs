@@ -1,8 +1,8 @@
 pub mod prelude {
     pub use super::{
         Boolean, Comment, CommentExt, Ident, IdentExt, Keyword, Number, NumberExt, Punct,
-        StringLit, StringLitExt, Template, TemplateExt, Token, TokenExt, BinaryOperatorData, 
-        Association, UnaryOperatorData, Fix, NumberKind
+        StringLit, StringLitExt, Template, TemplateExt, Token, TokenExt, 
+        NumberKind
     };
 }
 
@@ -118,10 +118,6 @@ pub trait TokenExt {
     fn matches_comment_str(&self, comment: &str) -> bool;
 
     fn matches_string_content(&self, content: &str) -> bool;
-
-    fn get_binary_operator_data(&self) -> Option<BinaryOperatorData>;
-
-    fn get_unary_operator_data(&self) -> Option<UnaryOperatorData>;
 }
 
 impl<'a> ToString for Token<&'a str> {
@@ -145,7 +141,7 @@ impl<'a> ToString for Token<&'a str> {
 #[derive(Debug, PartialEq, Clone)]
 /// An identifier
 pub struct Ident<T>(T);
-/// Extention methods for allowing Ident
+/// Extension methods for allowing Ident
 /// to work with both &str and String
 pub trait IdentExt<T>
 where
@@ -818,29 +814,6 @@ pub enum NumberKind {
     Oct,
 }
 
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Association{
-    Left, 
-    Right,
-}
-
-pub struct BinaryOperatorData{
-    pub precedence: i32,
-    pub association: Association,
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Fix{
-    Prefix, 
-    Postfix,
-    Both
-}
-
-pub struct UnaryOperatorData{
-    pub fix: Fix,
-}
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 /// All available punctuation
 pub enum Punct {
@@ -952,58 +925,7 @@ impl Punct {
         }
     }
 
-    /// at the point where this could be a binary operator, what is its precedence and association
-    fn get_binary_operator_data(self) -> Option<BinaryOperatorData> {
-        match self {
-            Punct::Period => Some(BinaryOperatorData{precedence: 18, association: Association::Left}),
-            Punct::Colon => None,
-            Punct::QuestionMark => None,
-            Punct::Tilde => None,
-            Punct::GreaterThan => Some(BinaryOperatorData{precedence: 11, association: Association::Left}),
-            Punct::LessThan => Some(BinaryOperatorData{precedence: 11, association: Association::Left}),
-            Punct::Equal => Some(BinaryOperatorData{precedence: 3, association: Association::Right}),
-            Punct::Plus => Some(BinaryOperatorData{precedence: 13, association: Association::Left}),
-            Punct::Dash => Some(BinaryOperatorData{precedence: 13, association: Association::Left}),
-            Punct::Asterisk => Some(BinaryOperatorData{precedence: 14, association: Association::Left}),
-            Punct::Percent => Some(BinaryOperatorData{precedence: 14, association: Association::Left}),
-            Punct::Pipe => Some(BinaryOperatorData{precedence: 7, association: Association::Left}),
-            Punct::Ampersand => Some(BinaryOperatorData{precedence: 9, association: Association::Left}),
-            Punct::Caret => Some(BinaryOperatorData{precedence: 8, association: Association::Left}),
-            Punct::ForwardSlash => Some(BinaryOperatorData{precedence: 14, association: Association::Left}),
-            Punct::Ellipsis => None,
-            Punct::TripleEqual => Some(BinaryOperatorData{precedence: 10, association: Association::Left}),
-            Punct::BangDoubleEqual => Some(BinaryOperatorData{precedence: 10, association: Association::Left}),
-            Punct::DoubleAsteriskEqual => Some(BinaryOperatorData{precedence: 3, association: Association::Right}),
-            Punct::DoubleAmpersand => Some(BinaryOperatorData{precedence: 6, association: Association::Left}),
-            Punct::DoublePipe => Some(BinaryOperatorData{precedence: 5, association: Association::Left}),
-            Punct::DoubleEqual => Some(BinaryOperatorData{precedence: 10, association: Association::Left}),
-            Punct::BangEqual => Some(BinaryOperatorData{precedence: 10, association: Association::Left}),
-            Punct::PlusEqual => Some(BinaryOperatorData{precedence: 3, association: Association::Right}),
-            Punct::DashEqual => Some(BinaryOperatorData{precedence: 3, association: Association::Right}),
-            Punct::AsteriskEqual => Some(BinaryOperatorData{precedence: 3, association: Association::Right}),
-            Punct::ForwardSlashEqual => Some(BinaryOperatorData{precedence: 3, association: Association::Right}),
-            Punct::AmpersandEqual => Some(BinaryOperatorData{precedence: 3, association: Association::Right}),
-            Punct::PipeEqual => Some(BinaryOperatorData{precedence: 3, association: Association::Right}),
-            Punct::CaretEqual => Some(BinaryOperatorData{precedence: 3, association: Association::Right}),
-            Punct::PercentEqual => Some(BinaryOperatorData{precedence: 3, association: Association::Right}),
-            Punct::GreaterThanEqual => Some(BinaryOperatorData{precedence: 11, association: Association::Left}),
-            Punct::LessThanEqual => Some(BinaryOperatorData{precedence: 11, association: Association::Left}),
-            Punct::DoubleAsterisk => Some(BinaryOperatorData{precedence: 16, association: Association::Right}),
-            _ => None
-        }
-    }
-
-    fn get_unary_operator_data(self) -> Option<UnaryOperatorData> {
-        match self {
-            Punct::Bang => Some(UnaryOperatorData{fix: Fix::Prefix}),
-            Punct::Dash => Some(UnaryOperatorData{fix: Fix::Prefix}),
-            Punct::DoubleDash => Some(UnaryOperatorData{fix: Fix::Both}),
-            Punct::DoublePlus => Some(UnaryOperatorData{fix: Fix::Both}),
-            Punct::Plus => Some(UnaryOperatorData{fix: Fix::Prefix}),
-            Punct::Tilde => Some(UnaryOperatorData{fix: Fix::Prefix}),
-            _ => None,
-        }
-    }
+    
 }
 
 impl ToString for Punct {
@@ -1367,14 +1289,7 @@ impl Keyword {
         }
     }
 
-    pub fn get_binary_operator_data(&self) -> Option<BinaryOperatorData> {
-        match self {
-            Keyword::In => Some(BinaryOperatorData{precedence: 12, association: Association::Left}),
-            Keyword::InstanceOf => Some(BinaryOperatorData{precedence: 12, association: Association::Left}),
-            Keyword::As => Some(BinaryOperatorData{precedence: 12, association: Association::Left}),
-            _ => None
-        }
-    }
+    
 }
 
 impl<'a> TokenExt for Token<&'a str> {
@@ -1606,21 +1521,6 @@ impl<'a> TokenExt for Token<&'a str> {
                 StringLit::Double(s) => content == *s,
             },
             _ => false,
-        }
-    }
-
-    fn get_binary_operator_data(&self) -> Option<BinaryOperatorData> {
-        match self {
-            Token::Punct(p) => p.get_binary_operator_data(),
-            Token::Keyword(k) => k.get_binary_operator_data(),
-            _ => None
-        }
-    }
-
-    fn get_unary_operator_data(&self) -> Option<UnaryOperatorData> {
-        match self {
-            Token::Punct(p) => p.get_unary_operator_data(),
-            _ => None
         }
     }
 }

@@ -14,6 +14,9 @@ pub use errs::Error;
 use errs::prelude::*;
 use ast::Imports;
 
+#[macro_use]
+extern crate lazy_static;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum StartFuncType{
     ///The internal module start func
