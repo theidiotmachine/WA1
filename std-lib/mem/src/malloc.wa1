@@ -41,8 +41,15 @@ function sbrk(sz: int): __ptr<0> {
 WIN32: undefined
 DLMALLOC_EXPORT: ???
 MALLOC_ALIGNMENT: 8
+
 MSPACES: 0
+MSPACES                  default: 0 (false)
+  If true, compile in support for independent allocation spaces.
+  This is only supported if HAVE_MMAP is true.
+
 ONLY_MSPACES: 0
+ONLY_MSPACES             default: 0 (false)
+  If true, only compile in mspace versions, not regular versions.
 
 USE_LOCKS: 0
 USE_LOCKS                default: 0 (false)
@@ -89,6 +96,7 @@ MALLOC_FAILURE_ACTION: no op
 HAVE_MORECORE: 1
 MORECORE: sbrk
 
+MORECORE_CONTIGUOUS: 1
 MORECORE_CONTIGUOUS       default: 1 (true) if HAVE_MORECORE
   If true, take advantage of fact that consecutive calls to MORECORE
   with positive arguments always return contiguous increasing
@@ -97,31 +105,54 @@ MORECORE_CONTIGUOUS       default: 1 (true) if HAVE_MORECORE
   Setting it false when definitely non-contiguous saves time
   and possibly wasted space it would take to discover this though.
 
-MORECORE_CONTIGUOUS: 1
-
+MORECORE_CANNOT_TRIM: 1 (*)
 MORECORE_CANNOT_TRIM      default: NOT defined
   True if MORECORE cannot release space back to the system when given
   negative arguments. This is generally necessary only if you are
   using a hand-crafted MORECORE function that cannot handle negative
   arguments.
 
-MORECORE_CANNOT_TRIM: 1 (*)
-
 NO_SEGMENT_TRAVERSAL: 0
 HAVE_MMAP: 0
 HAVE_MREMAP: 0
 MMAP_CLEARS: 0
 USE_BUILTIN_FFS: 1 (*)
-malloc_getpagesize: 64k
+malloc_getpagesize: 64KiB
 USE_DEV_RANDOM: 0
 NO_MALLINFO: 0 (*)
 MALLINFO_FIELD_TYPE: __ptr<0>
 NO_MALLOC_STATS: 1 (*)
 REALLOC_ZERO_BYTES_FREES: undefined
 LACKS_*: ???
-DEFAULT_GRANULARITY: 64k
+DEFAULT_GRANULARITY: 64KiB
 DEFAULT_TRIM_THRESHOLD: 2M
+
 DEFAULT_MMAP_THRESHOLD: ???
+DEFAULT_MMAP_THRESHOLD       default: 256K
+      Also settable using mallopt(M_MMAP_THRESHOLD, x)
+  The request size threshold for using MMAP to directly service a
+  request. Requests of at least this size that cannot be allocated
+  using already-existing space will be serviced via mmap.  (If enough
+  normal freed space already exists it is used instead.)  Using mmap
+  segregates relatively large chunks of memory so that they can be
+  individually obtained and released from the host system. A request
+  serviced through mmap is never reused by any other request (at least
+  not directly; the system may just so happen to remap successive
+  requests to the same locations).  Segregating space in this way has
+  the benefits that: Mmapped space can always be individually released
+  back to the system, which helps keep the system level memory demands
+  of a long-lived program low.  Also, mapped memory doesn't become
+  `locked' between other chunks, as can happen with normally allocated
+  chunks, which means that even trimming via malloc_trim would not
+  release them.  However, it has the disadvantage that the space
+  cannot be reclaimed, consolidated, and then used to service later
+  requests, as happens with normal chunks.  The advantages of mmap
+  nearly always outweigh disadvantages for "large" chunks, but the
+  value of "large" may vary across systems.  The default is an
+  empirically derived value that works well in most systems. You can
+  disable mmap by setting to MAX_SIZE_T.
+
+
 MAX_RELEASE_CHECK_RATE: MAX_SIZE_T (*)
 */
 
@@ -331,8 +362,8 @@ function align_offset_size_t(A: __size_t): __size_t if((A & (7 as __size_t)) == 
 __struct malloc_chunk {
   prev_foot: __size_t;  // Size of previous chunk (if free)
   head: __size_t;       // Size and inuse bits
-  fd: __Option<malloc_chunk>;         // double links -- used only if free. was struct malloc_chunk*
-  bk: __Option<malloc_chunk>;
+  fd: malloc_chunk;         // double links -- used only if free. was struct malloc_chunk*
+  bk: malloc_chunk;
 }
 
 /*
@@ -558,8 +589,8 @@ __struct malloc_tree_chunk {
   /* The first four fields must be compatible with malloc_chunk */
   prev_foot: __size_t;
   head: __size_t;
-  fd: __Option<malloc_tree_chunk>;
-  bk: __Option<malloc_tree_chunk>;
+  fd: malloc_tree_chunk;
+  bk: malloc_tree_chunk;
 
   //WA1 - in dlmalloc these are an array of size 2. I don't have an 
   //array implementation yet, and it doesn't seem that important
@@ -676,6 +707,7 @@ __struct malloc_segment {
     itself).  This avoids special-casing for headers.  But to avoid
     waste, we allocate only the fd/bk pointers of bins, and then use
     repositioning tricks to treat these as the fields of a chunk.
+    *_* note - we don't use this trick right now.
 
   TreeBins
     Treebins are pointers to the roots of trees holding a range of
@@ -753,7 +785,7 @@ __struct malloc_state {
   trim_check:       __size_t;
   release_checks:   __size_t;
   magic:            __size_t;
-  smallbins:        __array<__Option<malloc_chunk>>; //mchunkptr  smallbins[(NSMALLBINS+1)*2];
+  smallbins:        __array<malloc_chunk>; //mchunkptr  smallbins[(NSMALLBINS+1)*2];
   treebins:         __array<__Option<malloc_tree_chunk>>; //tbinptr    treebins[NTREEBINS];
   footprint:        __size_t;
   max_footprint:    __size_t;
@@ -783,7 +815,7 @@ __struct malloc_params {
   default_mflags: __size_t; // was a flag_t aka u32;
 }
 
-const mparams: malloc_params = __static malloc_params {
+let mparams: malloc_params = __static malloc_params {
   magic: 0 as __size_t, 
   page_size: 0 as __size_t, 
   granularity: 0 as __size_t, 
@@ -791,9 +823,6 @@ const mparams: malloc_params = __static malloc_params {
   trim_threshold: 0 as __size_t, 
   default_mflags: 0 as __size_t
 };
-
-/* Ensure mparams initialized */
-//function ensure_initialization(): void { (mparams.magic != (0 as __size_t)) || init_mparams(); }
 
 /* The global malloc_state used for all non-"mspace" calls */
 const gm: malloc_state = __static malloc_state{
@@ -807,15 +836,18 @@ const gm: malloc_state = __static malloc_state{
   trim_check:       (0 as __size_t),
   release_checks:   (0 as __size_t),
   magic:            (0 as __size_t),
-  //66 lots of malloc_chunk...
-  smallbins:        __static __array<__Option<malloc_chunk>> [
+  //32 lots of malloc_chunk...
+  smallbins:        __static __array<malloc_chunk> [
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    fixme, finish
+    /*
     __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
     __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
     __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
-    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
-    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
-    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
-    __null, __null, __null, __null, __null, __null
+    __null, __null
+    */
   ],
   treebins:         __static __array<__Option<malloc_tree_chunk>>[
       __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
@@ -862,7 +894,7 @@ function is_granularity_aligned(s: __ptr): boolean ((s as __size_t) & (mparams.g
 
 /*  True if segment S holds address A */
 //#define segment_holds(S, A) ((char*)(A) >= S->base && (char*)(A) < S->base + S->size)
-//function segment_holds(s: malloc_segment, a: __ptr): boolean (a >= s.base && a < s.base + s.size);
+function segment_holds(s: malloc_segment, a: __ptr): boolean (a >= s.base && a < s.base + s.size);
 
 /* Return segment holding given address */
 /*
@@ -895,14 +927,6 @@ function has_segment_link(m: malloc_state, ss: malloc_segment): boolean {
 */
 
 //#define should_trim(M,s)  (0)
-
-/*
-  TOP_FOOT_SIZE is padding at the end of a segment, including space
-  that may be needed to place segment records and fenceposts when new
-  noncontiguous segments are added.
-*/
-//#define TOP_FOOT_SIZE  (align_offset(chunk2mem(0))+pad_request(sizeof(struct malloc_segment))+MIN_CHUNK_SIZE)
-const TOP_FOOT_SIZE = align_offset(8 as __ptr)+pad_request(__sizeof(malloc_segment))+MIN_CHUNK_SIZE;
 
 /* -------------------------------  Hooks -------------------------------- */
 
@@ -947,9 +971,9 @@ function small_index2size(i: __size_t): __size_t i.shiftLeft(3);
 //#define MIN_SMALL_INDEX     (small_index(MIN_CHUNK_SIZE))
 const MIN_SMALL_INDEX = small_index(MIN_CHUNK_SIZE);
 
-/* addressing by index. See above about smallbin repositioning */
+/* addressing by index. See above about smallbin repositioning *_* we don't do the repositioning trick */
 //#define smallbin_at(M, i)   ((sbinptr)((char*)&((M)->smallbins[(i)<<1])))
-function smallbin_at(m: malloc_state, i: __size_t): __Option<malloc_chunk> m.smallbins[i.shiftLeft(1) as int];
+function smallbin_at(m: malloc_state, i: __size_t): malloc_chunk m.smallbins[i as int];
 
 //#define treebin_at(M,i)     (&((M)->treebins[i]))
 function treebin_at(m: malloc_state, i: __size_t): __Option<malloc_tree_chunk>  m.treebins[i as int];
@@ -1072,6 +1096,103 @@ function set_inuse(m: malloc_state, p: malloc_chunk, s: __size_t): void {
 
 /* Set cinuse and pinuse of this chunk and pinuse of next chunk */
 //#define set_inuse_and_pinuse(M,p,s)  ((p)->head = (s|PINUSE_BIT|CINUSE_BIT),  ((mchunkptr)(((char*)(p)) + (s)))->head |= PINUSE_BIT)
+function set_inuse_and_pinuse(m: malloc_state, p: malloc_chunk, s: __size_t): void {
+  p.head = (s|(1 as __size_t)|(2 as __size_t));
+  (((p as __ptr) + s) as malloc_chunk).head |= (1 as __size_t);
+}
 
 /* Set size, cinuse and pinuse bit of this chunk */
 //#define set_size_and_pinuse_of_inuse_chunk(M, p, s)  ((p)->head = (s|PINUSE_BIT|CINUSE_BIT))
+function set_size_and_pinuse_of_inuse_chunk(m: malloc_state, p: malloc_chunk, s: __size_t): void {
+  p.head = (s|(1 as __size_t)|(2 as __size_t));
+}
+
+/* ---------------------------- setting mparams -------------------------- */
+
+/* Initialize mparams */
+function init_mparams(): boolean {
+  if (mparams.magic == (0 as __size_t)) {
+    let psize: __size_t = (65536 as __size_t); //malloc_getpagesize
+    let gsize: __size_t = (65536 as __size_t); //((DEFAULT_GRANULARITY != 0)? DEFAULT_GRANULARITY : psize);
+    mparams.granularity = gsize;
+    mparams.page_size = psize;
+    mparams.mmap_threshold = (0xffffffff as __size_t); //DEFAULT_MMAP_THRESHOLD
+    mparams.trim_threshold = (0xffffffff as __size_t); //DEFAULT_TRIM_THRESHOLD
+    mparams.default_mflags = (0 as __size_t); //USE_LOCK_BIT|USE_MMAP_BIT;
+
+    /* Set up lock for main malloc area */
+    gm.mflags = mparams.default_mflags;
+    // *_* there was a lot about random numbers and volatile writes here. I presume that this is when you hit malloc from
+    // multiple threads. I removed that for the moment
+    mparams.magic = (1 as __size_t);
+  }
+
+  true;
+}
+
+/* Ensure mparams initialized */
+function ensure_initialization(): void { (mparams.magic != (0 as __size_t)) || init_mparams(); }
+
+/* ------------------------- Debugging Support --------------------------- */
+// *_* not implemented at present
+
+/* ----------------------------- statistics ------------------------------ */
+
+// *_* This has a different api - the dlmalloc allocates on the stack, but I can't do that, so
+// I accept a pre-allocated container and write in it
+function internal_mallinfo(m: malloc_state, nm: mallinfo): void {
+  ensure_initialization();
+  //check_malloc_state(m);
+  if (is_initialized(m)) {
+    let nfree = (1 as __size_t); /* top always free */
+    let mfree = m.topsize + TOP_FOOT_SIZE;
+    let sum = mfree;
+
+    //FIXME option handling
+    let o_s = m.seg;
+    while (o_s != __null) {
+      let s = option.__Option_unwrap<malloc_segment>(o_s);
+      let q = align_as_chunk(s.base);
+      while (segment_holds(s, q as __ptr) && __Some(q) != m.top && q.head != (7 as __size_t)) {
+        let sz = chunksize(q);
+        sum += sz;
+        if (!is_inuse(q)) {
+          mfree += sz;
+          nfree+=(1 as __size_t);
+        }
+        q = next_chunk(q);
+      }
+      o_s = s.next;
+    }
+
+    nm.arena    = sum;
+    nm.ordblks  = nfree;
+    //nm.hblkhd   = m.footprint - sum;
+    nm.usmblks  = m.max_footprint;
+    nm.uordblks = m.footprint - mfree;
+    nm.fordblks = mfree;
+    nm.keepcost = m.topsize;
+  }
+}
+
+/* ----------------------- Operations on smallbins ----------------------- */
+
+// *_* dlmalloc defines these as macros. I obviously don't. I guess I shall
+// see if I can inline as well
+function insert_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t): void {
+  let i  = small_index(s);
+  let b = smallbin_at(m, i);
+  let f = b;
+  //assert(S >= MIN_CHUNK_SIZE);
+  if (!smallmap_is_marked(m, i))
+    mark_smallmap(m, i);
+  else if (ok_address(m, b.fd as __ptr))
+    f = b.fd;
+  else {
+    __trap();
+  }
+  b.fd = p;
+  f.bk = p;
+  p.fd = f;
+  p.bk = b;
+}
