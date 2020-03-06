@@ -3,6 +3,9 @@
   Doug Lea and released to the public domain, as explained at
   http://creativecommons.org/publicdomain/zero/1.0/ Send questions,
   comments, complaints, performance data, etc to dl@cs.oswego.edu
+  
+* This is modified by to be the code used for WA1 malloc. It's a 
+  reference.
 
 * Version 2.8.6 Wed Aug 29 06:57:58 2012  Doug Lea
    Note: There may be an updated version of this malloc obtainable at
@@ -5270,7 +5273,7 @@ int dlposix_memalign(void** pp, size_t alignment, size_t bytes) {
     size_t d = alignment / sizeof(void*);
     size_t r = alignment % sizeof(void*);
     if (r != 0 || d == 0 || (d & (d-SIZE_T_ONE)) != 0)
-      return EINVAL;
+      return 22;//EINVAL;
     else if (bytes <= MAX_REQUEST - alignment) {
       if (alignment <  MIN_CHUNK_SIZE)
         alignment = MIN_CHUNK_SIZE;
@@ -5278,7 +5281,7 @@ int dlposix_memalign(void** pp, size_t alignment, size_t bytes) {
     }
   }
   if (mem == 0)
-    return ENOMEM;
+    return 12;//ENOMEM;
   else {
     *pp = mem;
     return 0;
