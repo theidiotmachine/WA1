@@ -72,7 +72,7 @@ impl Display for Error {
             Error::TypeFailureBinaryOperator(ref loc, ref lhs_type, ref rhs_type) => 
                 write!(f, "ERROR {}: can't make type of lhs ({}) and rhs ({}) of binary operator agree", loc, lhs_type, rhs_type),
             Error::TypeFailureVariableCreation(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: initializer type {} doesn't match variable type {}", loc, got, wanted),
-            Error::TypeFailureMemberCreation(ref loc, ref m, ref wanted, ref got) => write!(f, "ERROR {}: initializer type {} of {} doesn't match variable type {}", loc, got, m, wanted),
+            Error::TypeFailureMemberCreation(ref loc, ref m, ref wanted, ref got) => write!(f, "ERROR {}: initializer of type {} of member {} doesn't match member type {}", loc, got, m, wanted),
             Error::TypeFailure(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: expecting expression of type {}, found {}", loc, wanted, got),
             Error::CastFailure(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: can't cast to type {}, from {}", loc, wanted, got),
             Error::NoValueReturned(ref loc) => write!(f, "ERROR {}: must return a value", loc),
@@ -84,7 +84,7 @@ impl Display for Error {
             Error::NotEnoughArgs(ref loc) => write!(f, "ERROR {}: not enough args for function call", loc),
             Error::DuplicateTypeName(name) => write!(f, "Duplicate type name: {}", name),
             Error::NotInLoop(what) => write!(f, "Used loop keyword outside a loop: {}", what),
-            Error::TypeFailureIf(ref loc, ref then_type, ref else_type) => write!(f, "ERROR {}: Types of branches of if statement do not match; then branch is of type {}, else branch is of type {}", loc, then_type, else_type),
+            Error::TypeFailureIf(ref loc, ref then_type, ref else_type) => write!(f, "WARNING {}: Types of branches of if statement do not match; then branch is of type {}, else branch is of type {}", loc, then_type, else_type),
             Error::WhileMayNotReturn => write!(f, "while loops may not have a return value"),
             Error::NoComponents(ref loc) => write!(f, "ERROR {}: object has no components", loc),
             Error::CantConstructUsingObjectLiteral(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {} from an object literal", loc, t),
@@ -110,6 +110,12 @@ impl Display for Error {
 }
 
 impl Error {
+    pub fn is_warning(&self) -> bool {
+        match self {
+            Error::TypeFailureIf(_, _, _) => true,
+            _ => false
+        }
+    }
 }
 
 pub fn pretty_print_errs(errs: &Vec<Error>) -> () {

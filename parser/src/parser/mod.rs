@@ -310,7 +310,7 @@ impl<'b> Parser<'b> {
             StartFuncType::Start => format!("_start_{}", module_name)
         };
         self.parse_internal(&start_func_name, start_func_type, &mut parser_context, importer);
-        if parser_context.errors.is_empty() {
+        if parser_context.errors.is_empty() || parser_context.errors.iter().all(|e| e.is_warning()) {
             Ok(AST{start: start_func_name, global_decls: parser_context.global_decls, global_imports: parser_context.global_imports,
                 func_decls: parser_context.func_decls, func_imports: parser_context.func_imports, generic_func_decls: parser_context.generic_func_decls,
                 type_map: parser_context.type_map
@@ -896,9 +896,9 @@ impl<'b> Parser<'b> {
                         let else_to_then_cast = try_create_cast(&then_block.r#type, &else_block, true);
                         match else_to_then_cast {
                             None => {
-                                //give up 
+                                //warn that we can't figure out the type, make it the top type
                                 parser_context.push_err(Error::TypeFailureIf(loc.clone(), then_block.r#type.clone(), else_block.r#type.clone()));
-                                Ok(TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: then_block_type, loc: loc})
+                                Ok(TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: Type::Unknown, loc: loc})
                             },
                             Some(new_else_block) => {
                                 Ok(TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(new_else_block)), is_const: true, r#type: then_block_type, loc: loc})
