@@ -749,7 +749,16 @@ pub(crate) fn compile_expr(
 
         Expr::IfThenElse(c, t, e) => {
             compile_expr(&c, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            wasm_expr.data.push(WasmInstr::If(get_wasm_return_type(&typed_expr.r#type)));
+            if !consume_result {
+                ret_val = false;
+            }
+            wasm_expr.data.push(WasmInstr::If(
+                if consume_result {
+                    get_wasm_return_type(&typed_expr.r#type)
+                } else {
+                    WasmResultType::Empty
+                }
+            ));
             compile_expr(&**t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors);
             wasm_expr.data.push(WasmInstr::Else);
             compile_expr(&**e, context, local_var_map, consume_result, wasm_module, wasm_expr, errors);
