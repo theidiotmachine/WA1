@@ -841,13 +841,99 @@ const gm: malloc_state = __static malloc_state{
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
       fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
     },
-    fixme, finish
-    /*
-    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
-    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
-    __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
-    __null, __null
-    */
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
+    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+    },
   ],
   treebins:         __static __array<__Option<malloc_tree_chunk>>[
       __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
@@ -1008,7 +1094,7 @@ function idx2bit(i: __size_t): __size_t (1 as __size_t).shiftLeft(i as int);
 
 /* Mark/Clear bits with given index */
 //#define mark_smallmap(M,i)      ((M)->smallmap |=  idx2bit(i))
-function mark_smallmap(m: malloc_state, i: __size_t): void m.smallmap |= idx2bit(i);
+//function mark_smallmap(m: malloc_state, i: __size_t): void m.smallmap |= idx2bit(i);
 //#define clear_smallmap(M,i)     ((M)->smallmap &= ~idx2bit(i))
 function clear_smallmap(m: malloc_state, i: __size_t): void m.smallmap &= ~idx2bit(i);
 //#define smallmap_is_marked(M,i) ((M)->smallmap &   idx2bit(i))
@@ -1185,7 +1271,7 @@ function insert_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t): void
   let f = b;
   //assert(S >= MIN_CHUNK_SIZE);
   if (!smallmap_is_marked(m, i))
-    mark_smallmap(m, i);
+    m.smallmap |= idx2bit(i);
   else if (ok_address(m, b.fd as __ptr))
     f = b.fd;
   else {
