@@ -363,6 +363,10 @@ impl ParserContext {
         self.counter += 1;
         format!("{}#{}", name, counter)
     }
+
+    fn get_global_decl(&self, id: &String) -> Option<&GlobalVariableDecl> {
+        self.global_decls.iter().find(|&x| x.name == id.to_string())
+    }
 }
 
 impl ErrRecorder for ParserContext {

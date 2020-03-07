@@ -310,7 +310,7 @@ impl<'b> Parser<'b> {
             StartFuncType::Start => format!("_start_{}", module_name)
         };
         self.parse_internal(&start_func_name, start_func_type, &mut parser_context, importer);
-        if parser_context.errors.is_empty() {
+        if parser_context.errors.is_empty() || parser_context.errors.iter().all(|e| e.is_warning()) {
             Ok(AST{start: start_func_name, global_decls: parser_context.global_decls, global_imports: parser_context.global_imports,
                 func_decls: parser_context.func_decls, func_imports: parser_context.func_imports, generic_func_decls: parser_context.generic_func_decls,
                 type_map: parser_context.type_map
@@ -682,6 +682,12 @@ impl<'b> Parser<'b> {
 
         let next = assert_next!(self, "Expecting variable name");
         let id = assert_ident!(next, "Expecting variable name to be an identifier");
+
+        //check to see if this shadows a pre-existing global
+        if global && parser_context.get_global_decl(&id.to_string()).is_some() {
+            parser_context.push_err(Error::DuplicateGlobalVariable(loc.clone(), id.to_string().clone()));
+        }
+
         let next = self.peek_next_item();
         let token = &next.token;
         let mut var_type = match token {
@@ -890,9 +896,9 @@ impl<'b> Parser<'b> {
                         let else_to_then_cast = try_create_cast(&then_block.r#type, &else_block, true);
                         match else_to_then_cast {
                             None => {
-                                //give up 
-                                parser_context.errors.push(Error::TypeFailureIf(loc.clone(), then_block.r#type.clone(), else_block.r#type.clone()));
-                                Ok(TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: then_block_type, loc: loc})
+                                //warn that we can't figure out the type, make it the top type
+                                parser_context.push_err(Error::TypeFailureIf(loc.clone(), then_block.r#type.clone(), else_block.r#type.clone()));
+                                Ok(TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: Type::Unknown, loc: loc})
                             },
                             Some(new_else_block) => {
                                 Ok(TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(new_else_block)), is_const: true, r#type: then_block_type, loc: loc})
@@ -1230,7 +1236,7 @@ impl<'b> Parser<'b> {
                     let o_member_map_elem = member_map.get(&i.to_string());
                     match o_member_map_elem {
                         None => {
-                            parser_context.errors.push(Error::ObjectHasNoMember(next_item.location, i.to_string().clone()));
+                            parser_context.errors.push(Error::ObjectHasNoMember(next_item.location, for_type.clone(), i.to_string().clone()));
                         },
                         Some(member_map_elem) => {
                             let o_cast = try_create_cast(member_map_elem, &v, true);
@@ -1335,7 +1341,7 @@ impl<'b> Parser<'b> {
         let o_mem = struct_type.members.iter().find(|x| x.name == *component);
         match o_mem {
             None => {
-                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), component.clone()));
+                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), lhs.r#type.clone(), component.clone()));
                 TypedExpr{
                     expr: Expr::NamedMember(Box::new(lhs.clone()), component.clone()),
                     r#type: Type::Undeclared,

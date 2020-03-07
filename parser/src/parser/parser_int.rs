@@ -39,7 +39,7 @@ impl<'a> Parser<'a> {
                 TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), args), r#type: func_decl.return_type.clone(), is_const: true, loc: loc.clone()}
             },
             None => {
-                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), id.clone()));
+                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), Type::Int.clone(), id.clone()));
                 TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: Type::Int, is_const: true, loc: loc.clone()}
             }
         }
