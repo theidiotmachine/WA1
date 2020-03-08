@@ -277,12 +277,46 @@ fn compile_binary_operator(
                         BinaryOperator::Equal => wasm_expr.data.push(WasmInstr::I32Eq),
                         BinaryOperator::NotEqual => wasm_expr.data.push(WasmInstr::I32Ne),
                         _ => {
-                            errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (Option<T> ★ ? => boolean)")))
+                            errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (__Option<T> ★ ? => boolean)")))
                         }
                     }
                 },
                 _ => {
-                    errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (Option<T> ★ ? => ?)")))
+                    errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (__Option<T> ★ ? => ?)")))
+                }
+            }
+        },
+
+        Type::UnsafeSome(_) => {
+            match return_type {
+                Type::Boolean => {
+                    match bin_op {
+                        BinaryOperator::Equal => wasm_expr.data.push(WasmInstr::I32Eq),
+                        BinaryOperator::NotEqual => wasm_expr.data.push(WasmInstr::I32Ne),
+                        _ => {
+                            errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (__Some<T> ★ ? => boolean)")))
+                        }
+                    }
+                },
+                _ => {
+                    errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (__Some<T> ★ ? => ?)")))
+                }
+            }
+        },
+
+        Type::UnsafeNull => {
+            match return_type {
+                Type::Boolean => {
+                    match bin_op {
+                        BinaryOperator::Equal => wasm_expr.data.push(WasmInstr::I32Eq),
+                        BinaryOperator::NotEqual => wasm_expr.data.push(WasmInstr::I32Ne),
+                        _ => {
+                            errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (__null ★ ? => boolean)")))
+                        }
+                    }
+                },
+                _ => {
+                    errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (__null ★ ? => ?)")))
                 }
             }
         },

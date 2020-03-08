@@ -142,6 +142,10 @@ pub enum Type {
     Option(Box<Type>),
     /// The unsafe option type. May one day become the full option type.
     UnsafeOption(Box<Type>),
+    /// The unsafe option type some
+    UnsafeSome(Box<Type>),
+    /// The unsafe option type none
+    UnsafeNull,
     /// Option - some
     Some(Box<Type>),
     /// user type
@@ -211,6 +215,8 @@ impl Type{
             Type::Any => String::from("!any"),
             Type::Option(inner) => format!("!Option<{}>", inner.get_mangled_name()),
             Type::UnsafeOption(inner) => format!("!__Option<{}>", inner.get_mangled_name()),
+            Type::UnsafeSome(inner) => format!("!__Some<{}>", inner.get_mangled_name()),
+            Type::UnsafeNull => format!("!__null"),
             Type::Some(inner) => format!("!Some<{}>", inner.get_mangled_name()),
             Type::UserClass{name} => format!("!class_{}", name),
             Type::UnsafeStruct{name} => format!("!__struct_{}", name),
@@ -255,6 +261,8 @@ impl Display for Type {
             Type::Any => write!(f, "any"),
             Type::Option(inner) => write!(f, "Option<{}>", inner),
             Type::UnsafeOption(inner) => write!(f, "__Option<{}>", inner),
+            Type::UnsafeSome(inner) => write!(f, "__Some<{}>", inner),
+            Type::UnsafeNull => write!(f, "__null"),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
             Type::UserClass{name} => write!(f, "{}", name),
             Type::UnsafeStruct{name} => write!(f, "{}", name),

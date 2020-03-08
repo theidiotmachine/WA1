@@ -84,6 +84,8 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
                 Type::UnsafeStruct{name: _} => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::UnsafeSizeT => TypeCast::FreeWiden,
                 Type::UnsafeOption(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafeSome(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafeNull => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 _ => TypeCast::None,
             }
         },
@@ -114,13 +116,21 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
         Type::UnsafeOption(inner_to) => {
             match from {
                 Type::UnsafeOption(inner_from) => {
+                    /*
                     if **inner_from == Type::Never {
                         // UnsafeOption(Never) is '__null' which is None(T) in my language. Yes, I have somewhat abused the 
                         // type system for options
                         TypeCast::FreeWiden
                     } else {
+                        */
                         try_cast(inner_from, inner_to, implicit)
-                    }
+                    //}
+                },
+                Type::UnsafeNull => {
+                    TypeCast::FreeWiden
+                },
+                Type::UnsafeSome(inner_from) => {
+                    try_cast(inner_from, inner_to, implicit)
                 },
                 _ => TypeCast::None,
             }

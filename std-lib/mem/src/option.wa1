@@ -1,8 +1,25 @@
 export function __Option_unwrap<T: __struct T>(x: __Option<T>): T {
-    let p: __ptr = x as __ptr;
-    if (p == (0 as __ptr)) {
+    if (x == __null) {
         __trap();
     } else {
-        p as T;
+        x as __ptr as T;
     }
 }
+
+export function __Some_unwrap<T: __struct T>(x: __Some<T>): T {
+    x as __ptr as T;
+}
+
+export function __Option_isSome<T: __struct T>(x: __Option<T>): boolean {
+    x != __null;
+} /*__typeguard {
+    true => x as __Some<T>;
+    false => x as __null;
+}*/
+
+export function __Option_isNull<T: __struct T>(x: __Option<T>): boolean {
+    x == __null;
+} /*__typeguard {
+    true => x as __null;
+    false => x as __Some<T>;
+}*/

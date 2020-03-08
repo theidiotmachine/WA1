@@ -116,6 +116,16 @@ impl<'a> Parser<'a> {
                 expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
                 Type::UnsafeOption(Box::new(inner))
             },
+            Keyword::UnsafeSome => {
+                if !parser_context.is_unsafe {
+                    parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
+                }
+                expect_punct!(self, parser_context, Punct::LessThan, err_ret);
+                let inner = self.parse_type(parser_context);
+                expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
+                Type::UnsafeSome(Box::new(inner))
+            },
+            
             _ => {
                 parser_context.errors.push(Error::InvalidTypeName(loc.clone(), keyword.as_str().to_owned()));
                 Type::Undeclared
@@ -180,6 +190,13 @@ impl<'a> Parser<'a> {
             },
 
             Token::String(s) => Type::StringLiteral(s.to_string()),
+
+            Token::UnsafeNull => {
+                if !parser_context.is_unsafe {
+                    parser_context.errors.push(Error::UnsafeCodeNotAllowed(next.location.clone()));
+                }
+                Type::UnsafeNull
+            },
 
             _ => {
                 parser_context.errors.push(Error::InvalidType(self.current_position));

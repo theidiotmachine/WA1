@@ -819,6 +819,7 @@ pub enum NumberKind {
 pub enum Punct {
     Ampersand,
     AmpersandEqual,
+    /// The fat arrow, '=>'
     Arrow,
     Asterisk,
     AsteriskEqual,
