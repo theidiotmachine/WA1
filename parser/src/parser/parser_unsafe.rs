@@ -186,7 +186,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn create_unsafe_null(
         loc: &SourceLocation,
     ) -> TypedExpr {
-        TypedExpr{expr:Expr::UnsafeNull, r#type: Type::UnsafeOption(Box::new(Type::Never)), is_const: true, loc: loc.clone()}
+        TypedExpr{expr:Expr::UnsafeNull, r#type: Type::UnsafeNull, is_const: true, loc: loc.clone()}
     }
 
     /// Parse '__Some(x)'. Because options are built in at a fairly low level, this is a parser function, not a library function.
@@ -215,7 +215,7 @@ impl<'a> Parser<'a> {
 
         let inner_loc = inner.loc.clone();
         let inner_type = inner.r#type.clone();
-        Ok(TypedExpr{expr: Expr::FreeTypeWiden(Box::new(inner)), r#type: Type::UnsafeOption(Box::new(inner_type)), loc: inner_loc, is_const: true})
+        Ok(TypedExpr{expr: Expr::FreeTypeWiden(Box::new(inner)), r#type: Type::UnsafeSome(Box::new(inner_type)), loc: inner_loc, is_const: true})
     }
 
     pub(crate) fn parse_unsafe_option_component(&mut self,

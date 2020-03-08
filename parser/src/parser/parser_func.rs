@@ -55,7 +55,7 @@ fn transform_type(t: &Type,
     match t {
         Type::Any | Type::BigInt | Type::BigIntLiteral(_) | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) 
         | Type::Int | Type::IntLiteral(_) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
-        | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeSizeT
+        | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeNull | Type::UnsafeSizeT
         | Type::UnsafeStruct{name: _} | Type::UserClass{name: _}
             => t.clone(),
         Type::Array(t) => Type::Array(Box::new(transform_type(t, type_map, loc, parser_context))),
@@ -74,6 +74,7 @@ fn transform_type(t: &Type,
         Type::TypeLiteral(t) => Type::TypeLiteral(Box::new(transform_type(&t, type_map, loc, parser_context))),
         Type::UnsafeArray(t) => Type::UnsafeArray(Box::new(transform_type(t, type_map, loc, parser_context))),
         Type::UnsafeOption(t) => Type::UnsafeOption(Box::new(transform_type(&t, type_map, loc, parser_context))),
+        Type::UnsafeSome(t) => Type::UnsafeSome(Box::new(transform_type(&t, type_map, loc, parser_context))),
         Type::VariableUsage{name, constraint: _} => {
             let o_n_t = type_map.get(name);
             match o_n_t {
