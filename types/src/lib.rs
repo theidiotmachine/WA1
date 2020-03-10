@@ -255,7 +255,7 @@ impl Display for Type {
                 for inner in types {
                     vec.push(format!("{}", inner));
                 }
-                write!(f, "[{}]", vec.join(",")) 
+                write!(f, "Tuple<{}>", vec.join(",")) 
             },
             //Type::Object => write!(f, "object"),
             Type::Any => write!(f, "any"),

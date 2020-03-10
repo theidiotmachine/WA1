@@ -2,7 +2,7 @@ import {*} from "./cache"
 import {*} from "./assert"
 import {*} from "./array"
 
-export function test(): void {
+export fn test() -> int {
     assert.assert(cache.getA() == 10);
     cache.setA(20);
     assert.assert(cache.getA() == 20);
@@ -14,4 +14,6 @@ export function test(): void {
     assert.assert(array.getElem(0) == 1);
     assert.assert(array.getElem(1) == 10);
     assert.assert(array.getElem(2) == 4);
+
+    1;
 }

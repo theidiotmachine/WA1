@@ -383,7 +383,7 @@ fn build(matches: &ArgMatches) -> i32 {
                     }
                 } 
                 
-                args.push(String::from("--verbose"));
+                //args.push(String::from("--verbose"));
                 
                 let mut of_full_path = config_path.clone().join(build_config.out_path.clone()).join(build_config.module_name.clone());
                 of_full_path.set_extension("wasm");

@@ -20,5 +20,5 @@
     "src_path": "./src",
     "out_path": "./out",
     "module_name": "linker_mem",
-    "wasm_exe": "/home/tim/Code/Ext/LLVM/llvm-build/bin/wasm-ld"
+    "wasm_exe": "wasm-ld-9"
 }

@@ -1,48 +1,60 @@
-export function addd(x: number, y: number): number {
-    x + y;
+export fn addd(x: number, y: number) -> number {
+    x + y
 }
 
-export function negMax(x: number, y: number): number {
-    let b = true;
+export fn negMax(x: number, y: number) -> number {
+    let b = true
     if(b && x > y)
-        -x;
+        -x
     else {
-        -y;
+        -y
     }
 }
 
-export function bang(x: number): number {
+export fn bang(x: number) -> number {
     if(x <= 0)
-        return 0;
+        return 0
 
-    let out: number = 1;
+    let out: number = 1
 
     while(x > 0) {
-        out *= x;
-        x -= 1;
+        out *= x
+        x -= 1
     }
 
-    out;
+    out
 }
 
 //test of non block function. The syntax is pretty weird
-function mul(x: number, y: number): number x * y;
+fn mul(x: number, y: number) -> number x * y
 
 //test of function call
-export function fourTimes(x: number): number{
-    mul(x, 2) * 2;
+export fn fourTimes(x: number) -> number{
+    mul(x, 2) * 2
 }
 
-export function mul3(x: number, y: number, z: number): number {
-    return x * y * z;
+export fn mul3(x: number, y: number, z: number) -> number {
+    return x * y * z
 }
 
-export function idNumber(x:  number): number {
-    x;
+export fn idNumber(x:  number) -> number {
+    x
 }
 
-function assert(x: boolean): void {
-    if(!x) __trap();
+fn assert(x: boolean) -> void {
+    if(!x) __trap()
+}
+
+fn inferReturnTypeInt(x: int) => x
+fn inferReturnTypeBool(x: int) => true
+
+//should warn of unused value
+fn badReturnTypeVoid() -> void 8
+
+fn returnTypeTest() -> void {
+    assert(inferReturnTypeInt(3) == 3)
+    assert(inferReturnTypeBool(3) == true)
+    badReturnTypeVoid()
 }
 
 /*
@@ -51,48 +63,49 @@ __struct Simple{
     b: int;
 }*/
 
-function structTest(): void {
+fn structTest() -> void {
     /*
     //need malloc
-    let c = new Simple {a: 3, b: 4};
-    assert(c.a == 3);
-    assert(c.b == 4);
-    c.a = 8;
-    assert(c.a == 8);
-    assert(c.b == 4);
-    c.b = 9;
-    assert(c.a == 8);
-    assert(c.b == 9);
+    let c = new Simple {a: 3, b: 4}
+    assert(c.a == 3)
+    assert(c.b == 4)
+    c.a = 8
+    assert(c.a == 8)
+    assert(c.b == 4)
+    c.b = 9
+    assert(c.a == 8)
+    assert(c.b == 9)
     */
 }
 
-function intTest(): void {
-    const e = 8;
-    assert(e.countTrailingZeros() == 3);
+fn intTest() -> void {
+    const e = 8
+    assert(e.countTrailingZeros() == 3)
 }
 
-function asTest(): void {
-    const a = 9;
-    const b = a as number;
-    const c: number = b;
+fn asTest() -> void {
+    const a = 9
+    const b = a as number
+    const c: number = b
     //would fail
-    //const d: int = b;
+    //const d: int = b
 }
 
-const g = 5;
-function globalTest(): void {
-    assert(g == 5);
+const g = 5
+fn globalTest() -> void {
+    assert(g == 5)
 }
 
-export function testSuite(): int {
-    assert(idNumber(3) == 3);
-    assert(idNumber(-3.0) == -3);
-    assert(addd(3, 5) == 8);
-    assert(negMax(8, 9.1) == -9.1);
-    assert(bang(3) == 6);
-    assert(fourTimes(3) == 12);
-    structTest();
-    intTest();
-    globalTest();
-    1;
+export fn testSuite() -> int {
+    assert(idNumber(3) == 3)
+    assert(idNumber(-3.0) == -3)
+    assert(addd(3, 5) == 8)
+    assert(negMax(8, 9.1) == -9.1)
+    assert(bang(3) == 6)
+    assert(fourTimes(3) == 12)
+    structTest()
+    intTest()
+    globalTest()
+    returnTypeTest()
+    1
 }

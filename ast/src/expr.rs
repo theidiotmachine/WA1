@@ -210,6 +210,8 @@ pub enum Expr {
     SizeOf(Type),
     ///No op expression
     NoOp,
+    ///Tuple literal constructor
+    TupleLiteral(Vec<TypedExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

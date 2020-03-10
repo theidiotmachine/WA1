@@ -157,6 +157,7 @@ pub fn transform_expr(
         Expr::Return(o_te) => Expr::Return(Box::new(o_te.as_ref().as_ref().map(|te| transform_typed_expr(&te, transform, parser_context)))),
         Expr::SizeOf(t) => Expr::SizeOf(t.clone()),
         Expr::StaticFuncCall(s, v) => Expr::StaticFuncCall(s.clone(), transform_typed_exprs(v, transform, parser_context)),
+        Expr::TupleLiteral(v) => Expr::TupleLiteral(transform_typed_exprs(v, transform, parser_context)),
         Expr::TypeLiteral(t) => Expr::TypeLiteral(t.clone()),
         Expr::UnaryOperator{expr: te, op} => Expr::UnaryOperator{expr: Box::new(transform_typed_expr(te, transform, parser_context)), op: *op},
         Expr::VariableDecl(vd) => {

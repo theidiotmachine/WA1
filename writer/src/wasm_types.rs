@@ -15,7 +15,7 @@ pub(crate) fn get_wasm_value_type(r#type: &Type) -> WasmValueType {
         Type::UnsafeSizeT => WasmValueType::I32,
         Type::UnsafeStruct{name: _} => WasmValueType::I32,
         Type::UnsafeArray(_) => WasmValueType::I32,
-        Type::UnsafeOption(inner_type) => {
+        Type::UnsafeOption(inner_type) | Type::UnsafeSome(inner_type) => {
             match **inner_type {
                 Type::UnsafeStruct{name: _} => WasmValueType::I32,
                 //FIXME64BIT
@@ -23,6 +23,9 @@ pub(crate) fn get_wasm_value_type(r#type: &Type) -> WasmValueType {
                 Type::Never => WasmValueType::I32,
                 _ => panic!()                
             }
+        },
+        Type::UnsafeNull => {
+            WasmValueType::I32
         },
         _ => panic!()
     }

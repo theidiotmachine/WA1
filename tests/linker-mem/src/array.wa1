@@ -1,9 +1,9 @@
 let arr1 = __static __array<int> [ 1, 2, 4 ];
 
-export function setElem(a: int, idx: int): void {
+export fn setElem(a: int, idx: int) -> void {
     arr1[idx] = a;
 }
 
-export function getElem(idx: int): int {
+export fn getElem(idx: int) -> int {
     arr1[idx];
 }

@@ -1,0 +1,1 @@
+cargo run -- build std-lib/mem/build-wsb.json --clean

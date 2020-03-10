@@ -820,7 +820,9 @@ pub enum Punct {
     Ampersand,
     AmpersandEqual,
     /// The fat arrow, '=>'
-    Arrow,
+    FatArrow,
+    /// The thin arrow, '->'
+    ThinArrow,
     Asterisk,
     AsteriskEqual,
     AtMark,
@@ -917,7 +919,8 @@ impl Punct {
             Punct::PipeEqual => "|=" == s,
             Punct::CaretEqual => "^=" == s,
             Punct::PercentEqual => "%=" == s,
-            Punct::Arrow => "=>" == s,
+            Punct::FatArrow => "=>" == s,
+            Punct::ThinArrow => "->" == s,
             Punct::GreaterThanEqual => ">=" == s,
             Punct::LessThanEqual => "<=" == s,
             Punct::DoubleAsterisk => "**" == s,
@@ -974,7 +977,8 @@ impl ToString for Punct {
             Punct::PipeEqual => "|=",
             Punct::CaretEqual => "^=",
             Punct::PercentEqual => "%=",
-            Punct::Arrow => "=>",
+            Punct::FatArrow => "=>",
+            Punct::ThinArrow => "->",
             Punct::GreaterThanEqual => ">=",
             Punct::LessThanEqual => "<=",
             Punct::DoubleAsterisk => "**",
@@ -1079,7 +1083,7 @@ pub enum Keyword {
     Finally,
     For,
     From,
-    Function,
+    Fn,
     If,
     Implements,
     Import,
@@ -1150,7 +1154,7 @@ impl Keyword {
             "else" => Keyword::Else,
             "finally" => Keyword::Finally,
             "for" => Keyword::For,
-            "function" => Keyword::Function,
+            "fn" => Keyword::Fn,
             "from" => Keyword::From,
             "if" => Keyword::If,
             "int" => Keyword::Int,
@@ -1237,7 +1241,7 @@ impl Keyword {
             Keyword::Finally => "finally",
             Keyword::For => "for",
             Keyword::From => "from",
-            Keyword::Function => "function",
+            Keyword::Fn => "fn",
             Keyword::If => "if",
             Keyword::In => "in",
             Keyword::Int => "int",
@@ -1289,8 +1293,6 @@ impl Keyword {
             Keyword::UnsafeOption => "__Option",
         }
     }
-
-    
 }
 
 impl<'a> TokenExt for Token<&'a str> {
