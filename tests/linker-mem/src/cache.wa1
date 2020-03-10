@@ -4,10 +4,10 @@ __struct test_struct {
 
 let cache = __static test_struct{a: 10};
 
-export function setA(a: int): void {
+export fn setA(a: int) -> void {
     cache.a = a;
 }
 
-export function getA(): int {
+export fn getA() -> int {
     cache.a;
 }

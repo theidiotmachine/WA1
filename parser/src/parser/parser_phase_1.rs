@@ -73,7 +73,7 @@ impl<'a> Parser<'a> {
         let token = &next.token;
         match &token {
             Token::Keyword(ref k) => match k {   
-                Keyword::Function => self.parse_phase_1_func(parser_context),
+                Keyword::Fn => self.parse_phase_1_func(parser_context),
                 Keyword::UnsafeStruct => {let _ = self.parse_struct_decl(true, parser_context);},
                 Keyword::Const => self.parse_phase_1_global(true, parser_context),
                 Keyword::Let => self.parse_phase_1_global(false, parser_context),

@@ -112,6 +112,30 @@ fn transform_generic_local_vars(
     out
 }
 
+/// Because the return type of 'return' is 'never' we need to do some weird checks
+fn get_body_return_type(
+    body: &TypedExpr,
+) -> Type {
+    match &body.expr {
+        Expr::Block(exprs) => {
+            let o_last = exprs.last();
+            match o_last {
+                Some(last) => get_body_return_type(&last),
+                _ => Type::RealVoid
+            }
+        },
+        Expr::Return(o_e) => {
+            if o_e.is_none() {
+                Type::RealVoid
+            } else {
+                o_e.as_ref().as_ref().unwrap().r#type.clone()
+            }
+        },
+        _ => body.r#type.clone()
+    }
+}
+
+
 struct GenericFuncTypeTransformer{
     pub type_map: HashMap<String, Type>,
 }
@@ -339,43 +363,24 @@ impl<'a> Parser<'a> {
 
     /// If you don't have a return value at the end of function, you get errors at run time. Also, it seems
     /// polite to make sure the return type is in fact correct.
-    fn check_return_value(&mut self, 
-        block: &TypedExpr,
+    fn check_void_return_value(&mut self, 
+        body: &TypedExpr,
+        body_return_type: &Type,
         parser_func_context_inner: &ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> () {
-        if parser_func_context_inner.func_return_type != Type::RealVoid {
-            match &block.expr {
-                Expr::Block(exprs) => {
-                    let o_last = exprs.last();
-                    match o_last {
-                        Some(last) => {
-                            match &last.expr {
-                                Expr::Return(o_e) => {
-                                    if o_e.is_none() {
-                                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()))
-                                    }
-                                },
-                                _ => {
-                                    if last.r#type == Type::RealVoid {
-                                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()));
-                                    }
-                                },
-                            }
-                        },
-                        _ => parser_context.errors.push(Error::NoValueReturned(block.loc.clone()))
+        match parser_func_context_inner.given_func_return_type {
+            Type::RealVoid => {},
+            Type::Undeclared => {
+                match parser_func_context_inner.implied_func_return_type {
+                    Type::RealVoid => {},
+                    _ => if *body_return_type == Type::RealVoid {
+                        parser_context.push_err(Error::NoValueReturned(body.loc.clone()))
                     }
-                },
-                Expr::Return(o_e) => {
-                    if o_e.is_none() {
-                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()))
-                    }
-                },
-                _ => {
-                    if block.r#type == Type::RealVoid {
-                        parser_context.errors.push(Error::NoValueReturned(block.loc.clone()));
-                    }
-                },
+                }
+            },
+            _ => if *body_return_type == Type::RealVoid {
+                parser_context.push_err(Error::NoValueReturned(body.loc.clone()))
             }
         }
     }
@@ -386,31 +391,48 @@ impl<'a> Parser<'a> {
         parser_context: &mut ParserContext,
     ) -> Func {
         let mut parser_func_context_inner = ParserFuncContext::new();
-
+        
         self.context.push_func_scope();
 
         self.register_params(&func_decl.args, &mut parser_func_context_inner);
 
-        parser_func_context_inner.func_return_type = func_decl.return_type.clone();
+        parser_func_context_inner.given_func_return_type = func_decl.return_type.clone();
 
         let old_in_iteration = self.context.in_iteration;
         self.context.in_iteration = false;
         
+        let mut decl = func_decl.clone();
         let r_block = self.parse_block(false, &mut parser_func_context_inner, parser_context);
         let o_block = if r_block.is_err() { 
             parser_context.push_err(r_block.unwrap_err());
             None
         } else {
             let block = r_block.unwrap();
-            self.check_return_value(&block, &parser_func_context_inner, parser_context);
-            Some(block)
+            //get a guess of the return type of the body based on the last elem
+            let body_return_type = get_body_return_type(&block);
+            //if we never figured out a return type, then use this. It means we never encountered a return statement.
+            if parser_func_context_inner.given_func_return_type == Type::Undeclared && parser_func_context_inner.implied_func_return_type == Type::Undeclared {
+                parser_func_context_inner.implied_func_return_type = body_return_type.clone();
+            }
+            //do some special checks on this
+            self.check_void_return_value(&block, &body_return_type, &parser_func_context_inner, parser_context);
+            //fix up the decl to our implied value
+            if decl.return_type == Type::Undeclared {
+                decl.return_type = parser_func_context_inner.implied_func_return_type.clone()
+            }
+            //and cast. we special case void because we drop unused values.
+            if decl.return_type == Type::RealVoid {
+                Some(block)
+            } else {
+                Some(cast_typed_expr(&decl.return_type, Box::new(block), true, parser_context))
+            }
         };
 
         self.context.pop_func_scope();
         self.context.in_iteration = old_in_iteration;
 
         Func{
-            decl: func_decl.clone(),
+            decl: decl,
             local_vars: parser_func_context_inner.local_vars, closure: parser_func_context_inner.closure, 
             local_var_map: parser_func_context_inner.local_var_map, body: o_block,
         }
@@ -423,7 +445,7 @@ impl<'a> Parser<'a> {
         parser_context: &mut ParserContext,
     ) -> Option<TypedExpr> {
         let err_ret = None;
-        expect_keyword!(self, parser_context, Keyword::Function, err_ret);
+        expect_keyword!(self, parser_context, Keyword::Fn, err_ret);
 
         let loc = self.peek_next_location();
 
@@ -449,8 +471,21 @@ impl<'a> Parser<'a> {
         let arg_list = self.parse_function_decl_args(parser_context);
 
         //and the return type
-        expect_punct!(self, parser_context, Punct::Colon, err_ret);
-        let return_type = self.parse_type(parser_context);
+        let next = self.peek_next_item();
+        let token = &next.token;
+        let return_type = if token.matches_punct(Punct::ThinArrow) {
+            self.skip_next_item();
+            self.parse_type(parser_context)
+        } else if token.matches_punct(Punct::FatArrow) {
+            if generic {
+                parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("Expecting '->' for generic function")));
+            }
+            self.skip_next_item();
+            Type::Undeclared
+        } else {
+            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("Expecting '->' or '=>'")));
+            Type::Undeclared
+        };
 
         //here's the decl
         let func_decl = FuncDecl{
@@ -497,7 +532,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(crate) fn main_parse_named_function_decl(&mut self, 
+    pub(crate) fn main_parse_function_decl(&mut self, 
         export: bool,
         parser_func_context_outer: &mut ParserFuncContext,
         parser_context: &mut ParserContext,

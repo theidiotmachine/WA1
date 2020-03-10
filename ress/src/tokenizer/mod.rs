@@ -91,6 +91,7 @@ impl<'a> Tokenizer<'a> {
         match self.stream.idx - self.current_start {
             2 if ident == b"as" => Some(RawToken::Keyword(Keyword::As)),
             2 if ident == b"do" => Some(RawToken::Keyword(Keyword::Do)),
+            2 if ident == b"fn" => Some(RawToken::Keyword(Keyword::Fn)),
             2 if ident == b"if" => Some(RawToken::Keyword(Keyword::If)),
             2 if ident == b"in" => Some(RawToken::Keyword(Keyword::In)),
             3 if ident == b"any" => Some(RawToken::Keyword(Keyword::Any)),
@@ -154,7 +155,6 @@ impl<'a> Tokenizer<'a> {
             8 if ident == b"__struct" => Some(RawToken::Keyword(Keyword::UnsafeStruct)),
             8 if ident == b"continue" => Some(RawToken::Keyword(Keyword::Continue)),
             8 if ident == b"debugger" => Some(RawToken::Keyword(Keyword::Debugger)),
-            8 if ident == b"function" => Some(RawToken::Keyword(Keyword::Function)),
             9 if ident == b"interface" => Some(RawToken::Keyword(Keyword::Interface)),
             9 if ident == b"protected" => Some(RawToken::Keyword(Keyword::Protected)),
             9 if ident == b"undefined" => Some(RawToken::Keyword(Keyword::Undefined)),
@@ -403,7 +403,7 @@ impl<'a> Tokenizer<'a> {
             self.gen_punct(Punct::DoubleEqual)
         } else if self.look_ahead_byte_matches('>') {
             self.stream.skip(1);
-            self.gen_punct(Punct::Arrow)
+            self.gen_punct(Punct::FatArrow)
         } else {
             self.gen_punct(Punct::Equal)
         }
@@ -479,6 +479,9 @@ impl<'a> Tokenizer<'a> {
         } else if self.look_ahead_byte_matches('=') {
             self.stream.skip(1);
             self.gen_punct(Punct::DashEqual)
+        } else if self.look_ahead_byte_matches('>') {
+            self.stream.skip(1);
+            self.gen_punct(Punct::ThinArrow)
         } else {
             self.gen_punct(Punct::Dash)
         }

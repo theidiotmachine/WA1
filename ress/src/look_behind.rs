@@ -74,7 +74,7 @@ mod test {
     fn six() {
         let first = RawToken::EoF;
         let second = RawToken::Ident;
-        let third = RawToken::Keyword(Keyword::Function);
+        let third = RawToken::Keyword(Keyword::Fn);
         let fourth = RawToken::Punct(Punct::Ampersand);
         let fifth = RawToken::Punct(Punct::Bang);
         let sixth = RawToken::Punct(Punct::Caret);

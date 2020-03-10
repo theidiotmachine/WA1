@@ -1,8 +1,6 @@
 # WA1
 
-WA1 is the working name for a language that compiles down to Web Assembly. It is an attempt at a powerful and fun language. 
-Although it has roots in TypeScript, it sheds a lot of the baggage that came from JavaScript, while borrowing concepts from other
-languages.
+WA1 is the working name for a language that compiles down to Web Assembly. 
 
 Yes, it needs a fancy name. At some point it will get that.
 
@@ -69,7 +67,7 @@ and manually call in your browser in the debugger by typing the function name (c
 
 # The language
 
-WA1 is a strongly-typed expression-based language, with its roots in TypeScript syntax. Here we use 'expression-based' to mean that, generally,
+WA1 is a strongly-typed expression-based language, which borrows from TypeScript, Rust and Scala. Here we use 'expression-based' to mean that, generally,
 the last value of a block is its return value, and you can compose expressions freely.
 
 Because we are not monsters, classic control flow also works, so you can still use `return` if you want.
@@ -77,27 +75,27 @@ Because we are not monsters, classic control flow also works, so you can still u
 So, a simple function is written like this. In simple build mode, use the export keyword to make it visible outside web assembly.
 
 ```
-export function mul(x: number, y: number): number {
-    x * y;
+export fn mul(x: number, y: number) -> number {
+    x * y
 }
 ```
 
 But this is also fine:
 
 ```
-function mul3(x: number, y: number, z: number): number {
-    return x * y * z;
+fn mul3(x: number, y: number, z: number) -> number {
+    return x * y * z
 }
 ```
 
 `if` is an expression too!
 
 ```
-export function negMax(x: number, y: number): number {
+export fn negMax(x: number, y: number) -> number {
     if(x > y)
-        -x;
+        -x
     else {
-        -y;
+        -y
     }
 }
 ```
@@ -105,18 +103,18 @@ export function negMax(x: number, y: number): number {
 But it doesn't need to be.
 
 ```
-export function bang(x: number): number {
+export fn bang(x: number) -> number {
     if(x <= 0)
-        return 0;
+        return 0
 
-    let out: number = 1.0;
+    let out: number = 1.0
 
     while(x > 0) {
-        out *= x;
-        x -= 1;
+        out *= x
+        x -= 1
     }
 
-    out;
+    out
 }
 ```
 
@@ -132,7 +130,7 @@ Currently the following features are supported.
 * bigint - a 64 bit int.
 * int - a 32 bit int. Will be auto-casted to number and bigint if needed. This means that an expression like this will actually be an int.
 ```
-let a = 0;
+let a = 0
 ```
 * boolean
 
@@ -142,15 +140,21 @@ As mentioned above, numeric types will auto-cast. If you need to manually invoke
 
 ```
 //totally spurious example
-let a = 9 as number;
+let a = 9 as number
 ```
 
 ### Functions
 
-Functions are declared as follows.
+Functions are declared as follows. Use thin arrows for explicit return type declaration, fat arrows will let the type engine figure it out.
 
 ```
-function name(arg: Type): Type {
+//explicit return type
+fn name(arg: Type) -> Type {
+    body
+}
+
+//implicit return type
+fn name(arg: Type) => {
     body
 }
 ```
@@ -158,14 +162,14 @@ function name(arg: Type): Type {
 Astonishingly, generic functions are supported. Here is the identity function. Not all types can be applied, but that's a work in progress.
 
 ```
-function id<T>(x: T): T { x; }
+function id<T>(x: T) -> T { x }
 ```
 
 To use them you must provide the types.
 
 ```
-let n1: number = 4;
-let n2 = id<number>(n1);
+let n1: number = 4
+let n2 = id<number>(n1)
 ```
 
 They are not actually true generics. They specialize for some types -- at the moment, the numeric types -- which means I can avoid a box. It also means
@@ -176,7 +180,7 @@ they are sort of a mix between templates and generics. Some days I like saying '
 Local and global variables are declared like this.
 
 ```
-let s = expr;
+let s = expr
 ```
 
 The type of s is inferred from the expression you assign it.
@@ -309,6 +313,7 @@ A leading `__` is pronounced 'unsafe', by the way.
 1. Function calling
     1. [x] simple static function call
     1. [ ] functions as first class objects (but not closures)
+    1. [ ] allow tuples to be used as function args (so e.g. instead of `f(1, 2)`, we also allow `let t = (1, 2); f t`)
 1. Known bugs
     1. [ ] fairly sure prefix unary operators are wrong - may need to start at a precedence
     1. [ ] the lexer doesn't parse negative numbers!
@@ -341,6 +346,8 @@ A leading `__` is pronounced 'unsafe', by the way.
         1. [ ] means map over a union is well understood, I guess
     1. opt: booleans are 1 bit in structs, 32 bits on the heap?
 1. Types
+    1. [ ] tuples - are just collections of locals, so pass by value (needs wasm multi value for some things)
+    1. [ ] tuples - need a syntax for tuple 1. Probably `Tuple<int>(3)`
     1. [ ] type keyword is a first class type, not an alias (might as well, eh? I always disliked that Scala and TS do that)
 1. Closure generation and usage
     1. [ ] closure capture

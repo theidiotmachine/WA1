@@ -448,7 +448,7 @@ mod test {
     console.log('stuff');
 }";
         let expectation = vec![
-            Token::Keyword(Keyword::Function),
+            Token::Keyword(Keyword::Fn),
             Token::Ident("thing".into()),
             Token::Punct(Punct::OpenParen),
             Token::Punct(Punct::CloseParen),
@@ -486,7 +486,7 @@ this.y = 0;
         );
         let expected = vec![
             Token::Punct(Punct::OpenParen), //"("
-            Token::Keyword(Keyword::Function),
+            Token::Keyword(Keyword::Fn),
             Token::Punct(Punct::OpenParen),  //"("
             Token::Punct(Punct::CloseParen), //")"
             Token::Punct(Punct::OpenBrace),  //"{"

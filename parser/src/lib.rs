@@ -46,9 +46,11 @@ macro_rules! expect_ok {
 #[macro_export]
 macro_rules! assert_semicolon {
     ($s:ident) => (
-        let next = $s.next_item()?;
-        if !next.token.matches_punct(Punct::SemiColon) {
-            return $s.expected_token_error(&next, &[&";"]);
+        if !$s.context.has_line_term {
+            let next = $s.next_item()?;
+            if !next.token.matches_punct(Punct::SemiColon) {
+                return $s.expected_token_error(&next, &[&";"]);
+            }
         }
     )
 }
@@ -380,7 +382,8 @@ struct ParserFuncContext{
     pub local_vars: Vec<VariableDecl>,
     pub local_var_map: HashMap<String, u32>,
     pub closure: Vec<ClosureRef>,
-    pub func_return_type: Type,
+    pub given_func_return_type: Type,
+    pub implied_func_return_type: Type,
 }
 
 impl ParserFuncContext{
@@ -389,7 +392,8 @@ impl ParserFuncContext{
             local_vars: vec![],
             local_var_map: HashMap::new(),
             closure: vec![],
-            func_return_type: Type::Undeclared,
+            given_func_return_type: Type::Undeclared,
+            implied_func_return_type: Type::Undeclared,
         }
     }
 }

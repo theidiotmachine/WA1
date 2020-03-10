@@ -39,6 +39,10 @@ impl SourceLocation {
     pub const fn new(start: Position, end: Position) -> Self {
         Self { start, end }
     }
+
+    pub fn extend_right(&mut self, right: &SourceLocation) {
+        self.end = right.end.clone();
+    }
 }
 
 impl ::std::fmt::Display for SourceLocation {

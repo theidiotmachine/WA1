@@ -10,7 +10,7 @@ __struct S2 {
     y: number;
 }
 
-export function test(): void {
+export fn test() -> int {
     let s1_1 = __static S1{ x: 3 };
     let s1_2 = basic.id<S1>(s1_1);
     assert.assert(s1_1.x == s1_2.x);
@@ -25,4 +25,5 @@ export function test(): void {
 
     let oS = __Some(s1_1);
     assert.assert(option.__Option_unwrap<S1>(oS).x == 3);
+    1;
 }

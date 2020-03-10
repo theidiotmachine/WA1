@@ -1,4 +1,4 @@
-export function __Option_unwrap<T: __struct T>(x: __Option<T>): T {
+export fn __Option_unwrap<T: __struct T>(x: __Option<T>) -> T {
     if (x == __null) {
         __trap();
     } else {
@@ -6,18 +6,18 @@ export function __Option_unwrap<T: __struct T>(x: __Option<T>): T {
     }
 }
 
-export function __Some_unwrap<T: __struct T>(x: __Some<T>): T {
+export fn __Some_unwrap<T: __struct T>(x: __Some<T>) -> T {
     x as __ptr as T;
 }
 
-export function __Option_isSome<T: __struct T>(x: __Option<T>): boolean {
+export fn __Option_isSome<T: __struct T>(x: __Option<T>) -> boolean {
     x != __null;
 } /*__typeguard {
     true => x as __Some<T>;
     false => x as __null;
 }*/
 
-export function __Option_isNull<T: __struct T>(x: __Option<T>): boolean {
+export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> boolean {
     x == __null;
 } /*__typeguard {
     true => x as __null;
