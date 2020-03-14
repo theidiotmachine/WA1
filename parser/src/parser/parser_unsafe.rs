@@ -14,10 +14,10 @@ use lazy_static;
 
 lazy_static!{
     static ref UNSAFE_SIZE_T_METHODS: Vec<FuncDecl> = vec![
-        FuncDecl{name: String::from("countLeadingZeros"), return_type: Type::Int, args: vec![], export: false, generic_impl: false},
-        FuncDecl{name: String::from("countTrailingZeros"), return_type: Type::Int, args: vec![], export: false, generic_impl: false},
-        FuncDecl{name: String::from("shiftLeft"), return_type: Type::UnsafeSizeT, args: vec![FuncArg{name: String::from("n"), r#type: Type::Int}], export: false, generic_impl: false},
-        FuncDecl{name: String::from("shiftRight"), return_type: Type::UnsafeSizeT, args: vec![FuncArg{name: String::from("n"), r#type: Type::Int}], export: false, generic_impl: false},
+        FuncDecl{name: String::from("countLeadingZeros"), return_type: Type::Int, args: vec![], export: false, generic_impl: false, type_guard: None,},
+        FuncDecl{name: String::from("countTrailingZeros"), return_type: Type::Int, args: vec![], export: false, generic_impl: false, type_guard: None,},
+        FuncDecl{name: String::from("shiftLeft"), return_type: Type::UnsafeSizeT, args: vec![FuncArg{name: String::from("n"), r#type: Type::Int}], export: false, generic_impl: false, type_guard: None,},
+        FuncDecl{name: String::from("shiftRight"), return_type: Type::UnsafeSizeT, args: vec![FuncArg{name: String::from("n"), r#type: Type::Int}], export: false, generic_impl: false, type_guard: None,},
     ];
 }
 
@@ -293,7 +293,7 @@ impl<'a> Parser<'a> {
         let expr = r_expr.unwrap();
         let lhs_clone = lhs.clone();
         let cast_expr = cast_typed_expr(&Type::Int, Box::new(expr), true, parser_context);
-        expect_punct!(self, parser_context, Punct::CloseBracket, lhs_clone);
+        expect_punct!(self, parser_context, Punct::CloseBracket);
         TypedExpr{
             expr: Expr::DynamicMember(Box::new(lhs_clone), Box::new(cast_expr)),
             r#type: inner_type.clone(),

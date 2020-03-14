@@ -742,7 +742,7 @@ pub(crate) fn compile_expr(
             ret_val = false;
         },
 
-        Expr::StaticFuncCall(name, args) => {
+        Expr::StaticFuncCall(name, _, args) => {
             for arg in args {
                 compile_expr(&arg, context, local_var_map, true, wasm_module, wasm_expr, errors);
             }
@@ -824,14 +824,14 @@ pub(crate) fn compile_expr(
             wasm_expr.data.push(WasmInstr::End);
         },
 
-        Expr::VariableDecl(v) => {
+        Expr::VariableInit{internal_name, init} => {
             //first,  run the init expression
-            match &v.init {
+            match &**init {
                 Some(expr) => {
                     compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
             
                     //then set the variable
-                    let idx = local_var_map.get(&v.internal_name).unwrap();
+                    let idx = local_var_map.get(internal_name).unwrap();
                     wasm_expr.data.push(WasmInstr::SetLocal(*idx));
                 },
                 _ => {}

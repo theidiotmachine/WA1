@@ -54,6 +54,7 @@ pub enum Error {
     FailedTypeArgConstraint(SourceLocation),
     UnresolvedTypeArg(SourceLocation, String),
     DuplicateGlobalVariable(SourceLocation, String),
+    TypeGuardExpectingLiteral(SourceLocation),
 }
 
 impl Display for Error {
@@ -105,6 +106,7 @@ impl Display for Error {
             Error::MissingTypeArgs(ref loc) => write!(f, "ERROR {}: not all type arguments supplied", loc),
             Error::UnresolvedTypeArg(ref loc, ref name) => write!(f, "INTERNAL ERROR {}: unresolved type arg {}", loc, name),
             Error::DuplicateGlobalVariable(ref loc, ref name) => write!(f, "ERROR {}: duplicate global variable declaration {}", loc, name),
+            Error::TypeGuardExpectingLiteral(ref loc) => write!(f, "ERROR {}: type guard must be a literal", loc),
         }
     }
 }

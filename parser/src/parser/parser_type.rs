@@ -61,7 +61,6 @@ impl<'a> Parser<'a> {
         loc: &SourceLocation,
         parser_context: &mut ParserContext,
     ) -> Type {
-        let err_ret = Type::Undeclared;
         match keyword {
             Keyword::Void => Type::RealVoid,
             Keyword::Boolean => Type::Boolean,
@@ -70,18 +69,18 @@ impl<'a> Parser<'a> {
             Keyword::Number => Type::Number,
             Keyword::String => Type::String,
             Keyword::Array => {
-                expect_punct!(self, parser_context, Punct::LessThan, err_ret);
+                expect_punct!(self, parser_context, Punct::LessThan);
                 let inner = self.parse_type(parser_context);
-                expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
+                expect_punct!(self, parser_context, Punct::GreaterThan);
                 Type::Array(Box::new(inner))
             },
             Keyword::UnsafeArray => {
                 if !parser_context.is_unsafe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
-                expect_punct!(self, parser_context, Punct::LessThan, err_ret);
+                expect_punct!(self, parser_context, Punct::LessThan);
                 let inner = self.parse_type(parser_context);
-                expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
+                expect_punct!(self, parser_context, Punct::GreaterThan);
                 Type::UnsafeArray(Box::new(inner))
             },
             Keyword::BigInt => Type::BigInt,
@@ -102,27 +101,27 @@ impl<'a> Parser<'a> {
                 Type::UnsafeSizeT
             },
             Keyword::Option => {
-                expect_punct!(self, parser_context, Punct::LessThan, err_ret);
+                expect_punct!(self, parser_context, Punct::LessThan);
                 let inner = self.parse_type(parser_context);
-                expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
+                expect_punct!(self, parser_context, Punct::GreaterThan);
                 Type::Option(Box::new(inner))
             },
             Keyword::UnsafeOption => {
                 if !parser_context.is_unsafe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
-                expect_punct!(self, parser_context, Punct::LessThan, err_ret);
+                expect_punct!(self, parser_context, Punct::LessThan);
                 let inner = self.parse_type(parser_context);
-                expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
+                expect_punct!(self, parser_context, Punct::GreaterThan);
                 Type::UnsafeOption(Box::new(inner))
             },
             Keyword::UnsafeSome => {
                 if !parser_context.is_unsafe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
-                expect_punct!(self, parser_context, Punct::LessThan, err_ret);
+                expect_punct!(self, parser_context, Punct::LessThan);
                 let inner = self.parse_type(parser_context);
-                expect_punct!(self, parser_context, Punct::GreaterThan, err_ret);
+                expect_punct!(self, parser_context, Punct::GreaterThan);
                 Type::UnsafeSome(Box::new(inner))
             },
             

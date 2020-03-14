@@ -55,6 +55,19 @@ macro_rules! assert_semicolon {
     )
 }
 
+#[macro_export]
+macro_rules! expect_semicolon {
+    ($self:ident, $parser_context:ident) => (
+        if !$self.context.has_line_term {
+            let next = $self.peek_next_item();
+            if next.token.matches_punct(Punct::SemiColon) {
+                $self.skip_next_item();
+            } else {
+                $parser_context.push_err(Error::UnexpectedToken(next.location.clone(), format!("Expected ';' or line end")));
+            }
+        }
+    )
+}
 /// Get the next token, returning if it is not ok. Usage: `let next = assert_next!(self);`
 #[macro_export]
 macro_rules! assert_next {
@@ -73,42 +86,24 @@ macro_rules! assert_punct {
 
 #[macro_export]
 macro_rules! expect_punct {
-    ($self:ident, $parser_context:ident, $punct:path, $error_return_value:ident) => (
-        let e_next = $self.next_item();
-        match e_next {
-            Err(e) => {
-                $parser_context.push_err(e);
-                return $error_return_value;
-            },
-            Ok(next) => {
-                if !next.token.matches_punct($punct) {
-                    $parser_context.push_err(Error::UnexpectedToken(
-                        next.location.clone(),
-                        format!("Expected {}; found {:?}", $punct.to_string(), next.token),
-                    ));
-                }
-            } 
+    ($self:ident, $parser_context:ident, $punct:path) => (
+        let next = $self.peek_next_item();
+        if next.token.matches_punct($punct) {
+            $self.skip_next_item();
+        } else {
+            $parser_context.push_err(Error::UnexpectedToken(next.location.clone(), format!("Expected '{}", $punct.to_string())));
         }
     )
 }
 
 #[macro_export]
 macro_rules! expect_keyword {
-    ($self:ident, $parser_context:ident, $keyword:path, $error_return_value:ident) => (
-        let e_next = $self.next_item();
-        match e_next {
-            Err(e) => {
-                $parser_context.push_err(e);
-                return $error_return_value;
-            },
-            Ok(next) => {
-                if !next.token.matches_keyword($keyword) {
-                    $parser_context.push_err(Error::UnexpectedToken(
-                        next.location.clone(),
-                        format!("Expected {}; found {:?}", $keyword.to_string(), next.token),
-                    ));
-                }
-            } 
+    ($self:ident, $parser_context:ident, $keyword:path) => (
+        let next = $self.peek_next_item();
+        if next.token.matches_keyword($keyword) {
+            $self.skip_next_item();
+        } else {
+            $parser_context.push_err(Error::UnexpectedToken(next.location.clone(), format!("Expected '{}", $keyword.to_string())));
         }
     )
 }
@@ -247,6 +242,35 @@ pub trait Importer{
     fn import(&mut self, import_path_name: &String, from_path_name: &String) -> Result<Imports, String>;
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum ScopedVar{
+    /// Actual local variable
+    Local{
+        internal_name: String,
+        r#type: Type,
+        constant: bool,
+    },
+    /// Closure reference. Looks like a local, actually a member of the function's closure
+    ClosureRef{
+        internal_name: String,
+        r#type: Type,
+        constant: bool,
+    },
+}
+
+#[derive(Debug)]
+struct Scope{
+    pub var_names: HashMap<String, ScopedVar>,
+}
+
+impl<> Default for Scope<> {
+    fn default() -> Self {
+        Self {
+            var_names: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct TypeScope{
     pub var_names: HashMap<String, TypeArg>,
@@ -280,6 +304,10 @@ struct ParserContext {
 
     /// Uniqueness counter
     counter: u64,
+
+    /// local variables
+    func_var_stack: Vec<Scope>,
+    block_var_stack: Vec<Scope>,
 }
 
 impl ParserContext {
@@ -298,6 +326,8 @@ impl ParserContext {
             file_name: file_name.clone(),
             type_var_stack: vec![],
             counter: 0,
+            block_var_stack: Vec::new(),
+            func_var_stack: Vec::new(),
         }
     }
 
@@ -369,6 +399,93 @@ impl ParserContext {
     fn get_global_decl(&self, id: &String) -> Option<&GlobalVariableDecl> {
         self.global_decls.iter().find(|&x| x.name == id.to_string())
     }
+
+    fn push_empty_block_scope(&mut self) {
+        self.block_var_stack.push(Scope::default());
+    }
+
+    fn push_empty_func_scope(&mut self) {
+        self.func_var_stack.push(Scope::default());
+    }
+
+    fn push_block_scope(&mut self) {
+        let o_head = self.block_var_stack.last();
+        match o_head {
+            None => self.push_empty_block_scope(),
+            Some(head) => {
+                let mut new_var_names: HashMap<String, ScopedVar> = HashMap::new();
+                
+                for (key, val) in head.var_names.iter() {
+                    new_var_names.insert(key.clone(), val.clone());
+                }
+
+                self.block_var_stack.push(Scope{var_names: new_var_names});
+            }
+        }
+    }
+
+    fn push_func_scope(&mut self) {
+        let o_head = self.func_var_stack.last();
+        match o_head {
+            None => {
+                self.push_empty_func_scope();
+                self.push_empty_block_scope();
+            },
+            Some(head) => {
+                let mut new_var_names: HashMap<String, ScopedVar> = HashMap::new();
+                
+                for (key, val) in head.var_names.iter() {
+                    let new_val = match val {
+                        ScopedVar::Local{internal_name, r#type, constant} => 
+                            ScopedVar::ClosureRef{internal_name: internal_name.clone(), constant: *constant, r#type: r#type.clone()},
+                        ScopedVar::ClosureRef{internal_name, r#type, constant} => 
+                            ScopedVar::ClosureRef{internal_name: internal_name.clone(), constant: *constant, r#type: r#type.clone()},
+                    };
+                    new_var_names.insert(key.clone(), new_val);
+                }
+
+                self.func_var_stack.push(Scope{var_names: new_var_names.clone()});
+
+                self.block_var_stack.push(Scope{var_names: new_var_names});
+            }
+        }
+    }
+
+    fn pop_block_scope(&mut self) {
+        self.block_var_stack.pop();
+    }
+
+    fn pop_func_scope(&mut self) {
+        self.block_var_stack.pop();
+        self.func_var_stack.pop();
+    }
+
+    fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: &Type, constant: bool,) {
+        let o_head = self.func_var_stack.last_mut();
+        match o_head {
+            None => panic!(),
+            Some(head) => {
+                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant});
+            }
+        }
+
+        let o_head = self.block_var_stack.last_mut();
+        match o_head {
+            None => panic!(),
+            Some(head) => {
+                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant});
+            }
+        }
+    }
+
+    fn get_scoped_var(&mut self, var_name: &String) -> Option<&ScopedVar> {
+        match self.block_var_stack.last() {
+            None => None,
+            Some(s) => {
+                s.var_names.get(var_name)
+            } 
+        }
+    }
 }
 
 impl ErrRecorder for ParserContext {
@@ -379,7 +496,7 @@ impl ErrRecorder for ParserContext {
 
 #[derive(Debug)]
 struct ParserFuncContext{
-    pub local_vars: Vec<VariableDecl>,
+    pub local_vars: Vec<LocalVar>,
     pub local_var_map: HashMap<String, u32>,
     pub closure: Vec<ClosureRef>,
     pub given_func_return_type: Type,

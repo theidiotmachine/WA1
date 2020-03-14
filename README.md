@@ -278,12 +278,12 @@ A leading `__` is pronounced 'unsafe', by the way.
 1. Typing 
     1. [x] every expr needs a return type!
     1. [ ] functions decls are exprs, not statements
-    1. [ ] Infer return types
+    1. [x] Infer return types
     1. [ ] Handle `never` properly - i.e. complain about dead code
     1. [x] do proper auto-widening. means you can widen anything to unknown. Needed for templates, I think. 
         1. [x] means subsuming the number code, which is probably a good thing
     1. [ ] typescript-style const types, where a = 0 means typeof a == 0
-    1. [ ] move the bin op types from the ast
+    1. [x] move the bin op types from the ast
 1. Expression based language
     1. [x] blocks return a value
     1. [x] no need for a return statement (but still supported - what is this, scala?)
@@ -299,6 +299,7 @@ A leading `__` is pronounced 'unsafe', by the way.
     1. [x] global variables
     1. [ ] match statements 
         1. [ ] implement [this](http://cmph.sourceforge.net/papers/esa09.pdf) for strings
+    1. [ ] assign is void
 1. Strings
     1. [ ] a 'char' is a unicode grapheme cluster - see [this](https://manishearth.github.io/blog/2017/01/14/stop-ascribing-meaning-to-unicode-code-points/) - this guy has some cool rust libs
 1. Optimise steps. These should be on even on O0
@@ -310,6 +311,7 @@ A leading `__` is pronounced 'unsafe', by the way.
     1. [ ] == 0 is eqz
     1. [ ] globals that are init to a const should use the wasm global init mechanism
     1. [ ] when calling __static, copy true data into the data section and drop the initializer expression
+    1. [ ] tail recusrion
 1. Function calling
     1. [x] simple static function call
     1. [ ] functions as first class objects (but not closures)
@@ -356,6 +358,7 @@ A leading `__` is pronounced 'unsafe', by the way.
 1. templerics
     1. [x] for funcs generate meta code to turn into templates
     1. [ ] for types generate meta types
+    1. [ ] implicit type args on instantiation
 1. containers
     1. [ ] arrays
     1. [ ] hashmaps (probably called 'objects' to be JS friendly)
@@ -377,6 +380,7 @@ A leading `__` is pronounced 'unsafe', by the way.
 1. Linker
     1. [x] object file format that contains
     1. [x] use wasm-ld
+    1. [ ] `fatal-warnings`
 1. tool chain
     1. [ ] npm 
     1. [ ] binaryen optimizer

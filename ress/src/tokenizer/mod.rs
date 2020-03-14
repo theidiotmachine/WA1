@@ -160,6 +160,7 @@ impl<'a> Tokenizer<'a> {
             9 if ident == b"undefined" => Some(RawToken::Keyword(Keyword::Undefined)),
             10 if ident == b"instanceof" => Some(RawToken::Keyword(Keyword::InstanceOf)),
             10 if ident == b"implements" => Some(RawToken::Keyword(Keyword::Implements)),
+            11 if ident == b"__typeguard" => Some(RawToken::Keyword(Keyword::UnsafeTypeGuard)),
             11 if ident == b"constructor" => Some(RawToken::Keyword(Keyword::Constructor)),
             
             _ => None,

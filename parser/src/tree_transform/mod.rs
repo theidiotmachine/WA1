@@ -7,6 +7,23 @@ pub trait Transform{
     fn transform_expr(&mut self, expr: &Expr, loc: &SourceLocation, parser_context: &mut dyn ErrRecorder) -> Option<Expr>;
     fn transform_typed_lvalue_expr(&mut self, typed_lvalue_expr: &TypedLValueExpr, parser_context: &mut dyn ErrRecorder) -> Option<TypedLValueExpr>;
     fn transform_lvalue_expr(&mut self, lvalue_expr: &LValueExpr, loc: &SourceLocation, parser_context: &mut dyn ErrRecorder) -> Option<LValueExpr>;
+    fn transform_func_decl(&mut self, lvalue_expr: &FuncDecl, loc: &SourceLocation, parser_context: &mut dyn ErrRecorder) -> Option<FuncDecl>;
+}
+
+pub fn transform_func_decl(
+    fund_decl: &FuncDecl,
+    transform: &mut dyn Transform,
+    loc: &SourceLocation, 
+    parser_context: &mut dyn ErrRecorder,
+) -> FuncDecl {
+    let first_pass = transform.transform_func_decl(fund_decl, loc, parser_context);
+    match first_pass{
+        Some(out) => return out,
+        None => {}
+    }
+
+    FuncDecl{name: fund_decl.name.clone(), return_type: fund_decl.return_type.clone(), args: fund_decl.args.clone(), export: fund_decl.export, 
+        generic_impl: fund_decl.generic_impl, type_guard: fund_decl.type_guard.clone()}
 }
 
 pub fn transform_lvalue_expr(
@@ -156,20 +173,16 @@ pub fn transform_expr(
         Expr::Parens(te) => Expr::Parens(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::Return(o_te) => Expr::Return(Box::new(o_te.as_ref().as_ref().map(|te| transform_typed_expr(&te, transform, parser_context)))),
         Expr::SizeOf(t) => Expr::SizeOf(t.clone()),
-        Expr::StaticFuncCall(s, v) => Expr::StaticFuncCall(s.clone(), transform_typed_exprs(v, transform, parser_context)),
+        Expr::StaticFuncCall(s, fd, v) => Expr::StaticFuncCall(s.clone(), transform_func_decl(fd, transform, loc, parser_context),
+            transform_typed_exprs(v, transform, parser_context)),
         Expr::TupleLiteral(v) => Expr::TupleLiteral(transform_typed_exprs(v, transform, parser_context)),
         Expr::TypeLiteral(t) => Expr::TypeLiteral(t.clone()),
         Expr::UnaryOperator{expr: te, op} => Expr::UnaryOperator{expr: Box::new(transform_typed_expr(te, transform, parser_context)), op: *op},
-        Expr::VariableDecl(vd) => {
-            Expr::VariableDecl(Box::new(VariableDecl{
-                internal_name: vd.internal_name.clone(),
-                orig_name: vd.orig_name.clone(),
-                r#type: vd.r#type.clone(),
-                constant: vd.constant,
-                init: vd.init.as_ref().map(|te| transform_typed_expr(&te, transform, parser_context)),
-                closure_source: vd.closure_source,
-                arg: vd.arg
-            }))
+        Expr::VariableInit{internal_name, init} => {
+            Expr::VariableInit{
+                internal_name: internal_name.clone(),
+                init: Box::new(init.as_ref().as_ref().map(|te| transform_typed_expr(&te, transform, parser_context))),
+            }
         },
         Expr::While(te1, te2) => Expr::While(
             Box::new(transform_typed_expr(te1, transform, parser_context)), 
