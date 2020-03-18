@@ -126,7 +126,7 @@ impl<'a> Parser<'a> {
             },
             
             _ => {
-                parser_context.errors.push(Error::InvalidTypeName(loc.clone(), keyword.as_str().to_owned()));
+                parser_context.push_err(Error::InvalidTypeName(loc.clone(), keyword.as_str().to_owned()));
                 Type::Undeclared
             }
         }
@@ -192,13 +192,13 @@ impl<'a> Parser<'a> {
 
             Token::UnsafeNull => {
                 if !parser_context.is_unsafe {
-                    parser_context.errors.push(Error::UnsafeCodeNotAllowed(next.location.clone()));
+                    parser_context.push_err(Error::UnsafeCodeNotAllowed(next.location.clone()));
                 }
                 Type::UnsafeNull
             },
 
             _ => {
-                parser_context.errors.push(Error::InvalidType(self.current_position));
+                parser_context.push_err(Error::InvalidType(self.current_position));
                 Type::Undeclared
             }
         }

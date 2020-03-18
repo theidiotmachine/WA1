@@ -205,13 +205,13 @@ fn create_cast(want: &Type, got: &TypedExpr, cast: &TypeCast) -> Option<TypedExp
     }
 }
 
-fn try_create_cast(want: &Type, got: &TypedExpr, implicit: bool) -> Option<TypedExpr> {
-    let type_cast = types::cast::try_cast(&got.r#type, want, implicit);
+fn try_create_cast(want: &Type, got: &TypedExpr, cast_type: CastType) -> Option<TypedExpr> {
+    let type_cast = types::cast::try_cast(&got.r#type, want, cast_type);
     create_cast(want, got, &type_cast)
 }
 
-fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, implicit: bool, parser_context: &mut ParserContext) -> TypedExpr {
-    let type_cast = types::cast::try_cast(&got.r#type, want, implicit);
+fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, cast_type: CastType, parser_context: &mut ParserContext) -> TypedExpr {
+    let type_cast = types::cast::try_cast(&got.r#type, want, cast_type);
     let loc = got.loc.clone();
     let got_is_const = got.is_const;
     match type_cast {
@@ -219,10 +219,13 @@ fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, implicit: bool, parser_cont
         TypeCast::IntToBigIntWiden => TypedExpr{expr: Expr::IntToBigInt(got), r#type: Type::BigInt, is_const: true, loc: loc},
         TypeCast::IntToNumberWiden => TypedExpr{expr: Expr::IntToNumber(got), r#type: Type::Number, is_const: true, loc: loc},
         TypeCast::None => {
-            if implicit {
-                parser_context.push_err(Error::TypeFailure(loc, want.clone(), got.r#type.clone()));
-            } else {
-                parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone()));
+            match cast_type {
+                CastType::Implicit => 
+                    parser_context.push_err(Error::TypeFailure(loc, want.clone(), got.r#type.clone())),
+                CastType::Explicit => 
+                    parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone())),
+                CastType::GenericForce => 
+                    parser_context.push_err(Error::InternalError(loc)),
             }
             TypedExpr{expr: Expr::FreeTypeWiden(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
         },

@@ -49,8 +49,8 @@ pub struct TypeGuardBranch {
     /// The literal expression that tells us the type. 
     pub literal: TypedExpr,
     pub arg_idx: usize,
-    /// The cast expr to apply
-    pub cast_expr: TypedExpr,
+    /// The cast fn to apply
+    pub cast_fn_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

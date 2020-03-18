@@ -292,7 +292,7 @@ impl<'a> Parser<'a> {
         } 
         let expr = r_expr.unwrap();
         let lhs_clone = lhs.clone();
-        let cast_expr = cast_typed_expr(&Type::Int, Box::new(expr), true, parser_context);
+        let cast_expr = cast_typed_expr(&Type::Int, Box::new(expr), CastType::Implicit, parser_context);
         expect_punct!(self, parser_context, Punct::CloseBracket);
         TypedExpr{
             expr: Expr::DynamicMember(Box::new(lhs_clone), Box::new(cast_expr)),

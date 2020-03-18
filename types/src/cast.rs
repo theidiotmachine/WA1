@@ -8,6 +8,7 @@ pub mod prelude {
     pub use super::try_cast;
     pub use super::FuncCallTypeCast;
     pub use super::get_type_casts_for_function_set;
+    pub use super::CastType;
 }
 
 /// Enum describing the types of implicit casts available
@@ -27,8 +28,15 @@ pub enum TypeCast{
     NotNeeded,
 }
 
+#[derive(Debug, Clone, PartialEq, Copy)]
+pub enum CastType{
+    Implicit,
+    Explicit,
+    GenericForce
+}
+
 /// Try casting a type to another type.
-pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
+pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
     if *from == *to {
         return TypeCast::NotNeeded;
     }
@@ -49,7 +57,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
         Type::Int => {
             match from {
                 Type::IntLiteral(_) => TypeCast::FreeWiden,
-                Type::UnsafeSizeT => if implicit{ TypeCast::None } else {TypeCast::FreeWiden}
+                Type::UnsafeSizeT => if cast_type == CastType::Implicit { TypeCast::None } else {TypeCast::FreeWiden}
                 _ => TypeCast::None,
             }
         },
@@ -79,22 +87,22 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
         // you cast them from all sorts of things
         Type::UnsafePtr => {
             match from {
-                Type::IntLiteral(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
-                Type::Int => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
-                Type::UnsafeStruct{name: _} => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::IntLiteral(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::Int => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafeStruct{name: _} => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 Type::UnsafeSizeT => TypeCast::FreeWiden,
-                Type::UnsafeOption(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
-                Type::UnsafeSome(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
-                Type::UnsafeNull => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafeOption(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafeSome(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafeNull => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 _ => TypeCast::None,
             }
         },
         //again, this is wrong, but
         Type::UnsafeSizeT => {
             match from {
-                Type::IntLiteral(_) => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
-                Type::Int => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
-                Type::UnsafePtr => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::IntLiteral(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::Int => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafePtr => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeWiden },
                 _ => TypeCast::None,
             }
         },
@@ -102,8 +110,6 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
             match from {
                 Type::Option(inner_from) => {
                     if **inner_from == Type::Never {
-                        // Option(Never) is 'null' which is None(T) in my language. Yes, I have somewhat abused the 
-                        // type system for options
                         TypeCast::FreeWiden
                     } else {
                         TypeCast::None
@@ -115,30 +121,17 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
 
         Type::UnsafeOption(inner_to) => {
             match from {
-                Type::UnsafeOption(inner_from) => {
-                    /*
-                    if **inner_from == Type::Never {
-                        // UnsafeOption(Never) is '__null' which is None(T) in my language. Yes, I have somewhat abused the 
-                        // type system for options
-                        TypeCast::FreeWiden
-                    } else {
-                        */
-                        try_cast(inner_from, inner_to, implicit)
-                    //}
-                },
-                Type::UnsafeNull => {
-                    TypeCast::FreeWiden
-                },
-                Type::UnsafeSome(inner_from) => {
-                    try_cast(inner_from, inner_to, implicit)
-                },
+                Type::UnsafeOption(inner_from) => try_cast(inner_from, inner_to, cast_type),
+                Type::UnsafeNull => TypeCast::FreeWiden,
+                Type::UnsafeSome(inner_from) => try_cast(inner_from, inner_to, cast_type),
                 _ => TypeCast::None,
             }
         },
 
         Type::UnsafeStruct{name: _} => {
             match from {
-                Type::UnsafePtr => if implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::UnsafePtr => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeWiden },
+                Type::Int => if cast_type == CastType::GenericForce { TypeCast::FreeWiden } else { TypeCast::None },
                 _ => TypeCast::None,
             }
         },
@@ -147,7 +140,7 @@ pub fn try_cast(from: &Type, to: &Type, implicit: bool) -> TypeCast {
             match constraint{
                 TypeConstraint::None => TypeCast::NotNeeded,
                 TypeConstraint::IsAStruct => {
-                    try_cast(from, &Type::UnsafeStruct{name: String::from("")}, implicit)
+                    try_cast(from, &Type::UnsafeStruct{name: String::from("")}, cast_type)
                 }
             }
         }
@@ -180,7 +173,7 @@ pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, prop
 
         for proposed_arg_type in proposed_arg_types {
             let wanted_type = possible_func_type.in_types.get(idx).unwrap();
-            let type_cast = try_cast(proposed_arg_type, wanted_type, true);
+            let type_cast = try_cast(proposed_arg_type, wanted_type, CastType::Implicit);
             match type_cast {
                 TypeCast::NotNeeded => this_arg_type_casts.push(type_cast),
                 TypeCast::FreeWiden => {

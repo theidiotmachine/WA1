@@ -34,7 +34,7 @@ pub fn get_runtime_type_for_generic(
     match arg_type {
         Type::BigInt => Some(Type::BigInt),
         Type::BigIntLiteral(_) => Some(Type::BigInt),
-        Type::Boolean => Some(Type::Boolean),
+        Type::Boolean => Some(Type::Int),
         Type::FloatLiteral(_) => Some(Type::Number),
         Type::Int => Some(Type::Int),
         Type::IntLiteral(_) => Some(Type::Int),

@@ -44,7 +44,7 @@ pub enum Error {
     AsNeedsType(SourceLocation),
     RecursiveTypeDefinition(SourceLocation),
     UnsafeCodeNotAllowed(SourceLocation),
-    Dummy(SourceLocation),
+    InternalError(SourceLocation),
     CompileFailed(String),
     ImportFailed(SourceLocation, String),
     UnrecognizedTypeArg(SourceLocation),
@@ -55,6 +55,7 @@ pub enum Error {
     UnresolvedTypeArg(SourceLocation, String),
     DuplicateGlobalVariable(SourceLocation, String),
     TypeGuardExpectingLiteral(SourceLocation),
+    FailedGenericDeduction(SourceLocation, String),
 }
 
 impl Display for Error {
@@ -64,7 +65,7 @@ impl Display for Error {
             Error::UnexpectedEoF(ref msg) => write!(f, "Unexpectedly found the end of the file: {}", msg),
             Error::ParseAfterEoF => write!(f, "Parser attempted to get the next token after finding the end of the file"),
             Error::InvalidTypeName(ref loc, ref msg) => write!(f, "ERROR {}: Invalid type name {}", loc, msg),
-            Error::InvalidType(ref loc) => write!(f, "Invalid type, {}", loc),
+            Error::InvalidType(ref loc) => write!(f, "ERROR {}: Invalid type", loc),
             Error::Other(ref msg) => write!(f, "{}", msg),
             Error::NotYetImplemented(ref loc, ref msg) => write!(f, "ERROR {}: not yet implemented: {}", loc, msg),
             Error::VariableNotRecognized(ref loc, ref var_name) => write!(f, "ERROR {}: identifier not recognized: {}", loc, var_name),
@@ -96,7 +97,7 @@ impl Display for Error {
             Error::AsNeedsType(ref loc) => write!(f, "ERROR {}: 'as' must have a type literal on its rhs", loc),
             Error::RecursiveTypeDefinition(ref loc) => write!(f, "ERROR {}: recursive type definition not allowed", loc),
             Error::UnsafeCodeNotAllowed(ref loc) => write!(f, "ERROR {}: unsafe code not allowed to be called without --unsafe", loc),
-            Error::Dummy(ref loc) => write!(f, "ERROR {}: internal error", loc),
+            Error::InternalError(ref loc) => write!(f, "INTERNAL ERROR {}: internal error", loc),
             Error::CompileFailed(ref err) => write!(f, "ERROR: could not compile because {}", err),
             Error::ImportFailed(ref loc, ref mes) => write!(f, "ERROR {}: import failed because {}", loc, mes),
             Error::UnrecognizedTypeArg(ref loc) => write!(f, "ERROR {}: can't parse type arg", loc),
@@ -107,6 +108,7 @@ impl Display for Error {
             Error::UnresolvedTypeArg(ref loc, ref name) => write!(f, "INTERNAL ERROR {}: unresolved type arg {}", loc, name),
             Error::DuplicateGlobalVariable(ref loc, ref name) => write!(f, "ERROR {}: duplicate global variable declaration {}", loc, name),
             Error::TypeGuardExpectingLiteral(ref loc) => write!(f, "ERROR {}: type guard must be a literal", loc),
+            Error::FailedGenericDeduction(ref loc, ref name) => write!(f, "ERROR {}: unable to deduce type of type arg {}", loc, name),
         }
     }
 }

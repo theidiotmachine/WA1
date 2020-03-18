@@ -11,15 +11,15 @@ export fn __Some_unwrap<T: __struct T>(x: __Some<T>) -> T {
 }
 
 export fn __Option_isSome<T: __struct T>(x: __Option<T>) -> boolean __typeguard {
-    true => (x) -> __Some<T> { x as __ptr as T }
-    false => (x) -> __null { x as __ptr as __null }
+    true => fn <T: __struct T>(x: __Option<T>) -> __Some<T> { x as __ptr as T }
+    false => fn <T: __struct T>(x: __Option<T>) -> __null { x as __ptr as __null }
 } {
     x != __null;
 } 
 
 export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> boolean __typeguard {
-    true => (x) -> __null { x as __ptr as __null }
-    false => (x) -> __Some<T> { x as __ptr as T }
+    true => fn <T: __struct T>(x: __Option<T>) -> __null { x as __ptr as __null }
+    false => fn <T: __struct T>(x: __Option<T>) -> __Some<T> { x as __ptr as T }
 } {
     x == __null;
 }

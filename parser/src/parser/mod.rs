@@ -498,7 +498,7 @@ impl<'b> Parser<'b> {
         match &tok {
             Token::Keyword(ref k) => match k {
                 Keyword::Fn => {
-                    let o_func = self.main_parse_function_decl(true, fake_parser_func_context, parser_context);
+                    let (o_func, _) = self.main_parse_function_decl(true, fake_parser_func_context, parser_context);
                     match o_func {
                         Some(f) => init_body.push(f),
                         _ => {}
@@ -572,7 +572,7 @@ impl<'b> Parser<'b> {
         if var_type.is_undeclared() {
             var_type = init.r#type.clone();
         } else if var_type != init.r#type {
-            let o_cast_expr = try_create_cast(&var_type, &init, true);
+            let o_cast_expr = try_create_cast(&var_type, &init, CastType::Implicit);
             match o_cast_expr {
                 Some(cast_expr) => { init = cast_expr; },
                 None => { 
@@ -620,7 +620,7 @@ impl<'b> Parser<'b> {
                 Keyword::Fn => {
                     let o_func = self.main_parse_function_decl(false, fake_parser_func_context, parser_context);
                     match o_func {
-                        Some(f) => init_body.push(f),
+                        (Some(f), _) => init_body.push(f),
                         _ => {}
                     };
                 },
@@ -681,6 +681,7 @@ impl<'b> Parser<'b> {
         push_scope: bool,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
+        //type_guard_instances: Vec<TypeGuardBranch>
     ) -> TypedExpr {
         let mut out: Vec<TypedExpr> = vec![];
         let next = self.peek_next_item();
@@ -778,11 +779,11 @@ impl<'b> Parser<'b> {
 
             if then_block.r#type != else_block.r#type {
                 //first try casting then to else
-                let then_to_else_cast = try_create_cast(&else_block.r#type, &then_block, true);
+                let then_to_else_cast = try_create_cast(&else_block.r#type, &then_block, CastType::Implicit);
                 match then_to_else_cast {
                     None => {
                         //nope, not that way. Try the other
-                        let else_to_then_cast = try_create_cast(&then_block.r#type, &else_block, true);
+                        let else_to_then_cast = try_create_cast(&then_block.r#type, &else_block, CastType::Implicit);
                         match else_to_then_cast {
                             None => {
                                 //warn that we can't figure out the type, make it the top type
@@ -950,7 +951,7 @@ impl<'b> Parser<'b> {
                         };
 
                         Ok(TypedExpr{expr: Expr::Return(Box::new(Some(
-                            cast_typed_expr(&check_return_type, Box::new(expr), false, parser_context)
+                            cast_typed_expr(&check_return_type, Box::new(expr), CastType::Implicit, parser_context)
                         ))), is_const: true, r#type: Type::Never, loc: loc})
                     }
                 },
@@ -1041,7 +1042,7 @@ impl<'b> Parser<'b> {
 
             let v = self.parse_expr(parser_func_context, parser_context);
             assert_ok!(v);
-            let o_cast_expr = try_create_cast(inner_type, &v, true);
+            let o_cast_expr = try_create_cast(inner_type, &v, CastType::Implicit);
             match o_cast_expr {
                 Some(cast_expr) => { out.push(cast_expr) },
                 None => { 
@@ -1138,7 +1139,7 @@ impl<'b> Parser<'b> {
                             parser_context.errors.push(Error::ObjectHasNoMember(next_item.location, for_type.clone(), i.to_string().clone()));
                         },
                         Some(member_map_elem) => {
-                            let o_cast = try_create_cast(member_map_elem, &v, true);
+                            let o_cast = try_create_cast(member_map_elem, &v, CastType::Implicit);
                             match o_cast {
                                 None => {
                                     parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, i.to_string().clone(), member_map_elem.clone(), v.r#type.clone()));
@@ -1526,45 +1527,24 @@ impl<'b> Parser<'b> {
                                     Some(t) => 
                                         TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: next.location.clone()},
                                     _ => {
-                                        // peek to see if this is a function call. 
-                                        let lookahead_item = self.peek_next_item();
-                                        let lookahead = lookahead_item.token;
-            
-                                        match lookahead {
-                                            Token::Punct(Punct::OpenParen) => {
-                                                let o_f_d = parser_context.get_fn_decl_from_decls(&id);
-                                                match &o_f_d {
-                                                    Some(f_d) => {
-                                                        //yep it's a function call
-                                                        self.parse_static_func_call(&id, &f_d, &next.location, parser_func_context, parser_context)
-                                                    },
+                                        // might be a function call
+                                        let o_f_c = self.try_parse_func_call(&None, &id, &next.location, parser_func_context, parser_context);
+                                        match o_f_c {
+                                            Some(f_c) => f_c,
+                                            None => {
+                                                // might be a build in
+                                                let o_built_in = self.try_parse_built_in(&id, parser_func_context, parser_context);
+                                                match o_built_in {
+                                                    Some(built_in) => built_in,
                                                     None => {
-                                                        //might be a built in, so check that
-                                                        let o_built_in = self.try_parse_built_in(&id, parser_func_context, parser_context);
-                                                        match o_built_in {
-                                                            Some(built_in) => built_in,
-                                                            None => {
-                                                                //generic check 
-                                                                let o_g_f_c = self.try_parse_generic_func_call(&id, parser_func_context, parser_context);
-                                                                match o_g_f_c {
-                                                                    Some(g_f_c) => g_f_c,
-                                                                    None => {
-                                                                        parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone()));
-                                                                        err_ret
-                                                                    }
-                                                                }
-                                                            },
+                                                        //module check
+                                                        if parser_context.import_namespace_map.contains_key(&id) {
+                                                            TypedExpr{expr: Expr::NoOp, r#type: Type::ModuleLiteral(id.clone()), is_const: true, loc: next.location.clone()}
+                                                        } else {
+                                                            parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone()));
+                                                            err_ret
                                                         }
                                                     }
-                                                }
-                                            },
-                                            _ => {
-                                                //module check
-                                                if parser_context.import_namespace_map.contains_key(&id) {
-                                                    TypedExpr{expr: Expr::NoOp, r#type: Type::ModuleLiteral(id.clone()), is_const: true, loc: next.location.clone()}
-                                                } else {
-                                                    parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone()));
-                                                    err_ret
                                                 }
                                             }
                                         }
@@ -1585,22 +1565,13 @@ impl<'b> Parser<'b> {
                                 TypedExpr{expr: Expr::GlobalVariableUse(full_name), r#type: g_var.r#type.clone(), is_const: g_var.constant, 
                                     loc: next.location.clone()},
                             None => {
-                                let o_f_d = parser_context.get_fn_decl_from_imports(&full_name);
-                                match o_f_d {
-                                    Some(f_d) => 
-                                        //yep it's a function call
-                                        self.parse_static_func_call(&full_name, &f_d, &next.location, parser_func_context, parser_context),
+                                let o_f_c = self.try_parse_func_call(&Some(m.clone()), &id, &next.location, parser_func_context, parser_context);
+                                match o_f_c {
+                                    Some(f_c) => f_c,
                                     None => {
-                                        //generic check 
-                                        let o_g_f_c = self.try_parse_generic_func_call(&full_name, parser_func_context, parser_context);
-                                        match o_g_f_c {
-                                            Some(g_f_c) => g_f_c,
-                                            None => {
-                                                parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), full_name.clone()));
-                                                //give up
-                                                return err_ret;
-                                            },
-                                        }
+                                        parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), full_name.clone()));
+                                        //give up
+                                        return err_ret;
                                     },
                                 }
                             },
@@ -1777,10 +1748,10 @@ impl<'b> Parser<'b> {
                     },
                     Keyword::If => Ok(self.parse_if(parser_func_context, parser_context)),
                     Keyword::Fn => {
-                        let o_func = self.main_parse_function_decl(false, parser_func_context, parser_context);
+                        let (o_func, _) = self.main_parse_function_decl(false, parser_func_context, parser_context);
                         match o_func{
                             Some(f) => Ok(f),
-                            None => Err(Error::Dummy(lookahead_item.location))
+                            None => Err(Error::InternalError(lookahead_item.location))
                         }
                     },
                     Keyword::Some => self.parse_some(parser_func_context, parser_context),

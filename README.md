@@ -159,7 +159,7 @@ fn name(arg: Type) => {
 }
 ```
 
-Astonishingly, generic functions are supported. Here is the identity function. Not all types can be applied, but that's a work in progress.
+Astonishingly, generic functions are supported. Here is the identity function. Not all types can be applied, but that's a work in progress. Stonishingly, expect bugs.
 
 ```
 function id<T>(x: T) -> T { x }
@@ -359,6 +359,7 @@ A leading `__` is pronounced 'unsafe', by the way.
     1. [x] for funcs generate meta code to turn into templates
     1. [ ] for types generate meta types
     1. [ ] implicit type args on instantiation
+    1. [ ] partial instantiation - specifically `fn f1<T>(x: T) => {} fn f2<U>(x: U) => f1<U>(x)` currently generates an UnresolvedTypeArg error
 1. containers
     1. [ ] arrays
     1. [ ] hashmaps (probably called 'objects' to be JS friendly)

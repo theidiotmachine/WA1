@@ -4,7 +4,7 @@ pub mod cast;
 pub mod generics;
 use cast::get_type_casts_for_function_set;
 use cast::FuncCallTypeCast;
-use cast::TypeCast;
+use cast::{TypeCast, CastType};
 use cast::try_cast;
 use generics::TypeConstraint;
 use std::collections::HashMap;
@@ -154,9 +154,9 @@ pub enum Type {
     UnsafeStruct{name: String},
     /// not yet known - will be filled in by the type system
     Undeclared,
-    ///Unresolved type var
+    ///Unresolved type variable
     VariableUsage{name: String, constraint: TypeConstraint},
-    ///numeric literal - 'number'
+    ///numeric literal of type 'number'
     FloatLiteral(f64),
     //numeric literal - big int
     BigIntLiteral(i64),
@@ -180,6 +180,14 @@ impl Type{
     pub fn is_undeclared(&self) -> bool {
         match &self {
             Type::Undeclared => true,
+            _ => false
+        }
+    }
+
+    ///Is this an unresolved type variable?
+    pub fn is_type_variable(&self) -> bool {
+        match &self {
+            Type::VariableUsage{name: _, constraint: _} => true,
             _ => false
         }
     }
@@ -349,7 +357,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
         //assignment.
         OpType::AssignmentOpType => {
             //this is simple; either rhs can be cast to lhs or it can't
-            let type_cast = try_cast(rhs_type, lhs_type, true);
+            let type_cast = try_cast(rhs_type, lhs_type, CastType::Implicit);
             let out_rhs_type = match &type_cast{
                 TypeCast::NotNeeded => lhs_type.clone(),
                 TypeCast::FreeWiden => lhs_type.clone(),
@@ -368,7 +376,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             let yes = types.iter().find(|t| *t == lhs_type).is_some();
             if yes {
                 //if it is, see if the rhs can be cast to the lhs
-                let type_cast = try_cast(rhs_type, lhs_type, true);
+                let type_cast = try_cast(rhs_type, lhs_type, CastType::Implicit);
                 let out_rhs_type = match &type_cast{
                     TypeCast::NotNeeded => lhs_type.clone(),
                     TypeCast::FreeWiden => lhs_type.clone(),
@@ -387,7 +395,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
         //full equality (or inequality)
         OpType::EqualityOpType => {
             //try casting from one to the other. lhs to rhs first
-            let type_cast = try_cast(lhs_type, &rhs_type, true);
+            let type_cast = try_cast(lhs_type, &rhs_type, CastType::Implicit);
             match &type_cast{
                 TypeCast::NotNeeded => 
                     Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
@@ -395,7 +403,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
                     Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
                 TypeCast::None => {
                     //now try going the other way
-                    let type_cast = try_cast(rhs_type, &lhs_type, true);
+                    let type_cast = try_cast(rhs_type, &lhs_type, CastType::Implicit);
                     match &type_cast{
                         TypeCast::NotNeeded => 
                             Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
