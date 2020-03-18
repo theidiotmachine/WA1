@@ -1,9 +1,8 @@
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
 
 use types::Type;
-use crate::expr::VariableDecl;
 use crate::expr::ClosureRef;
-use std::collections::HashMap;
 use crate::expr::TypedExpr;
 use types::FuncType;
 
@@ -12,6 +11,9 @@ pub mod prelude {
     pub use super::FuncArg;
     pub use super::FuncObjectCreation;
     pub use super::FuncDecl;
+    pub use super::TypeGuard;
+    pub use super::TypeGuardBranch;
+    pub use super::LocalVar;
 }
 
 /// Simple func arg, one with a name and a type, e.g. x: number
@@ -21,15 +23,39 @@ pub struct FuncArg {
     pub r#type: Type,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct LocalVar{
+    pub internal_name: String,
+    pub r#type: Type,
+    pub closure_source: bool,
+    pub arg: bool,
+}
+
 /// Function definition
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Func {
     pub decl: FuncDecl,
     /// Function body. None if imported.
     pub body: Option<TypedExpr>,
-    pub local_vars: Vec<VariableDecl>,
+    pub local_vars: Vec<LocalVar>,
     pub closure: Vec<ClosureRef>,
     pub local_var_map: HashMap<String, u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct TypeGuardBranch {
+    /// The type that the type guard resolves to
+    pub r#type: Type,
+    /// The literal expression that tells us the type. 
+    pub literal: TypedExpr,
+    pub arg_idx: usize,
+    /// The cast fn to apply
+    pub cast_fn_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct TypeGuard {
+    pub branches: Vec<TypeGuardBranch>,
 }
 
 /// Function definition as seen from another module
@@ -40,6 +66,7 @@ pub struct FuncDecl {
     pub args: Vec<FuncArg>,
     pub export: bool,
     pub generic_impl: bool,
+    pub type_guard: Option<TypeGuard>
 }
 
 impl FuncDecl{

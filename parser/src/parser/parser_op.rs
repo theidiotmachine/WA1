@@ -311,7 +311,7 @@ impl<'b> Parser<'b> {
                         //as is just a straight cast; so 
                         match &rhs.r#type {
                             Type::TypeLiteral(t) => {
-                                cast_typed_expr(&t, Box::new(lhs.clone()), false, parser_context)
+                                cast_typed_expr(&t, Box::new(lhs.clone()), CastType::Explicit, parser_context)
                             },
                             _ => {
                                 parser_context.errors.push(Error::AsNeedsType(loc));

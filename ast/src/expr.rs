@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 
 use types::*;
-use crate::func::FuncObjectCreation;
+use crate::func::{FuncObjectCreation, FuncDecl};
 use crate::intrinsic::Intrinsic;
 use errs::prelude::*;
 
@@ -16,7 +16,6 @@ pub mod prelude {
     pub use super::GlobalVariableDecl;
     pub use super::GlobalVariableImport;
     pub use super::ClosureRef;
-    pub use super::VariableDecl;
     pub use super::ObjectLiteralElem;
 }
 
@@ -73,18 +72,6 @@ pub enum AssignmentOperator{
     BitAndAssign,
     BitXorAssign,
     BitOrAssign
-}
-
-/// Variable decl
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct VariableDecl {
-    pub internal_name: String,
-    pub orig_name: String,
-    pub r#type: Type,
-    pub constant: bool,
-    pub init: Option<TypedExpr>,
-    pub closure_source: bool,
-    pub arg: bool,
 }
 
 /// Variable decl
@@ -155,7 +142,7 @@ pub enum Expr {
     /// modify and assign expression
     ModifyAssignment(AssignmentOperator, Box<TypedExpr>, TypedLValueExpr, Box<TypedExpr>),
     /// static func call. Arg is func name.
-    StaticFuncCall(String, Vec<TypedExpr>),
+    StaticFuncCall(String, FuncDecl, Vec<TypedExpr>),
     /// dynamic func call.
     DynamicFuncCall(Box<TypedExpr>, Vec<TypedExpr>),
     /// Member func call.
@@ -173,7 +160,7 @@ pub enum Expr {
     /// a function declaration. This might compile to a closure creation, a function pointer, or a no op 
     FuncDecl(FuncObjectCreation),
     /// variable declaration
-    VariableDecl(Box<VariableDecl>),
+    VariableInit{internal_name: String, init: Box<Option<TypedExpr>>},
     /// global variable declaration. Only appears in the _start function.
     GlobalVariableDecl(Box<GlobalVariableDecl>),
     /// return statement
@@ -212,6 +199,17 @@ pub enum Expr {
     NoOp,
     ///Tuple literal constructor
     TupleLiteral(Vec<TypedExpr>),
+}
+
+impl Expr{
+    pub fn is_literal(&self) -> bool {
+        match self {
+            Expr::FloatLiteral(_) | Expr::BigIntLiteral(_) | Expr::IntLiteral(_) | Expr::BoolLiteral(_) | Expr::Null 
+                | Expr::UnsafeNull | Expr::Void | Expr::StringLiteral(_) | Expr::ObjectLiteral(_) | Expr::TypeLiteral(_) 
+                | Expr::TupleLiteral(_) => true,
+            _ => false
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

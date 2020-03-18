@@ -1134,6 +1134,7 @@ pub enum Keyword {
     Some,
     UnsafeArray,
     UnsafeStatic,
+    UnsafeTypeGuard,
 }
 
 impl Keyword {
@@ -1208,6 +1209,7 @@ impl Keyword {
             "__Some" => Keyword::UnsafeSome,
             "__array" => Keyword::UnsafeArray,
             "__static" => Keyword::UnsafeStatic,
+            "__typeguard" => Keyword::UnsafeTypeGuard,
             _ => return None,
         })
     }
@@ -1291,6 +1293,7 @@ impl Keyword {
             Keyword::UnsafeArray => "__array",
             Keyword::UnsafeStatic => "__static",
             Keyword::UnsafeOption => "__Option",
+            Keyword::UnsafeTypeGuard => "__typeguard",
         }
     }
 }

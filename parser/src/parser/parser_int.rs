@@ -12,10 +12,10 @@ use lazy_static;
 
 lazy_static!{
     static ref INT_METHODS: Vec<FuncDecl> = vec![
-        FuncDecl{name: String::from("countLeadingZeros"), return_type: Type::Int, args: vec![], export: false, generic_impl: false},
-        FuncDecl{name: String::from("countTrailingZeros"), return_type: Type::Int, args: vec![], export: false, generic_impl: false},
-        FuncDecl{name: String::from("shiftLeft"), return_type: Type::Int, args: vec![FuncArg{name: String::from("n"), r#type: Type::Int}], export: false, generic_impl: false},
-        FuncDecl{name: String::from("shiftRight"), return_type: Type::Int, args: vec![FuncArg{name: String::from("n"), r#type: Type::Int}], export: false, generic_impl: false},
+        FuncDecl{name: String::from("countLeadingZeros"), return_type: Type::Int, args: vec![], export: false, generic_impl: false, type_guard: None,},
+        FuncDecl{name: String::from("countTrailingZeros"), return_type: Type::Int, args: vec![], export: false, generic_impl: false, type_guard: None,},
+        FuncDecl{name: String::from("shiftLeft"), return_type: Type::Int, args: vec![FuncArg{name: String::from("n"), r#type: Type::Int}], export: false, generic_impl: false, type_guard: None,},
+        FuncDecl{name: String::from("shiftRight"), return_type: Type::Int, args: vec![FuncArg{name: String::from("n"), r#type: Type::Int}], export: false, generic_impl: false, type_guard: None,},
     ];
 }
 
