@@ -136,7 +136,7 @@ The type of `s` is inferred from the expression you assign it.
 
 You don't need 'em; a return character is equivalent. The things in javascript, like getting weird problems with `return`, are not an issue here. 
 
-Wise up kids, and say no.
+Wise up kids, and say no. I forget and put them in sometimes, though, so don't feel too bad.
 
 ## Types
 
@@ -155,6 +155,18 @@ As mentioned above, numeric types will auto-cast. If you need to manually invoke
 ```
 //totally spurious example
 let a = 9 as number
+```
+
+### Member functions on ints
+
+Currently there are four legal int member functions. These are somewhat bodged today.
+
+```
+let i = 256
+let clz = i.countLeadingZeros()
+let ctz = i.countTrailingZeros()
+let shl = i.shiftLeft(3)
+let shr = i.shiftRight(3)
 ```
 
 ## Functions
@@ -252,6 +264,27 @@ return 4;
 You don't need it at the end of a function (and is considered bad practice), but it is useful for flow control in complicated functions. If you 
 combine fat arrow with return, we try and guess based on all the returns in the function.
 
+## Unsafe mode
+
+Unsafe mode is designed to be a mode that library writers can write low-level code. It feels like C in that it is 
+not much more than structured WASM. In order to use it you need to somehow pass the unsafe arg to the compiler. Syntax is deliberately scary.
+
+A leading `__` is pronounced 'unsafe', by the way.
+
+* `__ptr` type - not yet finished
+* `__size_t` type - pretty much the same as a `__ptr`, but makes some things a bit type safer
+* intrinsics - wrap low level wasm calls
+    * `__memorySize()` - `memory.size` instruction
+    * `__memoryGrow(0, numPages)` - `memory.grow` instruction
+    * `__trap()` - `unreachable` instruction
+* `__Option` - is a essentially a nullable pointer. You can have it be a `__null` or `__Some<T>`. It will end up being the core of the 
+    real option. It's kind of horrible because it's pretending to be a union but it really is a nullable pointer.
+* `__struct` type - works but you need either the super secret `malloc` function for them to be useful 
+    (which doesn't exist, so good luck with that), cast from a `__ptr` (this is unsafe. The clue
+    is in the name...), or use `__static` (which does actually work and is a C-style static allocation). 
+    You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to dynamically allocate (which uses malloc), 
+    or `__static Hello {a: 3}`. A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
+
 ## Linker
 
 Instead of using the simple build mode described above, you may use a full build mode. For this we generate [WASM object files](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md), which, 
@@ -316,26 +349,6 @@ to test the example you would run
 cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 2);'
 ```
 
-## Unsafe mode
-
-Unsafe mode is designed to be a mode that library writers can write low-level code. It feels like C in that it is 
-not much more than structured WASM. In order to use it you need to somehow pass the unsafe arg to the compiler. Syntax is deliberately scary.
-
-A leading `__` is pronounced 'unsafe', by the way.
-
-* `__ptr` type - not yet finished
-* `__size_t` type - pretty much the same as a `__ptr`, but makes some things a bit type safer
-* intrinsics - wrap low level wasm calls
-    * `__memorySize()` - `memory.size` instruction
-    * `__memoryGrow(0, numPages)` - `memory.grow` instruction
-    * `__trap()` - `unreachable` instruction
-* `__Option` - is a essentially a nullable pointer. You can have it be a `__null` or `__Some<T>`. It will end up being the core of the 
-    real option. It's kind of horrible because it's pretending to be a union but it really is a nullable pointer.
-* `__struct` type - works but you need either the super secret `malloc` function for them to be useful 
-    (which doesn't exist, so good luck with that), cast from a `__ptr` (this is unsafe. The clue
-    is in the name...), or use `__static` (which does actually work and is a C-style static allocation). 
-    You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to dynamically allocate (which uses malloc), 
-    or `__static Hello {a: 3}`. A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
 
 # TODO
 
