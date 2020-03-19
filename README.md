@@ -1,71 +1,10 @@
-# WA1
+# Hello WA1
 
 WA1 is the working name for a language that compiles down to Web Assembly. 
 
 Yes, it needs a fancy name. At some point it will get that.
 
-## Building
-
-To build, first you need Rust. Install cargo. Then, run
-
-```
-cargo build
-```
-
-in the root. To run, you need to pass the compiler some arguments.
-
-```
-cargo run -- build-simple tests/simple/one.wa1 -o=tests/simple/out.wasm
-```
-
-will parse `tests/simple/one.wa1` and generate `tests/simple/out.wasm`.
-
-## Running
-
-To run, you will need some way of running wasm. 
-
-### Runner
-
-We ship a runner built on [wasmtime](https://github.com/bytecodealliance/wasmtime) for easy testing.
-To run, call
-
-```
-cargo run --bin test-runner -- tests/simple/out.wasm -f 'fourTimes(8);'
-```
-
-This will run the init function (always called `__wasm_call_ctors` for compatibility with existing WASM conventions) and then the entry point you give it.
-
-### Webpage
-
-One way is to use a webpage that looks something like this:
-
-```html
-<html>
-<body>
-  <script>
-    fetch('out.wasm').then(response =>
-      response.arrayBuffer()
-    ).then(bytes =>
-      WebAssembly.instantiate(bytes, {imports: {}})
-    ).then(results => {
-      results.instance.exports.__wasm_call_ctors();
-      window.addd = results.instance.exports.addd; //or whatever is exported from the file
-    });
-  </script>
-</body>
-</html>
-```
-
-Serve it with http-server; install that with 
-
-```
-npm install -g http-server
-```
-
-and manually call in your browser in the debugger by typing the function name (called `addd` out of the box). Note that you have to call 
-`__wasm_call_ctors` manually. We don't use start functions, because the wasm linker tools [warn against it](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md#start-section).
-
-# The language
+# A very quick introduction
 
 WA1 is a strongly-typed expression-based language, which borrows from TypeScript, Rust and Scala. Here we use 'expression-based' to mean that, generally,
 the last value of a block is its return value, and you can compose expressions freely.
@@ -120,11 +59,86 @@ export fn bang(x: number) -> number {
 
 There are some examples in the `tests/simple/one.wa1` file which contains our original test!
 
-## Features
+# Using it
 
-Currently the following features are supported.
+To build the compiler, first you need Rust. Install cargo. Then, run
 
-### Types
+```
+cargo build
+```
+
+in the root. To run the compiler, you need to pass the compiler some arguments.
+
+```
+cargo run -- build-simple tests/simple/one.wa1 -o=tests/simple/out.wasm
+```
+
+will parse `tests/simple/one.wa1` and generate `tests/simple/out.wasm`.
+
+## Running
+
+To run, you will need some way of running wasm. 
+
+### Runner
+
+We ship a runner built on [wasmtime](https://github.com/bytecodealliance/wasmtime) for easy testing.
+To run, call
+
+```
+cargo run --bin test-runner -- tests/simple/out.wasm -f 'fourTimes(8);'
+```
+
+This will run the init function (always called `__wasm_call_ctors` for compatibility with existing WASM conventions) and then the entry point you give it.
+
+### Webpage
+
+One way is to use a webpage that looks something like this:
+
+```html
+<html>
+<body>
+  <script>
+    fetch('out.wasm').then(response =>
+      response.arrayBuffer()
+    ).then(bytes =>
+      WebAssembly.instantiate(bytes, {imports: {}})
+    ).then(results => {
+      results.instance.exports.__wasm_call_ctors();
+      window.addd = results.instance.exports.addd; //or whatever is exported from the file
+    });
+  </script>
+</body>
+</html>
+```
+
+Serve it with http-server; install that with 
+
+```
+npm install -g http-server
+```
+
+and manually call in your browser in the debugger by typing the function name (called `addd` out of the box). Note that you have to call 
+`__wasm_call_ctors` manually. We don't use start functions, because the wasm linker tools [warn against it](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md#start-section).
+
+
+# Another quite quick introduction but less quick than the last one
+
+## Variables
+
+Local and global variables are declared like this.
+
+```
+let s = expr
+```
+The type of `s` is inferred from the expression you assign it.
+
+### A word on semi-colons
+
+You don't need 'em; a return character is equivalent. The things in javascript, like getting weird problems with `return`, are not an issue here. 
+
+Wise up kids, and say no.
+
+## Types
 
 * number - a 64 bit float.
 * bigint - a 64 bit int.
@@ -134,7 +148,7 @@ let a = 0
 ```
 * boolean
 
-#### Casting
+### Casting
 
 As mentioned above, numeric types will auto-cast. If you need to manually invoke casting, the 'as' keyword is your friend.
 
@@ -143,7 +157,7 @@ As mentioned above, numeric types will auto-cast. If you need to manually invoke
 let a = 9 as number
 ```
 
-### Functions
+## Functions
 
 Functions are declared as follows. Use thin arrows for explicit return type declaration, fat arrows will let the type engine figure it out.
 
@@ -159,41 +173,91 @@ fn name(arg: Type) => {
 }
 ```
 
+The deduction algorithm for return types is very simple. Don't be surprised if you need to help it.
+
+### Generic Functions
+
 Astonishingly, generic functions are supported. Here is the identity function. Not all types can be applied, but that's a work in progress. Stonishingly, expect bugs.
 
 ```
 function id<T>(x: T) -> T { x }
 ```
 
-To use them you must provide the types.
+To use them you can provide the types, or have it deduce them. 
 
 ```
 let n1: number = 4
 let n2 = id<number>(n1)
+let n3 = id(n1)
 ```
+
+The deduction algorithm is very simple, and just matches function argument types against what it's been given. This means that it won't be able to 
+deduce a type variable that is only used as a return type.
 
 They are not actually true generics. They specialize for some types -- at the moment, the numeric types -- which means I can avoid a box. It also means
-they are sort of a mix between templates and generics. Some days I like saying 'genemplates', other days 'templerics' is more fun.
+they are sort of a mix between templates and generics. Some days I like saying 'genemplates', other days 'templerics' is more fun. (Note that Rust calls their
+templates 'generics' even though I think they compile in a very similar way to C++. Traitors.)
 
-### Variables
+## Control
 
-Local and global variables are declared like this.
+### Blocks
+
+The return value of a block is the last expression. So a function that added two numbers would be this:
 
 ```
-let s = expr
+fn add(x: number, y: number) => x + y
 ```
 
-The type of s is inferred from the expression you assign it.
+This works because a function expects a block; a single expression or a squiggly bracket enclosed list of expressions is a block; the last expression of a block is what it returns.
 
-### Control
-* `if`, `else`, `while`, `continue`, `break`, `return`.
+### if
 
-### Linker
+`if` is an expression, if it has an else branch.
+```
+let a = if(b) 3 else 4
+```
+
+Type inference will do some work for you if the branches are a bit different, but will complain if they are radically different.
+
+You don't have to have an else branch, mind; you just can't use it as an expression.
+
+```
+if(k != 4)
+    j = true
+```
+
+### while
+
+`while` is not an expression.
+
+```
+while(a > 3) {
+    a -= 1
+
+    if(a == -100)
+        break
+}
+```
+
+`break` and `continue` work as you would expect.
+
+### return
+
+`return` causes early return of the function you are in.
+
+```
+return 4;
+```
+
+You don't need it at the end of a function (and is considered bad practice), but it is useful for flow control in complicated functions. If you 
+combine fat arrow with return, we try and guess based on all the returns in the function.
+
+## Linker
 
 Instead of using the simple build mode described above, you may use a full build mode. For this we generate [WASM object files](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md), which, 
 because they are a standard, can then be linked with an external linker. A very simple example exists in the tests folder. 
 
-#### The linker exe
+### The linker exe
 
 The linker we use is [wasm-ld](https://lld.llvm.org/WebAssembly.html), given that is the only working WASM linker. You will need to install it somehow.
 On Ubuntu you can get that by calling 
@@ -206,7 +270,7 @@ On Windows and OSX you are on your own, I am afraid. I found building it from so
 it is `wasm-ld-9`, surprisingly) you need to edit the `build-wsb.json `file you are building to point to the right location. Yes, I know. This should get better
 as either the LLVM WASM toolchain matures, or I get fed up and write a compatible linker.
 
-#### Using it
+### Using it
 
 When you are set up, call this to run the sample.
 
@@ -252,7 +316,7 @@ to test the example you would run
 cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 2);'
 ```
 
-### Unsafe mode
+## Unsafe mode
 
 Unsafe mode is designed to be a mode that library writers can write low-level code. It feels like C in that it is 
 not much more than structured WASM. In order to use it you need to somehow pass the unsafe arg to the compiler. Syntax is deliberately scary.
@@ -273,7 +337,7 @@ A leading `__` is pronounced 'unsafe', by the way.
     You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to dynamically allocate (which uses malloc), 
     or `__static Hello {a: 3}`. A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
 
-## TODO
+# TODO
 
 1. Typing 
     1. [x] every expr needs a return type!
@@ -358,7 +422,7 @@ A leading `__` is pronounced 'unsafe', by the way.
 1. templerics
     1. [x] for funcs generate meta code to turn into templates
     1. [ ] for types generate meta types
-    1. [ ] implicit type args on instantiation
+    1. [x] implicit type args on instantiation
     1. [ ] partial instantiation - specifically `fn f1<T>(x: T) => {} fn f2<U>(x: U) => f1<U>(x)` currently generates an UnresolvedTypeArg error
 1. containers
     1. [ ] arrays
