@@ -46,7 +46,7 @@ macro_rules! expect_ok {
 #[macro_export]
 macro_rules! assert_semicolon {
     ($s:ident) => (
-        if !$s.context.has_line_term {
+        if !$s.has_line_term {
             let next = $s.next_item()?;
             if !next.token.matches_punct(Punct::SemiColon) {
                 return $s.expected_token_error(&next, &[&";"]);
@@ -58,9 +58,9 @@ macro_rules! assert_semicolon {
 #[macro_export]
 macro_rules! expect_semicolon {
     ($self:ident, $parser_context:ident) => (
-        if !$self.context.has_line_term {
-            let next = $self.peek_next_item();
-            if next.token.matches_punct(Punct::SemiColon) {
+        if !$self.has_line_term {
+            let next = $self.peek_next_item(); 
+            if next.token.matches_punct(Punct::SemiColon) || next.token.is_eof() {
                 $self.skip_next_item();
             } else {
                 $parser_context.push_err(Error::UnexpectedToken(next.location.clone(), format!("Expected ';' or line end")));
@@ -393,6 +393,10 @@ impl ParserContext {
         }
     }
 
+    fn has_type_stack(&self) -> bool {
+        !self.type_var_stack.is_empty()
+    }
+
     fn get_unique_name(&mut self, name: &String) -> String {
         let counter = self.counter;
         self.counter += 1;
@@ -504,6 +508,8 @@ struct ParserFuncContext{
     pub closure: Vec<ClosureRef>,
     pub given_func_return_type: Type,
     pub implied_func_return_type: Type,
+    /// If we have entered a loop block
+    pub in_iteration: bool,
 }
 
 impl ParserFuncContext{
@@ -514,6 +520,7 @@ impl ParserFuncContext{
             closure: vec![],
             given_func_return_type: Type::Undeclared,
             implied_func_return_type: Type::Undeclared,
+            in_iteration: false,
         }
     }
 }

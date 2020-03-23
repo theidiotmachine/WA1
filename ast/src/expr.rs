@@ -1,6 +1,7 @@
 use serde::{Serialize, Deserialize};
 
 use types::*;
+use types::generics::TypeArg;
 use crate::func::{FuncObjectCreation, FuncDecl};
 use crate::intrinsic::Intrinsic;
 use errs::prelude::*;
@@ -147,6 +148,8 @@ pub enum Expr {
     DynamicFuncCall(Box<TypedExpr>, Vec<TypedExpr>),
     /// Member func call.
     MemberFuncCall(Box<TypedExpr>, String, Vec<TypedExpr>),
+    /// A generic call that we haven't been able to resolve yet
+    UnresolvedGenericFuncCall{name: String, resolved_func_decl: FuncDecl, args: Vec<TypedExpr>, resolved_types: Vec<Type>, type_args: Vec<TypeArg>},
     /// Implicit i32 -> f64 cast
     IntToNumber(Box<TypedExpr>),
     /// Implicit i32 -> i64 cast

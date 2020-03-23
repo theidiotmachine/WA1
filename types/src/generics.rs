@@ -1,6 +1,13 @@
 use serde::{Serialize, Deserialize};
 use crate::Type;
 
+pub mod prelude {
+    pub use super::TypeConstraint;
+    pub use super::TypeArg;
+    pub use super::matches_type_constraint;
+    pub use super::get_runtime_type_for_generic;
+}
+
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum TypeConstraint{
     None,

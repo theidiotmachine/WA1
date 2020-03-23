@@ -8,7 +8,7 @@ use ast::prelude::*;
 use types::prelude::*;
 pub use errs::{Error};
 use errs::prelude::*;
-use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident, expect_punct, cast_typed_expr};
+use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident, expect_punct, cast_typed_expr, expect_ok};
 
 use lazy_static;
 
@@ -193,17 +193,18 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_unsafe_some(&mut self, 
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr>{
+    ) -> TypedExpr {
+        let err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0)), is_const: true};
         let loc = self.peek_next_location();
         if !parser_context.is_unsafe {
             parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
         }
 
         self.skip_next_item();
-        assert_punct!(self, Punct::OpenParen);
+        expect_punct!(self, parser_context, Punct::OpenParen);
         let inner = self.parse_expr(parser_func_context, parser_context);
-        assert_ok!(inner);
-        assert_punct!(self, Punct::CloseParen);
+        expect_ok!(inner, parser_context, err_ret);
+        expect_punct!(self, parser_context, Punct::CloseParen);
         match inner.r#type {
             Type::UnsafeStruct{name: _} => {
 
@@ -215,7 +216,7 @@ impl<'a> Parser<'a> {
 
         let inner_loc = inner.loc.clone();
         let inner_type = inner.r#type.clone();
-        Ok(TypedExpr{expr: Expr::FreeTypeWiden(Box::new(inner)), r#type: Type::UnsafeSome(Box::new(inner_type)), loc: inner_loc, is_const: true})
+        TypedExpr{expr: Expr::FreeTypeWiden(Box::new(inner)), r#type: Type::UnsafeSome(Box::new(inner_type)), loc: inner_loc, is_const: true}
     }
 
     pub(crate) fn parse_unsafe_option_component(&mut self,

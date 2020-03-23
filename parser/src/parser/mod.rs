@@ -23,37 +23,11 @@ mod parser_op;
 use crate::{ParserContext, ScopedVar};
 use crate::ParserFuncContext;
 use crate::Res;
-use crate::{assert_punct, assert_ok,assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_ident, expect_string_literal, expect_keyword, StartFuncType, expect_ok};
+use crate::{assert_punct, assert_ok,assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_ident, expect_string_literal, expect_keyword, StartFuncType, expect_ok, expect_semicolon};
 use crate::{try_create_cast, cast_typed_expr};
 use crate::parser::parser_op::{get_unary_operator_data, Fix, get_binary_operator_data, Association, get_op_type_for_unop};
 use crate::Commitment;
 use crate::Importer;
-
-/// The current parsing context.
-/// This structure holds the relevant
-/// information to know when some
-/// text might behave differently
-/// depending on what has come before it
-struct Context<> {
-    /// If we have entered a loop block
-    in_iteration: bool,
-    /// If the scanner has a pending line terminator
-    /// before the next token
-    has_line_term: bool,
-}
-
-impl Context {
-
-}
-
-impl<> Default for Context<> {
-    fn default() -> Self {
-        Self {
-            in_iteration: false,
-            has_line_term: false,
-        }
-    }
-}
 
 enum ImportFilter{
     All,
@@ -71,8 +45,6 @@ fn filter_imports(exports: Exports, imports: &ImportFilter) -> Exports {
 /// This is the primary interface that you would interact with.
 pub struct Parser<'a>
 {
-    /// The current parsing context
-    context: Context<>,
     /// The internal scanner (see the
     /// `ress` crate for more details)
     scanner: Scanner<'a>,
@@ -82,6 +54,11 @@ pub struct Parser<'a>
     /// to make sure we don't miss the eof
     /// by using this flag
     found_eof: bool,
+
+    /// If the scanner has a pending line terminator
+    /// before the next token
+    pub has_line_term: bool,
+
     /// The current position we are parsing
     current_position: Position,
     look_ahead_position: Position,
@@ -92,16 +69,13 @@ impl<'a> Parser<'a> {
     /// javascript
     pub fn new(text: &'a str) -> Res<Self> {
         let s = Scanner::new(text);
-        let context = Context::default();
-        Self::_new(s, context)
+        Self::_new(s)
     }
 }
-
 
 impl<'b> Parser<'b> {
     fn _new(
         scanner: Scanner<'b>,
-        context: Context<>,
     ) -> Res<Self> {
         let look_ahead = Item {
             token: Token::EoF,
@@ -112,7 +86,7 @@ impl<'b> Parser<'b> {
             scanner,
             look_ahead,
             found_eof: false,
-            context,
+            has_line_term: false,
             current_position: Position { line: 1, column: 0 },
             look_ahead_position: Position { line: 1, column: 0 },
         };
@@ -193,7 +167,7 @@ impl<'b> Parser<'b> {
     /// Skip the next token, ignoring it.
     fn skip_next_item(&mut self) -> () {
         loop {
-            self.context.has_line_term = self.scanner.pending_new_line;
+            self.has_line_term = self.scanner.pending_new_line;
             if let Some(look_ahead) = self.scanner.next() {
                 let look_ahead = look_ahead.unwrap();
                 self.look_ahead_position = look_ahead.location.start;
@@ -238,7 +212,7 @@ impl<'b> Parser<'b> {
     /// and return the last token
     fn next_item(&mut self) -> Res<Item<Token<&'b str>>> {
         loop {
-            self.context.has_line_term = self.scanner.pending_new_line;
+            self.has_line_term = self.scanner.pending_new_line;
             if let Some(look_ahead) = self.scanner.next() {
                 let look_ahead = look_ahead.unwrap();
                 self.look_ahead_position = look_ahead.location.start;
@@ -656,8 +630,8 @@ impl<'b> Parser<'b> {
                 let next = self.next_item();
                 match next {
                     Ok(next) => {
-                        if self.context.has_line_term {
-                        } else if next.token.matches_punct(Punct::SemiColon) {
+                        if self.has_line_term {
+                        } else if next.token.matches_punct(Punct::SemiColon) || next.token.is_eof() {
                             self.skip_next_item();
                         } else {
                             parser_context.errors.push(self.expected_token_error_raw(&next, &[&";"]));
@@ -699,12 +673,8 @@ impl<'b> Parser<'b> {
             }
 
             while !token.matches_punct(Punct::CloseBrace) {
-                let r_stmt = self.parse_statement(parser_func_context, parser_context);
-                if r_stmt.is_ok() {
-                    out.push(r_stmt.unwrap());
-                } else {
-                    parser_context.push_err(r_stmt.unwrap_err());
-                }
+                let stmt = self.parse_statement(parser_func_context, parser_context);
+                out.push(stmt);
                 
                 next = self.peek_next_item();
                 loc.extend_right(&next.location);
@@ -715,14 +685,9 @@ impl<'b> Parser<'b> {
                 parser_context.pop_block_scope();
             }
         } else {
-            let r_stmt = self.parse_statement(parser_func_context, parser_context);
-            if r_stmt.is_ok() {
-                let stmt = r_stmt.unwrap();
-                loc.extend_right(&stmt.loc);
-                out.push(stmt);
-            } else {
-                parser_context.push_err(r_stmt.unwrap_err());
-            }
+            let stmt = self.parse_statement(parser_func_context, parser_context);
+            loc.extend_right(&stmt.loc);
+            out.push(stmt);
         } 
 
         let out_type = out.last().map_or(Type::RealVoid, |x| x.r#type.clone());
@@ -812,31 +777,33 @@ impl<'b> Parser<'b> {
     fn parse_while(&mut self,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
+        let err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0)), is_const: true};
         let mut loc = self.peek_next_location();
         self.skip_next_item();
 
-        assert_punct!(self, Punct::OpenParen);
+        expect_punct!(self, parser_context, Punct::OpenParen);
         let condition = self.parse_expr(parser_func_context, parser_context);
-        assert_ok!(condition);
+        expect_ok!(condition, parser_context, err_ret);
         if condition.r#type != Type::Boolean {
             parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Boolean, condition.r#type.clone()));
         }
-        assert_punct!(self, Punct::CloseParen);
+        expect_punct!(self, parser_context, Punct::CloseParen);
 
-        let old_in_iteration = self.context.in_iteration;
-        self.context.in_iteration = true;
+        let old_in_iteration = parser_func_context.in_iteration;
+        parser_func_context.in_iteration = true;
         let block = self.parse_block(true, parser_func_context, parser_context);
-        self.context.in_iteration = old_in_iteration;
+        parser_func_context.in_iteration = old_in_iteration;
         loc.end = block.loc.end.clone();
 
-        Ok(TypedExpr{expr: Expr::While(Box::new(condition), Box::new(block)), is_const: true, r#type: Type::RealVoid, loc: loc})
+        TypedExpr{expr: Expr::While(Box::new(condition), Box::new(block)), is_const: true, r#type: Type::RealVoid, loc: loc}
     }
 
     fn parse_class_decl(&mut self,
         export: bool,
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
+        
         let mut loc = self.peek_next_location();
         self.skip_next_item();
 
@@ -902,13 +869,22 @@ impl<'b> Parser<'b> {
     fn parse_statement(&mut self, 
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let next = self.peek_next_item();
         let token = &next.token;
+        let err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0)), is_const: true};
         match &token {
             Token::Keyword(ref k) => match k {
-                Keyword::Const => self.parse_variable_decl(true, false, false, parser_func_context, parser_context),
-                Keyword::Let => self.parse_variable_decl(false, false, false, parser_func_context, parser_context),
+                Keyword::Const => {
+                    let te = self.parse_variable_decl(true, false, false, parser_func_context, parser_context);
+                    expect_ok!(te, parser_context, err_ret);
+                    te
+                },
+                Keyword::Let => {
+                    let te = self.parse_variable_decl(false, false, false, parser_func_context, parser_context);
+                    expect_ok!(te, parser_context, err_ret);
+                    te
+                },
                 Keyword::Return => {
                     let loc = next.location.clone();
                     self.skip_next_item();
@@ -916,7 +892,7 @@ impl<'b> Parser<'b> {
                     
                     let token = &next.token;
 
-                    if token.matches_punct(Punct::SemiColon) || self.context.has_line_term {
+                    if token.matches_punct(Punct::SemiColon) || self.has_line_term || token.is_eof() {
                         // check the return type of this expression versus the function return type.
                         let check_return_type = if parser_func_context.given_func_return_type == Type::Undeclared {
                             if parser_func_context.implied_func_return_type == Type::Undeclared {
@@ -930,15 +906,15 @@ impl<'b> Parser<'b> {
                         if check_return_type != Type::RealVoid {
                             parser_context.errors.push(Error::TypeFailureReturn(loc.clone(), check_return_type.clone(), Type::RealVoid));
                         }
-                        if !self.context.has_line_term {
+                        if !self.has_line_term {
                             self.skip_next_item();
                         }
                         
-                        Ok(TypedExpr{expr: Expr::Return(Box::new(None)), is_const: true, r#type: Type::Never, loc: loc})
+                        TypedExpr{expr: Expr::Return(Box::new(None)), is_const: true, r#type: Type::Never, loc: loc}
                     } else {
                         let expr = self.parse_expr(parser_func_context, parser_context);
-                        assert_semicolon!(self);
-                        assert_ok!(expr);
+                        expect_semicolon!(self, parser_context);
+                        expect_ok!(expr, parser_context, err_ret);
                         // return type checking
                         let expr_type = expr.r#type.clone();
                         let check_return_type = if parser_func_context.given_func_return_type == Type::Undeclared {
@@ -950,41 +926,40 @@ impl<'b> Parser<'b> {
                             parser_func_context.given_func_return_type.clone()
                         };
 
-                        Ok(TypedExpr{expr: Expr::Return(Box::new(Some(
+                        TypedExpr{expr: Expr::Return(Box::new(Some(
                             cast_typed_expr(&check_return_type, Box::new(expr), CastType::Implicit, parser_context)
-                        ))), is_const: true, r#type: Type::Never, loc: loc})
+                        ))), is_const: true, r#type: Type::Never, loc: loc}
                     }
                 },
                 
                 Keyword::Class => {
-                    self.parse_class_decl(false, parser_context)
+                    let te = self.parse_class_decl(false, parser_context);
+                    expect_ok!(te, parser_context, err_ret);
+                    te
                 },
 
                 Keyword::Break => {
                     self.skip_next_item();
-                    if self.context.in_iteration {
-                        Ok(TypedExpr{expr: Expr::Break, is_const: true, r#type: Type::Never, loc: next.location.clone()})
-                    } else {
-                        Err(Error::NotInLoop(String::from("break")))
-                    }
+                    if !parser_func_context.in_iteration {
+                        parser_context.push_err(Error::NotInLoop(next.location.clone(), String::from("break")));
+                    } 
+                    TypedExpr{expr: Expr::Break, is_const: true, r#type: Type::Never, loc: next.location.clone()}
                 },
 
                 Keyword::Continue => {
                     self.skip_next_item();
-                    if self.context.in_iteration {
-                        Ok(TypedExpr{expr: Expr::Continue, is_const: true, r#type: Type::Never, loc: next.location.clone()})
-                    } else {
-                        Err(Error::NotInLoop(String::from("continue")))
+                    if !parser_func_context.in_iteration {
+                        parser_context.push_err(Error::NotInLoop(next.location.clone(), String::from("continue")));   
                     }
+                    TypedExpr{expr: Expr::Continue, is_const: true, r#type: Type::Never, loc: next.location.clone()}
                 },
 
-                Keyword::While => {
-                    self.parse_while(parser_func_context, parser_context)
-                },
+                Keyword::While => self.parse_while(parser_func_context, parser_context),
                 
                 _ => {
                     // if we don't know what this statement is, parse it as an expr
                     let expr = self.parse_expr(parser_func_context, parser_context);
+                    expect_ok!(expr, parser_context, err_ret);
                     expr
                 }
             },
@@ -992,7 +967,8 @@ impl<'b> Parser<'b> {
             _ => {
                 // if we don't know what this statement is, parse it as an expr
                 let expr = self.parse_expr(parser_func_context, parser_context);
-                assert_semicolon!(self);
+                expect_ok!(expr, parser_context, err_ret);
+                expect_semicolon!(self, parser_context);
                 expr
             }
         }
@@ -1661,22 +1637,26 @@ impl<'b> Parser<'b> {
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let expr = self.parse_primary(&None, parser_func_context, parser_context);
-        assert_ok!(expr);
-        self.parse_expr_1(&expr, 0, parser_func_context, parser_context)
+        Ok(self.parse_expr_1(&expr, 0, parser_func_context, parser_context))
     }
 
-    fn get_prefix_unary_operator_for_token(&self, span: Span, location: &SourceLocation, token: &Token<&'b str>) -> Res<UnaryOperator> {
+    fn get_prefix_unary_operator_for_token(&self, 
+        span: Span, 
+        location: &SourceLocation, 
+        token: &Token<&'b str>,
+        parser_context: &mut ParserContext,
+    ) -> UnaryOperator {
         match token {
-            Token::Punct(p) => match p {
-                Punct::Bang => Ok(UnaryOperator::LogicalNot),
-                Punct::Tilde => Ok(UnaryOperator::BitNot),
-                Punct::Dash => Ok(UnaryOperator::Minus),
-                Punct::Plus => Ok(UnaryOperator::Plus),
-                Punct::DoublePlus => Ok(UnaryOperator::PrefixIncrement),
-                Punct::DoubleDash => Ok(UnaryOperator::PrefixDecrement),
-                _ => self.unexpected_token_error(span, location, "unexpected unary operator"),
+            Token::Punct(Punct::Bang) => UnaryOperator::LogicalNot,
+            Token::Punct(Punct::Tilde) => UnaryOperator::BitNot,
+            Token::Punct(Punct::Dash) => UnaryOperator::Minus,
+            Token::Punct(Punct::Plus) => UnaryOperator::Plus,
+            Token::Punct(Punct::DoublePlus) => UnaryOperator::PrefixIncrement,
+            Token::Punct(Punct::DoubleDash) => UnaryOperator::PrefixDecrement,
+            _ => {
+                parser_context.push_err(self.unexpected_token_error_raw(span, location, "unexpected binary operator"));
+                UnaryOperator::LogicalNot
             },
-            _ => self.unexpected_token_error(span, location, "unexpected binary operator"),
         }
     }
 
@@ -1685,25 +1665,31 @@ impl<'b> Parser<'b> {
         holding: &Option<TypedExpr>,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let lookahead_item = self.peek_next_item();
+        let mut err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: lookahead_item.location.clone(), is_const: true};
+        
         let lookahead = lookahead_item.token;
         let o_uod = get_unary_operator_data(&lookahead);
         match o_uod {
             Some(uod) => {
                 if uod.fix == Fix::Prefix || uod.fix == Fix::Both {
                     let mut loc = lookahead_item.location.clone();
-                    let op = self.get_prefix_unary_operator_for_token(lookahead_item.span, &lookahead_item.location, &lookahead);
-                    assert_ok!(op);
+                    err_ret.loc = loc.clone();
+                    let op = self.get_prefix_unary_operator_for_token(lookahead_item.span, &lookahead_item.location, &lookahead, parser_context);
                     self.skip_next_item();
                     let inner = self.parse_expr(parser_func_context, parser_context);
-                    assert_ok!(inner);
+                    expect_ok!(inner, parser_context, err_ret);
                     loc.end = inner.loc.end.clone();
                     let o_outer_type = types::get_unary_op_type(get_op_type_for_unop(&op), &inner.r#type);
                     match o_outer_type {
                         Some(outer_type) => 
-                            return Ok(TypedExpr{expr: Expr::UnaryOperator{op: op, expr: Box::new(inner)}, r#type: outer_type, is_const: true, loc: loc}),
-                        None => return Err(Error::TypeFailureUnaryOperator(loc)),
+                            return TypedExpr{expr: Expr::UnaryOperator{op: op, expr: Box::new(inner)}, r#type: outer_type, is_const: true, loc: loc},
+                        None => {
+                            parser_context.push_err(Error::TypeFailureUnaryOperator(loc));
+                            let inner_type = inner.r#type.clone();
+                            return TypedExpr{expr: Expr::UnaryOperator{op: op, expr: Box::new(inner)}, r#type: inner_type, is_const: true, loc: loc}
+                        },
                     }
                 }
             },
@@ -1711,68 +1697,85 @@ impl<'b> Parser<'b> {
         };
 
         match lookahead {
-            Token::Number(n) => { return Ok(self.parse_number(&n, &lookahead_item.location)); },
+            Token::Number(n) => { return self.parse_number(&n, &lookahead_item.location); },
             
             Token::Boolean(b) => {
                 self.skip_next_item();
-                return Ok(TypedExpr{expr:Expr::BoolLiteral(b.is_true()), r#type: Type::Boolean, is_const: true, loc: lookahead_item.location.clone()});
+                return TypedExpr{expr:Expr::BoolLiteral(b.is_true()), r#type: Type::Boolean, is_const: true, loc: lookahead_item.location.clone()};
             },
 
             Token::Null => {
                 self.skip_next_item();
-                return Ok(Parser::create_null(&lookahead_item.location));
+                return Parser::create_null(&lookahead_item.location);
             },
 
             Token::UnsafeNull => {
                 self.skip_next_item();
-                return Ok(Parser::create_unsafe_null(&lookahead_item.location));
-            },
-
-            Token::Template(_) => {
-                self.skip_next_item();
-                return Err(Error::NotYetImplemented(lookahead_item.location.clone(), "template strings".to_string()));
+                return Parser::create_unsafe_null(&lookahead_item.location);
             },
 
             Token::String(sl) => {
                 self.skip_next_item();
-                return Ok(TypedExpr{expr:Expr::StringLiteral(sl.no_quote().to_string()), r#type: Type::String, is_const: true, loc: lookahead_item.location.clone()});
+                return TypedExpr{expr:Expr::StringLiteral(sl.no_quote().to_string()), r#type: Type::String, is_const: true, loc: lookahead_item.location.clone()};
             },
 
             Token::Keyword(k) => {
                 match k {
-                    Keyword::New => return self.parse_new(parser_func_context, parser_context),
-                    Keyword::UnsafeStatic => return self.parse_unsafe_static(parser_func_context, parser_context),
+                    Keyword::New => {
+                        let e = self.parse_new(parser_func_context, parser_context);
+                        expect_ok!(e, parser_context, err_ret);
+                        e
+                    },
+                    Keyword::UnsafeStatic => {
+                        let e = self.parse_unsafe_static(parser_func_context, parser_context);
+                        expect_ok!(e, parser_context, err_ret);
+                        e
+                    },
                     Keyword::Void => { 
                         self.skip_next_item();
-                        return Ok(TypedExpr{expr:Expr::Void, r#type: Type::FakeVoid, is_const: true, loc: lookahead_item.location.clone()}); 
+                        return TypedExpr{expr:Expr::Void, r#type: Type::FakeVoid, is_const: true, loc: lookahead_item.location.clone()}; 
                     },
-                    Keyword::If => Ok(self.parse_if(parser_func_context, parser_context)),
+                    Keyword::If => self.parse_if(parser_func_context, parser_context),
                     Keyword::Fn => {
                         let (o_func, _) = self.main_parse_function_decl(false, parser_func_context, parser_context);
                         match o_func{
-                            Some(f) => Ok(f),
-                            None => Err(Error::InternalError(lookahead_item.location))
+                            Some(f) => f,
+                            None => err_ret
                         }
                     },
-                    Keyword::Some => self.parse_some(parser_func_context, parser_context),
+                    Keyword::Some => {
+                        let e = self.parse_some(parser_func_context, parser_context);
+                        expect_ok!(e, parser_context, err_ret);
+                        e
+                    },
                     Keyword::UnsafeSome => self.parse_unsafe_some(parser_func_context, parser_context),
                     _ => {
                         self.skip_next_item();
                         let t = self.parse_type_from_keyword(&k, &lookahead_item.location, parser_context);
-                        Ok(TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: lookahead_item.location.clone()})
+                        TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: lookahead_item.location.clone()}
                     },
                 }
             },
 
-            Token::Ident(_) => Ok(self.parse_ident_expr(holding, parser_func_context, parser_context)),
+            Token::Ident(_) => self.parse_ident_expr(holding, parser_func_context, parser_context),
 
             Token::Punct(p) => match p {
-                Punct::OpenParen => Ok(self.parse_paren_expr(parser_func_context, parser_context)),
-                Punct::OpenBrace => self.parse_object_literal(parser_func_context, parser_context),
-                _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "unexpected punctuation"),
+                Punct::OpenParen => self.parse_paren_expr(parser_func_context, parser_context),
+                Punct::OpenBrace => {
+                    let e = self.parse_object_literal(parser_func_context, parser_context);
+                    expect_ok!(e, parser_context, err_ret);
+                    e
+                },
+                _ => {
+                    parser_context.push_err(self.unexpected_token_error_raw(lookahead_item.span, &lookahead_item.location, "unexpected punctuation"));
+                    err_ret
+                },
             },
 
-            _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "unexpected token"),
+            _ => {
+                parser_context.push_err(self.unexpected_token_error_raw(lookahead_item.span, &lookahead_item.location, "unexpected token"));
+                err_ret
+            },
         }
     }
 
@@ -1798,7 +1801,7 @@ impl<'b> Parser<'b> {
         min_precedence: i32, 
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let mut lhs = init_lhs.clone();
         let lookahead_item = self.peek_next_item();
         let mut lookahead = lookahead_item.token;
@@ -1828,8 +1831,7 @@ impl<'b> Parser<'b> {
                             None
                         };
                         let r_rhs = self.parse_primary(&holding, parser_func_context, parser_context);
-                        if r_rhs.is_err() { return Err(r_rhs.unwrap_err()) }; 
-                        let mut rhs = r_rhs?;
+                        let mut rhs = r_rhs;
                         // lookahead := peek next token
                         let lookahead_item = self.peek_next_item();
                         lookahead = lookahead_item.token;
@@ -1844,8 +1846,7 @@ impl<'b> Parser<'b> {
                                     if lookahead_data.precedence > op_precedence || (lookahead_data.association == Association::Right && lookahead_data.precedence == op_precedence) {
                                         //rhs := parse_expression_1 (rhs, lookahead's precedence)
                                         let new_rhs = self.parse_expr_1(&rhs, lookahead_data.precedence, parser_func_context, parser_context);
-                                        if new_rhs.is_err() { return Err(new_rhs.unwrap_err()) }; 
-                                        rhs = new_rhs?;
+                                        rhs = new_rhs;
                                         //lookahead := peek next token
                                         let lookahead_item = self.peek_next_item();
                                         lookahead = lookahead_item.token;
@@ -1862,7 +1863,7 @@ impl<'b> Parser<'b> {
                 }
             }
         };
-        return Ok(lhs.clone());
+        return lhs.clone();
     }
 }
 
