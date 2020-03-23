@@ -388,7 +388,7 @@ cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 
     1. [ ] == 0 is eqz
     1. [ ] globals that are init to a const should use the wasm global init mechanism
     1. [ ] when calling __static, copy true data into the data section and drop the initializer expression
-    1. [ ] tail recusrion
+    1. [ ] tail recursion
 1. Function calling
     1. [x] simple static function call
     1. [ ] functions as first class objects (but not closures)
@@ -436,9 +436,14 @@ cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 
     1. [x] for funcs generate meta code to turn into templates
     1. [ ] for types generate meta types
     1. [x] implicit type args on instantiation
+    1. [ ] support fat arrow
     1. [ ] partial instantiation - specifically `fn f1<T>(x: T) => {} fn f2<U>(x: U) => f1<U>(x)` currently generates an UnresolvedTypeArg error
 1. containers
     1. [ ] arrays
+        1. [ ] pass by value. increment rc on creation, if function contains a modification, not otherwise
+        1. [ ] 'ref' keyword for pass by ref
+        1. [ ] if a function takes an object and modifies it and returns that object, mark it. When you do let a = f(a) you should be able to remove ref count incs
+        1. [ ] a function that takes an object by ref and modifies it is marked. it will not inc the ref count; instead, the calling function does.
     1. [ ] hashmaps (probably called 'objects' to be JS friendly)
     1. [ ] map/foreach are macros
     1. [ ] more complex for loops (in, of)

@@ -21,7 +21,7 @@ pub mod prelude {
     pub use super::StructType;
     pub use super::StructMember;
     pub use super::cast::prelude::*;
-    pub use super::generics::*;
+    pub use super::generics::prelude::*;
 }
 
 use std::fmt::Display;
@@ -187,8 +187,16 @@ impl Type{
     ///Is this an unresolved type variable?
     pub fn is_type_variable(&self) -> bool {
         match &self {
+            Type::Any | Type::BigInt | Type::BigIntLiteral(_) | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) | Type::Int | Type::IntLiteral(_) 
+                | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String | Type::StringLiteral(_) | Type::Undeclared 
+                | Type::Unknown | Type::UnsafeNull | Type::UnsafePtr | Type::UnsafeSizeT | Type::UnsafeStruct{name:_} 
+                | Type::UserClass{name:_} => false,
+            Type::Array(t) | Type::Option(t) | Type::Some(t) | Type::TypeLiteral(t) | Type::UnsafeArray(t) | Type::UnsafeOption(t) 
+                | Type::UnsafeSome(t) => t.is_type_variable(),
+            Type::Func{func_type: ft} => ft.out_type.is_type_variable() || ft.in_types.iter().any(|t| t.is_type_variable()),
+            Type::ObjectLiteral(oles) => oles.iter().any(|ole| ole.1.is_type_variable()),
+            Type::Tuple(ts) => ts.iter().any(|t| t.is_type_variable()),
             Type::VariableUsage{name: _, constraint: _} => true,
-            _ => false
         }
     }
 

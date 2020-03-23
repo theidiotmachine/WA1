@@ -1,1 +1,1 @@
-export fn id<T>(x: T) -> T x;
+export fn id<T>(x: T) -> T x

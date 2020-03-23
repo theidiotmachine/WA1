@@ -19,7 +19,7 @@ pub mod prelude {
     pub use super::AST;
     pub use super::Exports;
     pub use super::Imports;
-    pub use super::GenericFunc;
+    pub use super::{GenericFunc};
 }
 
 /// A generic function that consumes type arguments and can generate a concrete function

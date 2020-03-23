@@ -178,6 +178,10 @@ pub fn transform_expr(
         Expr::TupleLiteral(v) => Expr::TupleLiteral(transform_typed_exprs(v, transform, parser_context)),
         Expr::TypeLiteral(t) => Expr::TypeLiteral(t.clone()),
         Expr::UnaryOperator{expr: te, op} => Expr::UnaryOperator{expr: Box::new(transform_typed_expr(te, transform, parser_context)), op: *op},
+        Expr::UnresolvedGenericFuncCall{name, resolved_func_decl, args, resolved_types, type_args} => 
+            Expr::UnresolvedGenericFuncCall{name: name.clone(), resolved_func_decl: transform_func_decl(resolved_func_decl, transform, loc, parser_context),
+                args: transform_typed_exprs(args, transform, parser_context), resolved_types: resolved_types.clone(), type_args: type_args.clone()
+            },
         Expr::VariableInit{internal_name, init} => {
             Expr::VariableInit{
                 internal_name: internal_name.clone(),
