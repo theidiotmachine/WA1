@@ -189,7 +189,8 @@ The deduction algorithm for return types is very simple. Don't be surprised if y
 
 ### Generic Functions
 
-Astonishingly, generic functions are supported. Here is the identity function. Not all types can be applied, but that's a work in progress. Stonishingly, expect bugs.
+Astonishingly, generic functions are supported. Here is the identity function. Not all types can be applied, but that's a work in progress. Stonishingly, expect bugs (but
+I am fixing them.)
 
 ```
 fn id<T>(x: T) -> T { x }
