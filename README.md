@@ -189,10 +189,11 @@ The deduction algorithm for return types is very simple. Don't be surprised if y
 
 ### Generic Functions
 
-Astonishingly, generic functions are supported. Here is the identity function. Not all types can be applied, but that's a work in progress. Stonishingly, expect bugs.
+Astonishingly, generic functions are supported. Here is the identity function. Not all types can be applied, but that's a work in progress. Stonishingly, expect bugs (but
+I am fixing them.)
 
 ```
-function id<T>(x: T) -> T { x }
+fn id<T>(x: T) -> T { x }
 ```
 
 To use them you can provide the types, or have it deduce them. 
@@ -207,8 +208,7 @@ The deduction algorithm is very simple, and just matches function argument types
 deduce a type variable that is only used as a return type.
 
 They are not actually true generics. They specialize for some types -- at the moment, the numeric types -- which means I can avoid a box. It also means
-they are sort of a mix between templates and generics. Some days I like saying 'genemplates', other days 'templerics' is more fun. (Note that Rust calls their
-templates 'generics' even though I think they compile in a very similar way to C++. Traitors.)
+they are sort of a mix between templates and generics. Some days I like saying 'genemplates', other days 'templerics' is more fun.
 
 ## Control
 
