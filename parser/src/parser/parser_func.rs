@@ -10,13 +10,35 @@ use types::prelude::*;
 pub use errs::Error;
 pub use errs::prelude::*;
 
-use crate::tree_transform::{Transform, transform_expr, transform_lvalue_expr, transform_typed_expr};
+use crate::tree_transform::{Transform, transform_expr, transform_lvalue_expr, transform_typed_expr, transform_func_decl};
 
 use crate::{expect_keyword, expect_next, expect_ident, expect_punct, cast_typed_expr, expect_semicolon};
 
+struct SimpleErrRecorder{
+    errs: Vec<Error>
+}
+
+impl SimpleErrRecorder{
+    pub fn write_to_p_c(&self, parser_context: &mut ParserContext) -> () {
+        for e in &self.errs {
+            parser_context.push_err(e.clone());
+        }
+    }
+
+    pub fn new() -> SimpleErrRecorder {
+        SimpleErrRecorder{errs: vec![]}
+    }
+}
+
+impl ErrRecorder for SimpleErrRecorder{
+    fn push_err(&mut self, err: Error) -> () {
+        self.errs.push(err);
+    }
+}
+
 /// Take a generic func, and a set of values for the type variables, and instantiate a
 /// resolved func decl. 
-fn resolve_generic_func_decl(
+fn resolve_generic_func_decl<'a>(
     generic_func: &GenericFunc,
     resolved_name: &String,
     type_map: &HashMap<String, Type>,
@@ -31,18 +53,20 @@ fn resolve_generic_func_decl(
 
     let out_return_type = transform_type(&generic_func.func.decl.return_type, type_map, loc, parser_context);
 
-    let mut transformer = GenericFuncTypeTransformer{type_map: type_map.clone()};
+    let mut transformer = GenericFuncTypeTransformer::new(type_map.clone(), parser_context);
+    let mut err_recorder = SimpleErrRecorder::new();
 
     let type_guard = if generic_func.func.decl.type_guard.is_some() {
         let t_g = generic_func.func.decl.type_guard.clone().unwrap();
         let mut t_g_b_s = vec![];
         for t_g_b in t_g.branches {
             t_g_b_s.push(TypeGuardBranch{
-                literal: transform_typed_expr(&t_g_b.literal, &mut transformer, parser_context),
-                arg_idx: 0, r#type: transform_type(&t_g_b.r#type, type_map, loc, parser_context),
+                literal: transform_typed_expr(&t_g_b.literal, &mut transformer, &mut err_recorder),
+                arg_idx: 0, r#type: transform_type(&t_g_b.r#type, type_map, loc, &mut err_recorder),
                 cast_fn_id: t_g_b.cast_fn_id.clone(),
             })
         }
+        err_recorder.write_to_p_c(parser_context);
         Some(TypeGuard{branches: t_g_b_s})
     } else {
         None
@@ -149,12 +173,104 @@ fn get_body_return_type(
     }
 }
 
+///Given a generic func, a set of arguments and a set of types that the generic function
+/// is being resolved with, generate an actual function call.
+fn generate_generic_func_call(
+    func_name: &String,
+    generic_func: &GenericFunc,
+    args: Vec<TypedExpr>,
+    resolved_types: &Vec<Type>,
+    resolved_func_decl: &FuncDecl,
+    loc: &SourceLocation,
+    parser_context: &mut ParserContext,
+) -> TypedExpr {
+    //can this actually be resolved? Are all the types non-variable?
+    let mut unresolved_type_args = vec![];
 
-struct GenericFuncTypeTransformer{
-    pub type_map: HashMap<String, Type>,
+    let mut idx = 0;
+    for t in resolved_types {
+        if t.is_type_variable() {
+            unresolved_type_args.push(generic_func.type_args[idx].name.clone());
+        }
+        idx += 1;
+    }
+
+    //if we still have unresolved types
+    if unresolved_type_args.len() > 0 {
+        //if we're in a generic
+        if parser_context.has_type_stack() {
+            return TypedExpr{expr: Expr::UnresolvedGenericFuncCall{
+                name: func_name.clone(), unresolved_func_decl: resolved_func_decl.clone(), args: args, 
+                unresolved_types: resolved_types.clone()
+            }, r#type: resolved_func_decl.return_type.clone(), is_const: true, loc: loc.clone()}
+        } else {
+            //something went wrong
+            for unresolved_type_arg in unresolved_type_args {
+                parser_context.push_err(Error::UnresolvedTypeArg(loc.clone(), unresolved_type_arg))
+            }
+        }
+    }
+
+    //runtime types are the actual types that we use with our generic function.
+    let mut runtime_type_args = vec![];
+    let mut mangled_type_names = vec![];
+    for resolved_type in resolved_types {
+        let o_runtime_type = get_runtime_type_for_generic(&resolved_type);
+        match o_runtime_type {
+            Some(runtime_type) => {
+                mangled_type_names.push(runtime_type.get_mangled_name());
+                runtime_type_args.push(runtime_type);
+            },
+            None => {
+                parser_context.push_err(Error::NotYetImplemented(loc.clone(), format!("type {} not supported as generic argument", resolved_type)));
+                runtime_type_args.push(Type::Undeclared);
+                mangled_type_names.push(Type::Undeclared.get_mangled_name());
+            }
+        }
+    }
+
+    let mut runtime_type_map: HashMap<String, Type> = HashMap::new();
+    let mut i = 0;
+    for type_arg in &generic_func.type_args {
+        runtime_type_map.insert(type_arg.name.clone(), runtime_type_args[i].clone());
+        i += 1;
+    }
+
+    //generate the name we actually call it, see if we have it already
+    let runtime_name = format!("{}<{}>", generic_func.func.decl.name, mangled_type_names.join(","));
+    let runtime_func_decl = if !parser_context.generic_func_impls.contains(&runtime_name) {
+        generate_runtime_generic_func(generic_func, &runtime_name, &runtime_type_map, &loc, parser_context)
+    } else {
+        resolve_generic_func_decl(generic_func, &runtime_name, &runtime_type_map, &loc, parser_context)
+    };
+
+    //now cast the arguments to the runtime types
+    let mut runtime_args = vec![];
+    let mut idx = 0;
+    let runtime_arg_types = runtime_func_decl.get_arg_types();
+    for arg in args {
+        let cast_expr = cast_typed_expr(&(runtime_arg_types[idx]), Box::new(arg), CastType::GenericForce, parser_context);
+        runtime_args.push(cast_expr);
+        idx += 1;
+    }
+
+    let runtime_call = TypedExpr{expr: Expr::StaticFuncCall(runtime_name.clone(), resolved_func_decl.clone(), runtime_args), 
+        r#type: runtime_func_decl.return_type.clone(), is_const: true, loc: loc.clone()};
+    cast_typed_expr(&resolved_func_decl.return_type, Box::new(runtime_call), CastType::GenericForce, parser_context)
 }
 
-impl Transform for GenericFuncTypeTransformer{
+struct GenericFuncTypeTransformer<'a>{
+    pub type_map: HashMap<String, Type>,
+    pub parser_context: &'a mut ParserContext
+}
+
+impl<'a> GenericFuncTypeTransformer<'a>{
+    pub fn new(type_map: HashMap<String, Type>, parser_context: &mut ParserContext) -> GenericFuncTypeTransformer {
+        GenericFuncTypeTransformer{type_map: type_map, parser_context: parser_context}
+    }
+} 
+
+impl<'a> Transform for GenericFuncTypeTransformer<'a>{
     fn transform_typed_expr(&mut self, typed_expr: &TypedExpr, parser_context: &mut dyn ErrRecorder,) -> Option<TypedExpr> {
         let new_type = transform_type(&typed_expr.r#type, &self.type_map, &typed_expr.loc, parser_context);
         Some(TypedExpr{expr: transform_expr(&typed_expr.expr, self, &typed_expr.loc, parser_context), is_const: typed_expr.is_const, loc: typed_expr.loc, r#type: new_type})
@@ -174,6 +290,21 @@ impl Transform for GenericFuncTypeTransformer{
                     internal_name: internal_name.clone(),
                     init: Box::new(init.as_ref().as_ref().map(|te| transform_typed_expr(&te, self, parser_context))),
                 })
+            },
+            Expr::UnresolvedGenericFuncCall{name, unresolved_func_decl, args, unresolved_types} => {
+                let generic_func = self.parser_context.get_generic_fn_from_generics(name).unwrap();
+                let mut resolved_args = vec![];
+                for arg in args {
+                    resolved_args.push(transform_typed_expr(&arg, self, parser_context));
+                }
+                let mut resolved_types = vec![];
+                for unresolved_type in unresolved_types {
+                    resolved_types.push(transform_type(&unresolved_type, &self.type_map, loc, parser_context));
+                }
+                let resolved_func_decl = transform_func_decl(&unresolved_func_decl, self, loc, parser_context);
+                Some(generate_generic_func_call(name, &generic_func, resolved_args, &resolved_types, &resolved_func_decl,
+                    loc, self.parser_context
+                ).expr)
             },
             _ => None
         }
@@ -215,8 +346,11 @@ fn transform_generic_body(
     match generic_body {
         None => None,
         Some(typed_expr) => {
-            let mut transformer = GenericFuncTypeTransformer{type_map: type_map.clone()};
-            Some(transform_typed_expr(typed_expr, &mut transformer, parser_context))
+            let mut transformer = GenericFuncTypeTransformer{type_map: type_map.clone(), parser_context: parser_context};
+            let mut err_recorder = SimpleErrRecorder::new();
+            let out = transform_typed_expr(typed_expr, &mut transformer, &mut err_recorder);
+            err_recorder.write_to_p_c(parser_context);
+            Some(out)
         }
     }
 }
@@ -802,92 +936,6 @@ impl<'a> Parser<'a> {
         self.parse_func_decl_internal(export, false, parser_func_context_outer, parser_context);
     }
 
-    ///Given a generic func, a set of arguments and a set of types that the generic function
-    /// is being resolved with, generate an actual function call.
-    fn generate_generic_func_call(&mut self,
-        func_name: &String,
-        generic_func: &GenericFunc,
-        args: Vec<TypedExpr>,
-        resolved_types: &Vec<Type>,
-        resolved_func_decl: &FuncDecl,
-        loc: &SourceLocation,
-        parser_context: &mut ParserContext,
-    ) -> TypedExpr {
-        //can this actually be resolved? Are all the types non-variable?
-        let mut unresolved_type_args = vec![];
-
-        let mut idx = 0;
-        for t in resolved_types {
-            if t.is_type_variable() {
-                unresolved_type_args.push(generic_func.type_args[idx].name.clone());
-            }
-            idx += 1;
-        }
-
-        //if we still have unresolved types
-        if unresolved_type_args.len() > 0 {
-            //if we're in a generic
-            if parser_context.has_type_stack() {
-                return TypedExpr{expr: Expr::UnresolvedGenericFuncCall{
-                    name: func_name.clone(), resolved_func_decl: resolved_func_decl.clone(), args: args, 
-                    resolved_types: resolved_types.clone(), type_args: generic_func.type_args.clone()
-                }, r#type: resolved_func_decl.return_type.clone(), is_const: true, loc: loc.clone()}
-            } else {
-                //something went wrong
-                for unresolved_type_arg in unresolved_type_args {
-                    parser_context.push_err(Error::UnresolvedTypeArg(loc.clone(), unresolved_type_arg))
-                }
-            }
-        }
-
-        //runtime types are the actual types that we use with our generic function.
-        let mut runtime_type_args = vec![];
-        let mut mangled_type_names = vec![];
-        for resolved_type in resolved_types {
-            let o_runtime_type = get_runtime_type_for_generic(&resolved_type);
-            match o_runtime_type {
-                Some(runtime_type) => {
-                    mangled_type_names.push(runtime_type.get_mangled_name());
-                    runtime_type_args.push(runtime_type);
-                },
-                None => {
-                    parser_context.push_err(Error::NotYetImplemented(loc.clone(), format!("type {} not supported as generic argument", resolved_type)));
-                    runtime_type_args.push(Type::Undeclared);
-                    mangled_type_names.push(Type::Undeclared.get_mangled_name());
-                }
-            }
-        }
-
-        let mut runtime_type_map: HashMap<String, Type> = HashMap::new();
-        let mut i = 0;
-        for type_arg in &generic_func.type_args {
-            runtime_type_map.insert(type_arg.name.clone(), runtime_type_args[i].clone());
-            i += 1;
-        }
-
-        //generate the name we actually call it, see if we have it already
-        let runtime_name = format!("{}<{}>", generic_func.func.decl.name, mangled_type_names.join(","));
-        let runtime_func_decl = if !parser_context.generic_func_impls.contains(&runtime_name) {
-            generate_runtime_generic_func(generic_func, &runtime_name, &runtime_type_map, &loc, parser_context)
-        } else {
-            resolve_generic_func_decl(generic_func, &runtime_name, &runtime_type_map, &loc, parser_context)
-        };
-
-        //now cast the arguments to the runtime types
-        let mut runtime_args = vec![];
-        let mut idx = 0;
-        let runtime_arg_types = runtime_func_decl.get_arg_types();
-        for arg in args {
-            let cast_expr = cast_typed_expr(&(runtime_arg_types[idx]), Box::new(arg), CastType::GenericForce, parser_context);
-            runtime_args.push(cast_expr);
-            idx += 1;
-        }
-
-        let runtime_call = TypedExpr{expr: Expr::StaticFuncCall(runtime_name.clone(), resolved_func_decl.clone(), runtime_args), 
-            r#type: runtime_func_decl.return_type.clone(), is_const: true, loc: loc.clone()};
-        cast_typed_expr(&resolved_func_decl.return_type, Box::new(runtime_call), CastType::GenericForce, parser_context)
-    }
-
     fn parse_generic_func_call_explicit_types(
         &mut self,
         func_name: &String,
@@ -945,7 +993,7 @@ impl<'a> Parser<'a> {
         //now parse the args
         let args = self.parse_function_call_args(&resolved_func_decl.get_arg_types(), parser_func_context, parser_context);
         
-        self.generate_generic_func_call(func_name, generic_func, args, &resolved_types, &resolved_func_decl, &loc, parser_context)
+        generate_generic_func_call(func_name, generic_func, args, &resolved_types, &resolved_func_decl, &loc, parser_context)
     }
 
     fn parse_generic_func_call_implicit_types(
@@ -1001,7 +1049,7 @@ impl<'a> Parser<'a> {
         }
         
         //now we can actually generate the generic call
-        self.generate_generic_func_call(func_name, generic_func, args, &resolved_types, &resolved_func_decl, &loc, parser_context)
+        generate_generic_func_call(func_name, generic_func, args, &resolved_types, &resolved_func_decl, &loc, parser_context)
     }
 
     fn parse_generic_func_call(

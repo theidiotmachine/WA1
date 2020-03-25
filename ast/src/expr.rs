@@ -149,7 +149,7 @@ pub enum Expr {
     /// Member func call.
     MemberFuncCall(Box<TypedExpr>, String, Vec<TypedExpr>),
     /// A generic call that we haven't been able to resolve yet
-    UnresolvedGenericFuncCall{name: String, resolved_func_decl: FuncDecl, args: Vec<TypedExpr>, resolved_types: Vec<Type>, type_args: Vec<TypeArg>},
+    UnresolvedGenericFuncCall{name: String, unresolved_func_decl: FuncDecl, args: Vec<TypedExpr>, unresolved_types: Vec<Type>},
     /// Implicit i32 -> f64 cast
     IntToNumber(Box<TypedExpr>),
     /// Implicit i32 -> i64 cast
