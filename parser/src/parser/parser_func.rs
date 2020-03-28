@@ -62,7 +62,6 @@ fn resolve_generic_func_decl<'a>(
         for t_g_b in t_g.branches {
             t_g_b_s.push(TypeGuardBranch{
                 literal: transform_typed_expr(&t_g_b.literal, &mut transformer, &mut err_recorder),
-                arg_idx: 0, r#type: transform_type(&t_g_b.r#type, type_map, loc, &mut err_recorder),
                 cast_fn_id: t_g_b.cast_fn_id.clone(),
             })
         }
@@ -259,6 +258,50 @@ fn generate_generic_func_call(
     cast_typed_expr(&resolved_func_decl.return_type, Box::new(runtime_call), CastType::GenericForce, parser_context)
 }
 
+///Given a set of type arguments that have deduced from a set of function arguments, check them, and generate
+/// a function call.
+fn generate_generic_func_call_deduced_types(
+    func_name: &String,
+    generic_func: &GenericFunc,
+    resolved_type_map: &HashMap<String, Type>,
+    first_pass_args: &Vec<TypedExpr>,
+    loc: &SourceLocation,
+    parser_context: &mut ParserContext,
+) -> TypedExpr {
+    //generate the resolved types
+    let mut resolved_types = vec![];
+    let mut idx = 0;
+    for type_arg in &generic_func.type_args {
+        let resolved_type = resolved_type_map.get(&type_arg.name).unwrap();
+        let loc = first_pass_args[idx].loc;
+        resolved_types.push(resolved_type.clone());
+
+        if *resolved_type == Type::Undeclared {
+            parser_context.push_err(Error::FailedGenericDeduction(loc, type_arg.name.clone()));
+        }
+
+        if !matches_type_constraint(resolved_type, &(generic_func.type_args[idx].constraint)) {
+            parser_context.push_err(Error::FailedTypeArgConstraint(loc.clone()));
+        }
+
+        idx += 1;
+    }
+
+    //generate a func_decl by substituting type vars
+    let resolved_func_decl: FuncDecl = resolve_generic_func_decl(generic_func, &generic_func.func.decl.name, &resolved_type_map, loc, parser_context);
+
+    //type check the first pass args by casting, to get the final args
+    let mut args = vec![];
+    idx = 0;
+    for first_pass_arg in first_pass_args {
+        let cast = cast_typed_expr(&resolved_func_decl.args[idx].r#type, Box::new(first_pass_arg.clone()), CastType::Implicit, parser_context);
+        args.push(cast);
+    }
+
+    //now we can actually generate the generic call
+    generate_generic_func_call(func_name, generic_func, args, &resolved_types, &resolved_func_decl, loc, parser_context)
+}
+
 struct GenericFuncTypeTransformer<'a>{
     pub type_map: HashMap<String, Type>,
     pub parser_context: &'a mut ParserContext
@@ -321,9 +364,7 @@ impl<'a> Transform for GenericFuncTypeTransformer<'a>{
             let mut branches = vec![];
             for old_branch in &old_type_guard.branches {
                 branches.push(TypeGuardBranch{
-                    r#type: transform_type(&old_branch.r#type, &self.type_map, loc, parser_context),
                     literal: transform_typed_expr(&old_branch.literal, self, parser_context),
-                    arg_idx: old_branch.arg_idx,
                     cast_fn_id: old_branch.cast_fn_id.clone(),
                 })
             }
@@ -494,6 +535,89 @@ fn deduce_generic_type(
     }
 }
 
+///Given a set of function arguments, and the corresponding generic function argument types (which may well contain type variables), guess the type arguments.  
+fn deduce_generic_function_call_args(
+    args: &Vec<TypedExpr>,
+    unresolved_arg_types: &Vec<Type>,
+    type_map: &mut HashMap<String, Type>,
+    loc: &SourceLocation,
+    parser_context: &mut ParserContext,
+) -> () {
+    let mut idx = 0;
+    let l = if unresolved_arg_types.len() > args.len() {
+        parser_context.errors.push(Error::NotEnoughArgs(loc.clone()));
+        args.len()
+    } else if unresolved_arg_types.len() < args.len() {
+        parser_context.errors.push(Error::TooManyArgs(args[unresolved_arg_types.len()].loc.clone()));
+        unresolved_arg_types.len()
+    } else {
+        args.len()
+    };
+
+    loop {
+        if idx >= l {
+            break;
+        }
+        let expr = &args[idx];
+        
+        let arg_type = &unresolved_arg_types[idx];
+        deduce_generic_type(arg_type, &expr.r#type, type_map, &expr.loc, parser_context);
+        
+        idx += 1;
+    }
+}
+
+/// Helper to create a type map, which is a map from type arg name to type. Starts off all undeclared
+fn new_type_map(type_args: &Vec<TypeArg>) -> HashMap<String, Type> {
+    let mut resolved_type_map: HashMap<String, Type> = HashMap::new();
+    for type_arg in type_args {
+        resolved_type_map.insert(type_arg.name.clone(), Type::Undeclared);
+    }
+    resolved_type_map
+}
+
+fn cast_function_call_args(
+    args: &Vec<TypedExpr>,
+    arg_types: &Vec<Type>,
+    loc: &SourceLocation,
+    parser_context: &mut ParserContext,
+) ->Vec<TypedExpr> {
+    let mut idx = 0;
+    let mut out: Vec<TypedExpr> = vec![];
+    let l = if arg_types.len() > args.len() {
+        parser_context.errors.push(Error::NotEnoughArgs(loc.clone()));
+        args.len()
+    } else if arg_types.len() < args.len() {
+        parser_context.errors.push(Error::TooManyArgs(args[arg_types.len()].loc.clone()));
+        arg_types.len()
+    } else {
+        args.len()
+    };
+
+    loop {
+        if idx >= l {
+            return out;
+        }
+        let arg_type = &arg_types[idx];
+        let cast = cast_typed_expr(arg_type, Box::new(args[idx].clone()), CastType::Implicit, parser_context);
+        out.push(cast);
+        idx += 1;
+    }
+}
+
+fn generate_static_func_call(
+    full_name: &String,
+    func_decl: &FuncDecl,
+    unchecked_args: &Vec<TypedExpr>,
+    loc: &SourceLocation,
+    parser_context: &mut ParserContext,
+) -> TypedExpr {
+    let arg_types = func_decl.get_arg_types();
+    let args = cast_function_call_args(unchecked_args, &arg_types, loc, parser_context);
+    let func_return_type = func_decl.return_type.clone();
+    TypedExpr{expr: Expr::StaticFuncCall(full_name.clone(), func_decl.clone(), args), r#type: func_return_type, is_const: true, loc: loc.clone()}
+}
+
 impl<'a> Parser<'a> {
     /// If we are expecting a no arg function, call this.
     pub(crate) fn parse_empty_function_call_args(&mut self,
@@ -508,39 +632,32 @@ impl<'a> Parser<'a> {
         self.parse_function_call_args(&vec![], parser_func_context, parser_context);
     }
 
-    pub(crate) fn parse_function_call_args(&mut self,
-        arg_types: &Vec<Type>,
+    fn parse_function_call_args_unchecked(&mut self,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Vec<TypedExpr> {
+    ) -> (Vec<TypedExpr>, SourceLocation) {
         let mut out: Vec<TypedExpr> = vec![];
+        let mut loc_out = self.next_position();
         self.skip_next_item();
         loop{
             let lookahead_item = self.peek_next_item();
             let lookahead = lookahead_item.token;
             match lookahead {
                 Token::Punct(Punct::CloseParen) => {
+                    loc_out.extend_right(&self.next_position());
                     self.skip_next_item();
-                    if arg_types.len() != out.len() {
-                        parser_context.errors.push(Error::NotEnoughArgs(lookahead_item.location.clone()));
-                    }
-                    return out;
+                    return (out, loc_out);
                 },
                 _ => {}
             }
         
             let expr = self.parse_expr(parser_func_context, parser_context);
             //remove this when parse_expr uses TSMGO error handling
-            if expr.is_err() { return out; }; let expr = expr.unwrap();
-            
-            if out.len() == arg_types.len() {
-                parser_context.errors.push(Error::TooManyArgs(expr.loc.clone()));
-            } else {
-                let arg_type = &arg_types[out.len()];
-                let cast = cast_typed_expr(arg_type, Box::new(expr), CastType::Implicit, parser_context);
-                out.push(cast);
+            if !expr.is_err() { 
+                let expr = expr.unwrap();
+                out.push(expr);
             }
-
+            
             let lookahead_item = self.peek_next_item();
             let lookahead = lookahead_item.token;
          
@@ -557,54 +674,13 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(crate) fn parse_generic_function_call_args(&mut self,
+    pub(crate) fn parse_function_call_args(&mut self,
         arg_types: &Vec<Type>,
-        type_map: &mut HashMap<String, Type>,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> Vec<TypedExpr> {
-        let mut out: Vec<TypedExpr> = vec![];
-        self.skip_next_item();
-        loop{
-            let lookahead_item = self.peek_next_item();
-            let lookahead = lookahead_item.token;
-            match lookahead {
-                Token::Punct(Punct::CloseParen) => {
-                    self.skip_next_item();
-                    if arg_types.len() != out.len() {
-                        parser_context.errors.push(Error::NotEnoughArgs(lookahead_item.location.clone()));
-                    }
-                    return out;
-                },
-                _ => {}
-            }
-        
-            let expr = self.parse_expr(parser_func_context, parser_context);
-            //remove this when parse_expr uses TSMGO error handling
-            if expr.is_err() { return out; }; let expr = expr.unwrap();
-            
-            if out.len() == arg_types.len() {
-                parser_context.errors.push(Error::TooManyArgs(expr.loc.clone()));
-            } else {
-                let arg_type = &arg_types[out.len()];
-                deduce_generic_type(arg_type, &expr.r#type, type_map, &expr.loc, parser_context);
-                out.push(expr);
-            }
-
-            let lookahead_item = self.peek_next_item();
-            let lookahead = lookahead_item.token;
-         
-            match lookahead {
-                Token::Punct(Punct::CloseParen) => {},
-                Token::Punct(Punct::Comma) => {
-                    self.skip_next_item();
-                },
-                _ => {
-                    parser_context.errors.push(Error::UnexpectedToken(lookahead_item.location.clone(), String::from("need expr or comma")));
-                    self.skip_next_item();
-                }
-            }
-        }
+        let (unchecked_args, loc) = self.parse_function_call_args_unchecked(parser_func_context, parser_context);
+        cast_function_call_args(&unchecked_args, arg_types, &loc, parser_context)
     }
 
     fn parse_function_decl_arg(&mut self,
@@ -749,8 +825,10 @@ impl<'a> Parser<'a> {
                 in_iteration: false,
             };
 
+            //parse the type literal that defines this branch of the type guard
             let r_expr = self.parse_expr(&mut fake_parser_func_context, parser_context);
             if r_expr.is_ok() {
+                //make sure it's a literal
                 let expr = r_expr.unwrap();
                 let mut ok = true;
                 if !expr.expr.is_literal() {
@@ -758,12 +836,13 @@ impl<'a> Parser<'a> {
                     parser_context.push_err(Error::TypeGuardExpectingLiteral(expr.loc.clone()));    
                 }
 
+                //and its type matches the type guard type
                 if expr.r#type != *func_return_type {
                     parser_context.push_err(Error::TypeFailure(expr.loc.clone(), func_return_type.clone(), expr.r#type.clone()));
                 }
 
+                //now, parse the func associated with this branch
                 expect_punct!(self, parser_context, Punct::FatArrow);
-              
                 let mut fake_parser_func_context = ParserFuncContext{
                     closure: vec![], given_func_return_type: Type::Undeclared, implied_func_return_type: Type::Undeclared,
                     local_vars: vec![],
@@ -772,25 +851,10 @@ impl<'a> Parser<'a> {
                 };
                 let (_, cast_fn_id) = self.main_parse_function_decl(false, &mut fake_parser_func_context, parser_context);
 
-                /*
-                let o_arg_idx = arg_list.iter().position(|a| a.name == id);
-                let arg_idx = if o_arg_idx.is_none() {
-                    parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone() ));
-                    0
-                } else {
-                    o_arg_idx.unwrap()
-                };
-                
-                let t = self.parse_type(parser_context);
-                */
-
-                /*
                 if ok {
-                    branches.push(TypeGuardBranch{r#type: t, literal: expr, arg_idx: arg_idx, cast_fn_id: cast_fn_id});
+                    branches.push(TypeGuardBranch{literal: expr, cast_fn_id: cast_fn_id});
                 }
-                */
-                panic!();
-
+                
                 expect_semicolon!(self, parser_context);
                 let next = self.peek_next_item();
                 
@@ -996,6 +1060,7 @@ impl<'a> Parser<'a> {
         generate_generic_func_call(func_name, generic_func, args, &resolved_types, &resolved_func_decl, &loc, parser_context)
     }
 
+    //Parse the function call of a generic function, where we don't know the type arguments.
     fn parse_generic_func_call_implicit_types(
         &mut self,
         func_name: &String,
@@ -1005,51 +1070,14 @@ impl<'a> Parser<'a> {
     ) -> TypedExpr {
         let loc = self.peek_next_location();
 
-        //generate a first pass args and a type map. This means accepting the arg 
-        //types as they are
-        let mut resolved_type_map: HashMap<String, Type> = HashMap::new();
-        for type_arg in &generic_func.type_args {
-            resolved_type_map.insert(type_arg.name.clone(), Type::Undeclared);
-        }
-        let first_pass_args = self.parse_generic_function_call_args(
-            &generic_func.func.decl.get_arg_types(),
-            &mut resolved_type_map,
-            parser_func_context,
-            parser_context,
-        );
+        //generate a first pass args and a type map. This means accepting the arg types as they are
+        let mut resolved_type_map = new_type_map(&generic_func.type_args);
+        let (first_pass_args, unchecked_args_loc) = self.parse_function_call_args_unchecked(parser_func_context, parser_context);
 
-        //generate the resolved types
-        let mut resolved_types = vec![];
-        let mut idx = 0;
-        for type_arg in &generic_func.type_args {
-            let resolved_type = resolved_type_map.get(&type_arg.name).unwrap();
-            let loc = first_pass_args[idx].loc;
-            resolved_types.push(resolved_type.clone());
+        //now run the deduction
+        deduce_generic_function_call_args(&first_pass_args, &generic_func.func.decl.get_arg_types(), &mut resolved_type_map, &unchecked_args_loc, parser_context);
 
-            if *resolved_type == Type::Undeclared {
-                parser_context.push_err(Error::FailedGenericDeduction(loc, type_arg.name.clone()));
-            }
-
-            if !matches_type_constraint(resolved_type, &(generic_func.type_args[idx].constraint)) {
-                parser_context.push_err(Error::FailedTypeArgConstraint(loc.clone()));
-            }
-
-            idx += 1;
-        }
-
-        //generate a func_decl by substituting type vars
-        let resolved_func_decl: FuncDecl = resolve_generic_func_decl(generic_func, &generic_func.func.decl.name, &resolved_type_map, &loc, parser_context);
-
-        //type check the first pass args by casting, to get the final args
-        let mut args = vec![];
-        idx = 0;
-        for first_pass_arg in first_pass_args {
-            let cast = cast_typed_expr(&resolved_func_decl.args[idx].r#type, Box::new(first_pass_arg), CastType::Implicit, parser_context);
-            args.push(cast);
-        }
-        
-        //now we can actually generate the generic call
-        generate_generic_func_call(func_name, generic_func, args, &resolved_types, &resolved_func_decl, &loc, parser_context)
+        generate_generic_func_call_deduced_types(func_name, generic_func, &resolved_type_map, &first_pass_args, &loc, parser_context)
     }
 
     fn parse_generic_func_call(
@@ -1129,6 +1157,44 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        
+    }
+
+    pub (crate) fn generate_func_call(
+        &mut self,
+        full_name: &String,
+        unchecked_args: &Vec<TypedExpr>,
+        loc: &SourceLocation,
+        parser_context: &mut ParserContext,
+    ) -> TypedExpr {
+        let o_f_d = parser_context.get_fn_decl_from_decls(&full_name);
+        match &o_f_d {
+            Some(func_decl) => {
+                generate_static_func_call(full_name, func_decl, unchecked_args, loc, parser_context)
+            }
+            None => {
+                let o_f_d = parser_context.get_fn_decl_from_imports(&full_name);
+                match &o_f_d {
+                    Some(func_decl) => {
+                        generate_static_func_call(full_name, func_decl, unchecked_args, loc, parser_context)
+                    }
+                    None => {
+                        let o_g_f = parser_context.get_generic_fn_from_generics(full_name);
+                        match o_g_f {
+                            Some(generic_func) => {
+                                let mut resolved_type_map = new_type_map(&generic_func.type_args);
+                                deduce_generic_function_call_args(
+                                    &unchecked_args, &generic_func.func.decl.get_arg_types(), &mut resolved_type_map, loc, parser_context);
+                        
+                                generate_generic_func_call_deduced_types(full_name, &generic_func, &resolved_type_map, &unchecked_args, loc, parser_context)
+                            },
+                            None => {
+                                parser_context.push_err(Error::FuncNotRecognized(loc.clone(), full_name.clone()));
+                                TypedExpr{expr: Expr::NoOp, is_const: true, loc: loc.clone(), r#type: Type::Undeclared}
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

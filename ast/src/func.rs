@@ -44,11 +44,8 @@ pub struct Func {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct TypeGuardBranch {
-    /// The type that the type guard resolves to
-    pub r#type: Type,
     /// The literal expression that tells us the type. 
     pub literal: TypedExpr,
-    pub arg_idx: usize,
     /// The cast fn to apply
     pub cast_fn_id: String,
 }
