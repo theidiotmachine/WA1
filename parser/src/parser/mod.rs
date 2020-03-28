@@ -655,7 +655,6 @@ impl<'b> Parser<'b> {
         push_scope: bool,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-        //type_guard_instances: Vec<TypeGuardBranch>
     ) -> TypedExpr {
         let mut out: Vec<TypedExpr> = vec![];
         let next = self.peek_next_item();
@@ -712,24 +711,26 @@ impl<'b> Parser<'b> {
         expect_punct!(self, parser_context, Punct::CloseParen);
 
         //is the condition a type guard?
-        let (o_type_guard, v) = match &condition.expr {
+        let o_type_guard_inst = match &condition.expr {
             Expr::StaticFuncCall(s, fd, v) => {
                 let o_type_guard = &fd.type_guard;
                 if o_type_guard.is_some() {
-                    (o_type_guard.clone(), v.clone())
+                    Some((o_type_guard.clone().unwrap(), v[0].clone()))
                 } else {
-                    (None, vec![])
+                    None
                 }
             },
-            _ => (None, vec![])
+            _ => None
         };
         
-        if o_type_guard.is_some() {
+        /*
+        let o_then_type_guard_branch = if o_type_guard.is_some() {
             let type_guard = o_type_guard.unwrap();
-            let o_branch = type_guard.branches.iter().find(|b| b.literal.expr == Expr::BoolLiteral(true));
-            parser_context.push_block_scope();
-            //parser_context.add_var(var_name: &String, internal_var_name: &String, r#type: &Type, constant: bool)
-        }
+            type_guard.branches.iter().find(|b| b.literal.expr == Expr::BoolLiteral(true))
+        } else {
+            None
+        };
+        */
 
         let then_block = self.parse_block(true, parser_func_context, parser_context);
 
