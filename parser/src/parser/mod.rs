@@ -537,10 +537,8 @@ impl<'b> Parser<'b> {
         };
 
         assert_punct!(self, Punct::Equal);
-        let init = self.parse_expr(parser_func_context, parser_context);
-        if init.is_err() { return Err(init.unwrap_err()) }; 
-        let mut init = init?;
-
+        let mut init = self.parse_expr(parser_func_context, parser_context);
+        
         loc.end = init.loc.end.clone();
 
         if var_type.is_undeclared() {
@@ -625,6 +623,7 @@ impl<'b> Parser<'b> {
             _ => {
                 // if we don't know what this statement is, parse it as an expr
                 let expr = self.parse_expr(fake_parser_func_context, parser_context);
+                init_body.push(expr);
 
                 // ugh this is like a hundred million lines to check the semi-colon
                 let next = self.next_item();
@@ -635,13 +634,7 @@ impl<'b> Parser<'b> {
                             self.skip_next_item();
                         } else {
                             parser_context.errors.push(self.expected_token_error_raw(&next, &[&";"]));
-                        }
-                        match expr {
-                            Err(e) => parser_context.errors.push(e),
-                            Ok(s) => {
-                                init_body.push(s);
-                            }
-                        }
+                        }        
                     },
                     Err(e) => {
                         parser_context.errors.push(e)
@@ -703,8 +696,6 @@ impl<'b> Parser<'b> {
         //get condition, check it
         expect_punct!(self, parser_context, Punct::OpenParen);
         let condition = self.parse_expr(parser_func_context, parser_context);
-        let err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Unknown, is_const: true, loc: loc.clone()};
-        expect_ok!(condition, parser_context, err_ret);
         if condition.r#type != Type::Boolean {
             parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Boolean,  condition.r#type.clone()));
         }
@@ -779,13 +770,11 @@ impl<'b> Parser<'b> {
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
-        let err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0)), is_const: true};
         let mut loc = self.peek_next_location();
         self.skip_next_item();
 
         expect_punct!(self, parser_context, Punct::OpenParen);
         let condition = self.parse_expr(parser_func_context, parser_context);
-        expect_ok!(condition, parser_context, err_ret);
         if condition.r#type != Type::Boolean {
             parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Boolean, condition.r#type.clone()));
         }
@@ -915,7 +904,6 @@ impl<'b> Parser<'b> {
                     } else {
                         let expr = self.parse_expr(parser_func_context, parser_context);
                         expect_semicolon!(self, parser_context);
-                        expect_ok!(expr, parser_context, err_ret);
                         // return type checking
                         let expr_type = expr.r#type.clone();
                         let check_return_type = if parser_func_context.given_func_return_type == Type::Undeclared {
@@ -960,7 +948,6 @@ impl<'b> Parser<'b> {
                 _ => {
                     // if we don't know what this statement is, parse it as an expr
                     let expr = self.parse_expr(parser_func_context, parser_context);
-                    expect_ok!(expr, parser_context, err_ret);
                     expr
                 }
             },
@@ -968,7 +955,6 @@ impl<'b> Parser<'b> {
             _ => {
                 // if we don't know what this statement is, parse it as an expr
                 let expr = self.parse_expr(parser_func_context, parser_context);
-                expect_ok!(expr, parser_context, err_ret);
                 expect_semicolon!(self, parser_context);
                 expr
             }
@@ -1018,7 +1004,6 @@ impl<'b> Parser<'b> {
             }
 
             let v = self.parse_expr(parser_func_context, parser_context);
-            assert_ok!(v);
             let o_cast_expr = try_create_cast(inner_type, &v, CastType::Implicit);
             match o_cast_expr {
                 Some(cast_expr) => { out.push(cast_expr) },
@@ -1102,7 +1087,6 @@ impl<'b> Parser<'b> {
                 Token::Ident(i) => {
                     assert_punct!(self, Punct::Colon);
                     let v = self.parse_expr(parser_func_context, parser_context);
-                    assert_ok!(v);
 
                     if got.contains(&i.to_string()) {
                         parser_context.errors.push(Error::ObjectDuplicateMember(next_item.location, i.to_string().clone()));
@@ -1238,36 +1222,6 @@ impl<'b> Parser<'b> {
         }
     }
 
-    /*
-    fn parse_component(&mut self, 
-        lhs: &TypedExpr,
-        parser_func_context: &mut ParserFuncContext,
-        parser_context: &mut ParserContext,
-    ) -> TypedExpr {
-        //expect_punct!(self, parser_context, Punct::Period);
-        self.skip_next_item();
-        let lhs_type = &lhs.r#type;
-
-        match lhs_type {
-            Type::UnsafeStruct{name} => {
-                let tm_entry = parser_context.type_map.get(name).unwrap().clone();
-                match tm_entry {
-                    TypeDecl::Struct{struct_type: st, under_construction: _, export: _, name: _} => self.parse_struct_component(lhs, &st, parser_context),
-                    _ => unreachable!()
-                }
-            },
-            Type::Int | Type::IntLiteral(_)  => self.parse_int_component(lhs, parser_func_context, parser_context),
-            //FIXME64BIT
-            Type::UnsafeSizeT => self.parse_unsafe_size_t_component(lhs, parser_func_context, parser_context),
-            Type::UnsafeOption(_/*inner*/) => self.parse_unsafe_option_component(lhs, /*&inner,*/ parser_func_context, parser_context),
-            _ => {
-                parser_context.push_err(Error::NoComponents(lhs.loc.clone()));
-                lhs.clone()
-            }
-        }
-    }
-    */
-
     ///A square bracket member access.
     fn parse_dynamic_component(&mut self, 
         lhs: &TypedExpr,
@@ -1307,16 +1261,11 @@ impl<'b> Parser<'b> {
                 break;
             }
 
-            let r_expr = self.parse_expr(parser_func_context, parser_context);
-            if r_expr.is_ok() {
-                let expr = r_expr.unwrap();
-                loc.extend_right(&expr.loc);
-                out_arr_types.push(expr.r#type.clone());
-                out_arr.push(expr);
-            } else {
-                parser_context.push_err(r_expr.unwrap_err());
-            }
-
+            let expr = self.parse_expr(parser_func_context, parser_context);
+            loc.extend_right(&expr.loc);
+            out_arr_types.push(expr.r#type.clone());
+            out_arr.push(expr);
+            
             let lookahead_item = self.peek_next_item();
             if !(lookahead_item.token.matches_punct(Punct::Comma) || lookahead_item.token.matches_punct(Punct::CloseParen)) {
                 parser_context.push_err(Error::UnexpectedToken(lookahead_item.location.clone(), String::from("Expecting ',' or ')")));
@@ -1363,7 +1312,6 @@ impl<'b> Parser<'b> {
                 Token::Ident(i) => {
                     assert_punct!(self, Punct::Colon);
                     let v = self.parse_expr(parser_func_context, parser_context);
-                    assert_ok!(v);
                     type_out.insert(i.to_string(), v.r#type.clone());
                     out.push(ObjectLiteralElem{name: i.to_string(), value: v});
                     
@@ -1636,9 +1584,9 @@ impl<'b> Parser<'b> {
     fn parse_expr(&mut self,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let expr = self.parse_primary(&None, parser_func_context, parser_context);
-        Ok(self.parse_expr_1(&expr, 0, parser_func_context, parser_context))
+        self.parse_expr_1(&expr, 0, parser_func_context, parser_context)
     }
 
     fn get_prefix_unary_operator_for_token(&self, 
@@ -1680,7 +1628,6 @@ impl<'b> Parser<'b> {
                     let op = self.get_prefix_unary_operator_for_token(lookahead_item.span, &lookahead_item.location, &lookahead, parser_context);
                     self.skip_next_item();
                     let inner = self.parse_expr(parser_func_context, parser_context);
-                    expect_ok!(inner, parser_context, err_ret);
                     loc.end = inner.loc.end.clone();
                     let o_outer_type = types::get_unary_op_type(get_op_type_for_unop(&op), &inner.r#type);
                     match o_outer_type {

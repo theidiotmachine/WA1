@@ -233,8 +233,8 @@ fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, cast_type: CastType, parser
     }
 }
 
-/// Type to indicate if this is a speculative parse (i.e. it may fail gracefully) of a required parse (in which case we)
-/// must succeed
+/// Type to indicate if this is a speculative parse (i.e. it may fail gracefully) of a required parse (in which case we
+/// must succeed)
 #[derive(Debug, PartialEq)]
 pub enum Commitment{
     Speculative,

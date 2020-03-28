@@ -652,11 +652,7 @@ impl<'a> Parser<'a> {
             }
         
             let expr = self.parse_expr(parser_func_context, parser_context);
-            //remove this when parse_expr uses TSMGO error handling
-            if !expr.is_err() { 
-                let expr = expr.unwrap();
-                out.push(expr);
-            }
+            out.push(expr);
             
             let lookahead_item = self.peek_next_item();
             let lookahead = lookahead_item.token;
@@ -826,45 +822,38 @@ impl<'a> Parser<'a> {
             };
 
             //parse the type literal that defines this branch of the type guard
-            let r_expr = self.parse_expr(&mut fake_parser_func_context, parser_context);
-            if r_expr.is_ok() {
-                //make sure it's a literal
-                let expr = r_expr.unwrap();
-                let mut ok = true;
-                if !expr.expr.is_literal() {
-                    ok = false;
-                    parser_context.push_err(Error::TypeGuardExpectingLiteral(expr.loc.clone()));    
-                }
+            let expr = self.parse_expr(&mut fake_parser_func_context, parser_context);
+            let mut ok = true;
+            if !expr.expr.is_literal() {
+                ok = false;
+                parser_context.push_err(Error::TypeGuardExpectingLiteral(expr.loc.clone()));    
+            }
 
-                //and its type matches the type guard type
-                if expr.r#type != *func_return_type {
-                    parser_context.push_err(Error::TypeFailure(expr.loc.clone(), func_return_type.clone(), expr.r#type.clone()));
-                }
+            //and its type matches the type guard type
+            if expr.r#type != *func_return_type {
+                parser_context.push_err(Error::TypeFailure(expr.loc.clone(), func_return_type.clone(), expr.r#type.clone()));
+            }
 
-                //now, parse the func associated with this branch
-                expect_punct!(self, parser_context, Punct::FatArrow);
-                let mut fake_parser_func_context = ParserFuncContext{
-                    closure: vec![], given_func_return_type: Type::Undeclared, implied_func_return_type: Type::Undeclared,
-                    local_vars: vec![],
-                    local_var_map: HashMap::new(),
-                    in_iteration: false,
-                };
-                let (_, cast_fn_id) = self.main_parse_function_decl(false, &mut fake_parser_func_context, parser_context);
+            //now, parse the func associated with this branch
+            expect_punct!(self, parser_context, Punct::FatArrow);
+            let mut fake_parser_func_context = ParserFuncContext{
+                closure: vec![], given_func_return_type: Type::Undeclared, implied_func_return_type: Type::Undeclared,
+                local_vars: vec![],
+                local_var_map: HashMap::new(),
+                in_iteration: false,
+            };
+            let (_, cast_fn_id) = self.main_parse_function_decl(false, &mut fake_parser_func_context, parser_context);
 
-                if ok {
-                    branches.push(TypeGuardBranch{literal: expr, cast_fn_id: cast_fn_id});
-                }
-                
-                expect_semicolon!(self, parser_context);
-                let next = self.peek_next_item();
-                
-                if next.token.matches_punct(Punct::CloseBrace) {
-                    self.skip_next_item();
-                    break;
-                }
-
-            } else {
-                parser_context.push_err(r_expr.unwrap_err());
+            if ok {
+                branches.push(TypeGuardBranch{literal: expr, cast_fn_id: cast_fn_id});
+            }
+            
+            expect_semicolon!(self, parser_context);
+            let next = self.peek_next_item();
+            
+            if next.token.matches_punct(Punct::CloseBrace) {
+                self.skip_next_item();
+                break;
             }
         }
 
