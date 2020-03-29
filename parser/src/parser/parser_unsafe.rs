@@ -1,5 +1,5 @@
 use crate::Parser;
-use crate::ParserContext;
+use crate::{ParserContext, UnsafeParseMode};
 use crate::ParserFuncContext;
 use crate::Res;
 
@@ -8,7 +8,7 @@ use ast::prelude::*;
 use types::prelude::*;
 pub use errs::{Error};
 use errs::prelude::*;
-use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident, expect_punct, cast_typed_expr, expect_ok};
+use crate::{assert_punct, assert_ok, assert_semicolon, assert_next, assert_ident, expect_punct, cast_typed_expr};
 
 use lazy_static;
 
@@ -40,7 +40,6 @@ impl<'a> Parser<'a> {
         assert_punct!(self, Punct::Comma);
         
         let expr = self.parse_expr(parser_func_context, parser_context);
-        assert_ok!(expr);
 
         let loc_after = self.peek_next_location();
         loc.end = loc_after.end.clone();
@@ -76,7 +75,6 @@ impl<'a> Parser<'a> {
         let expr = self.parse_expr(parser_func_context, parser_context);
         assert_punct!(self, Punct::CloseParen);
 
-        assert_ok!(expr);
         match expr.r#type {
             Type::TypeLiteral(t) => {
                 Ok(TypedExpr{expr: Expr::SizeOf((*t).clone()), is_const: true, r#type: Type::UnsafeSizeT, loc: loc})
@@ -90,7 +88,7 @@ impl<'a> Parser<'a> {
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let loc = self.peek_next_location();
-        if !parser_context.is_unsafe {
+        if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
             parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
         }
         
@@ -125,7 +123,7 @@ impl<'a> Parser<'a> {
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let mut loc = self.peek_next_location();
-        if !parser_context.is_unsafe {
+        if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
             parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
         }
         self.skip_next_item();
@@ -194,16 +192,14 @@ impl<'a> Parser<'a> {
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
-        let err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0)), is_const: true};
         let loc = self.peek_next_location();
-        if !parser_context.is_unsafe {
+        if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
             parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
         }
 
         self.skip_next_item();
         expect_punct!(self, parser_context, Punct::OpenParen);
         let inner = self.parse_expr(parser_func_context, parser_context);
-        expect_ok!(inner, parser_context, err_ret);
         expect_punct!(self, parser_context, Punct::CloseParen);
         match inner.r#type {
             Type::UnsafeStruct{name: _} => {
@@ -286,12 +282,7 @@ impl<'a> Parser<'a> {
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
         let loc = self.peek_next_location();
-        let r_expr = self.parse_expr(parser_func_context, parser_context);
-        if r_expr.is_err() { 
-            parser_context.push_err(r_expr.unwrap_err());
-            return lhs.clone();
-        } 
-        let expr = r_expr.unwrap();
+        let expr = self.parse_expr(parser_func_context, parser_context);
         let lhs_clone = lhs.clone();
         let cast_expr = cast_typed_expr(&Type::Int, Box::new(expr), CastType::Implicit, parser_context);
         expect_punct!(self, parser_context, Punct::CloseBracket);

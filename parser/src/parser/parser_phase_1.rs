@@ -1,6 +1,8 @@
 use crate::Parser;
 use crate::ParserContext;
 use crate::ParserFuncContext;
+use crate::UnsafeParseMode;
+
 use ast::Exports;
 
 use ress::prelude::*;
@@ -100,10 +102,9 @@ impl<'a> Parser<'a> {
 
     /// Phase 1 parse. Produces the file outline, to be used by the import code
     pub fn parse_phase_1(&mut self, 
-        is_unsafe: bool,
         file_name: &String,
     ) -> Exports {
-        let mut parser_context = ParserContext::new(is_unsafe, file_name);
+        let mut parser_context = ParserContext::new(UnsafeParseMode::Phase1, file_name);
         loop {
             if self.look_ahead.token.is_eof() {
                 break;

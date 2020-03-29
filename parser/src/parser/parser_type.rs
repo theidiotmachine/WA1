@@ -1,5 +1,5 @@
 use crate::Parser;
-use crate::ParserContext;
+use crate::{ParserContext, UnsafeParseMode};
 
 use ress::prelude::*;
 use ast::prelude::*;
@@ -75,7 +75,7 @@ impl<'a> Parser<'a> {
                 Type::Array(Box::new(inner))
             },
             Keyword::UnsafeArray => {
-                if !parser_context.is_unsafe {
+                if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
                 expect_punct!(self, parser_context, Punct::LessThan);
@@ -89,13 +89,13 @@ impl<'a> Parser<'a> {
             //Keyword::Object => Ok(Type::Object),
             Keyword::Any => Type::Any,
             Keyword::UnsafePtr => {
-                if !parser_context.is_unsafe {
+                if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
                 Type::UnsafePtr
             },
             Keyword::UnsafeSizeT => {
-                if !parser_context.is_unsafe {
+                if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
                 Type::UnsafeSizeT
@@ -107,7 +107,7 @@ impl<'a> Parser<'a> {
                 Type::Option(Box::new(inner))
             },
             Keyword::UnsafeOption => {
-                if !parser_context.is_unsafe {
+                if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
                 expect_punct!(self, parser_context, Punct::LessThan);
@@ -116,7 +116,7 @@ impl<'a> Parser<'a> {
                 Type::UnsafeOption(Box::new(inner))
             },
             Keyword::UnsafeSome => {
-                if !parser_context.is_unsafe {
+                if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
                 expect_punct!(self, parser_context, Punct::LessThan);
@@ -191,7 +191,7 @@ impl<'a> Parser<'a> {
             Token::String(s) => Type::StringLiteral(s.to_string()),
 
             Token::UnsafeNull => {
-                if !parser_context.is_unsafe {
+                if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
                     parser_context.push_err(Error::UnsafeCodeNotAllowed(next.location.clone()));
                 }
                 Type::UnsafeNull

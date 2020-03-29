@@ -30,9 +30,14 @@ pub enum TypeCast{
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum CastType{
+    /// Implicit cast from normal flow of data
     Implicit,
+    /// Explicit cast caused by an 'as' keyword
     Explicit,
-    GenericForce
+    /// Force cast due to compiler internals. A generic runtime cast to __ptr
+    GenericForce,
+    /// Force cast due to compiler internals. A downcast because of a type guard
+    GuardForce,
 }
 
 /// Try casting a type to another type.
@@ -97,6 +102,7 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
                 _ => TypeCast::None,
             }
         },
+        
         //again, this is wrong, but
         Type::UnsafeSizeT => {
             match from {
@@ -106,15 +112,11 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
                 _ => TypeCast::None,
             }
         },
-        Type::Option(_) => {
+
+        Type::UnsafeSome(inner_to) => {
             match from {
-                Type::Option(inner_from) => {
-                    if **inner_from == Type::Never {
-                        TypeCast::FreeWiden
-                    } else {
-                        TypeCast::None
-                    }
-                },
+                Type::UnsafeOption(inner_from) => if cast_type == CastType::GuardForce{ try_cast(inner_from, inner_to, cast_type) } else { TypeCast::None },
+                Type::UnsafeSome(inner_from) => try_cast(inner_from, inner_to, cast_type),
                 _ => TypeCast::None,
             }
         },

@@ -4,7 +4,7 @@ pub use parser::Parser;
 mod tree_transform;
 
 pub mod prelude {
-    pub use super::{Parser, StartFuncType};
+    pub use super::{Parser, StartFuncType, UnsafeParseMode};
 }
 
 use types::prelude::*;
@@ -222,10 +222,10 @@ fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, cast_type: CastType, parser
             match cast_type {
                 CastType::Implicit => 
                     parser_context.push_err(Error::TypeFailure(loc, want.clone(), got.r#type.clone())),
-                CastType::Explicit => 
+                CastType::Explicit | CastType::GuardForce => 
                     parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone())),
                 CastType::GenericForce => 
-                    parser_context.push_err(Error::InternalError(loc)),
+                    parser_context.push_err(Error::InternalError(loc, format!("can't cast from {} to {}", got.r#type, want))),
             }
             TypedExpr{expr: Expr::FreeTypeWiden(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
         },
@@ -233,8 +233,8 @@ fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, cast_type: CastType, parser
     }
 }
 
-/// Type to indicate if this is a speculative parse (i.e. it may fail gracefully) of a required parse (in which case we)
-/// must succeed
+/// Type to indicate if this is a speculative parse (i.e. it may fail gracefully) of a required parse (in which case we
+/// must succeed)
 #[derive(Debug, PartialEq)]
 pub enum Commitment{
     Speculative,
@@ -252,12 +252,14 @@ enum ScopedVar{
         internal_name: String,
         r#type: Type,
         constant: bool,
+        guard_type: Option<Type>,
     },
     /// Closure reference. Looks like a local, actually a member of the function's closure
     ClosureRef{
         internal_name: String,
         r#type: Type,
         constant: bool,
+        guard_type: Option<Type>,
     },
 }
 
@@ -287,6 +289,13 @@ impl<> Default for TypeScope<> {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum UnsafeParseMode{
+    Safe,
+    Unsafe,
+    Phase1,
+}
+
 /// Running state of the parser. Used to collect the AST as we build it.
 #[derive(Debug)]
 struct ParserContext {
@@ -299,7 +308,7 @@ struct ParserContext {
     pub errors: Vec<Error>,
     pub type_map: HashMap<String, TypeDecl>,
     pub import_namespace_map: HashMap<String, String>,
-    pub is_unsafe: bool,
+    pub unsafe_parse_mode: UnsafeParseMode,
     pub file_name: String,
 
     /// type variables
@@ -313,8 +322,9 @@ struct ParserContext {
     block_var_stack: Vec<Scope>,
 }
 
+
 impl ParserContext {
-    fn new(is_unsafe: bool, file_name: &String) -> ParserContext {
+    fn new(unsafe_parse_mode: UnsafeParseMode, file_name: &String) -> ParserContext {
         ParserContext{
             global_decls: vec![],
             global_imports: vec![],
@@ -325,7 +335,7 @@ impl ParserContext {
             errors: vec![],
             type_map: HashMap::new(),
             import_namespace_map: HashMap::new(),
-            is_unsafe: is_unsafe,
+            unsafe_parse_mode: unsafe_parse_mode,
             file_name: file_name.clone(),
             type_var_stack: vec![],
             counter: 0,
@@ -443,10 +453,10 @@ impl ParserContext {
                 
                 for (key, val) in head.var_names.iter() {
                     let new_val = match val {
-                        ScopedVar::Local{internal_name, r#type, constant} => 
-                            ScopedVar::ClosureRef{internal_name: internal_name.clone(), constant: *constant, r#type: r#type.clone()},
-                        ScopedVar::ClosureRef{internal_name, r#type, constant} => 
-                            ScopedVar::ClosureRef{internal_name: internal_name.clone(), constant: *constant, r#type: r#type.clone()},
+                        ScopedVar::Local{internal_name, r#type, constant, guard_type} => 
+                            ScopedVar::ClosureRef{internal_name: internal_name.clone(), constant: *constant, r#type: r#type.clone(), guard_type: guard_type.clone()},
+                        ScopedVar::ClosureRef{internal_name, r#type, constant, guard_type} => 
+                            ScopedVar::ClosureRef{internal_name: internal_name.clone(), constant: *constant, r#type: r#type.clone(), guard_type: guard_type.clone()},
                     };
                     new_var_names.insert(key.clone(), new_val);
                 }
@@ -467,12 +477,12 @@ impl ParserContext {
         self.func_var_stack.pop();
     }
 
-    fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: &Type, constant: bool,) {
+    fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: &Type, constant: bool)  -> () {
         let o_head = self.func_var_stack.last_mut();
         match o_head {
             None => panic!(),
             Some(head) => {
-                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant});
+                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: None});
             }
         }
 
@@ -480,12 +490,53 @@ impl ParserContext {
         match o_head {
             None => panic!(),
             Some(head) => {
-                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant});
+                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: None});
             }
         }
     }
 
-    fn get_scoped_var(&mut self, var_name: &String) -> Option<&ScopedVar> {
+    fn add_guarded_var(&mut self, 
+        var_name: &String, 
+        guard_type: &Type
+    ) -> () {
+        let internal_var_name = self.get_unique_name(var_name);
+
+        //find the var in the block_var_stack
+        let o_head = self.block_var_stack.last_mut();
+        let shadowed_var = match o_head {
+            None => panic!(),
+            Some(head) => {
+                head.var_names.get(var_name).unwrap()
+            }
+        };
+
+        let new_var = match shadowed_var {
+            ScopedVar::Local{internal_name: _, r#type, constant, guard_type: _} => {
+                ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: *constant, guard_type: Some(guard_type.clone())}
+            },
+            ScopedVar::ClosureRef{internal_name: _, r#type, constant, guard_type: _} => {
+                ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: *constant, guard_type: Some(guard_type.clone())}
+            }
+        };
+
+        let o_head = self.func_var_stack.last_mut();
+        match o_head {
+            None => panic!(),
+            Some(head) => {
+                head.var_names.insert(var_name.clone(), new_var.clone());
+            }
+        }
+
+        let o_head = self.block_var_stack.last_mut();
+        match o_head {
+            None => panic!(),
+            Some(head) => {
+                head.var_names.insert(var_name.clone(), new_var);
+            }
+        }
+    }
+
+    fn get_scoped_var(&self, var_name: &String) -> Option<&ScopedVar> {
         match self.block_var_stack.last() {
             None => None,
             Some(s) => {

@@ -8,7 +8,6 @@ use ast::prelude::*;
 use types::prelude::*;
 pub use errs::Error;
 use errs::prelude::*;
-use crate::assert_ok;
 use crate::assert_punct;
 
 impl<'a> Parser<'a> {
@@ -27,7 +26,6 @@ impl<'a> Parser<'a> {
         self.skip_next_item();
         assert_punct!(self, Punct::OpenParen);
         let inner = self.parse_expr(parser_func_context, parser_context);
-        assert_ok!(inner);
         assert_punct!(self, Punct::CloseParen);
         match inner.r#type {
             Type::UnsafeStruct{name: _} => {
