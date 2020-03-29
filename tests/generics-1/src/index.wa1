@@ -19,6 +19,14 @@ fn testDelayGenerate() => {
     f2(3)
 }
 
+fn testOptionExport() => {
+    let s1_1 = __static S1{ x: 3 }
+    
+    let oS = __Some(s1_1)
+    assert.assert(option.__Option_unwrap<S1>(oS).x == 3)
+    assert.assert(option.__Option_unwrap(oS).x == 3)
+}
+
 export fn test() -> int {
     //test the identity function on a __struct with explicit and implicit type params
     let s1_1 = __static S1{ x: 3 }
@@ -39,12 +47,8 @@ export fn test() -> int {
     let n3 = basic.id(n1)
     assert.assert(n1 == n3)
 
-    //more complex functions
-    let oS = __Some(s1_1)
-    assert.assert(option.__Option_unwrap<S1>(oS).x == 3)
-    assert.assert(option.__Option_unwrap(oS).x == 3)
-
     testDelayGenerate()
+    option.testOption();
 
     1
 }

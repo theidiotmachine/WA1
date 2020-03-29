@@ -1,5 +1,5 @@
 use crate::Parser;
-use crate::ParserContext;
+use crate::{ParserContext, UnsafeParseMode};
 use crate::ParserFuncContext;
 use crate::Res;
 
@@ -88,7 +88,7 @@ impl<'a> Parser<'a> {
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let loc = self.peek_next_location();
-        if !parser_context.is_unsafe {
+        if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
             parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
         }
         
@@ -123,7 +123,7 @@ impl<'a> Parser<'a> {
         parser_context: &mut ParserContext,
     ) -> Res<TypedExpr> {
         let mut loc = self.peek_next_location();
-        if !parser_context.is_unsafe {
+        if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
             parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
         }
         self.skip_next_item();
@@ -193,7 +193,7 @@ impl<'a> Parser<'a> {
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
         let loc = self.peek_next_location();
-        if !parser_context.is_unsafe {
+        if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
             parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
         }
 

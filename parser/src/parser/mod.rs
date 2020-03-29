@@ -20,7 +20,7 @@ mod parser_option;
 mod parser_phase_1;
 mod parser_op;
 
-use crate::{ParserContext, ScopedVar};
+use crate::{ParserContext, ScopedVar, UnsafeParseMode};
 use crate::ParserFuncContext;
 use crate::Res;
 use crate::{assert_punct, assert_ok,assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_ident, expect_string_literal, expect_keyword, StartFuncType, expect_ok, expect_semicolon};
@@ -137,13 +137,13 @@ impl<'b> Parser<'b> {
 
     /// Produces a full parse.
     pub fn parse_full(&mut self, 
-        is_unsafe: bool,
+        unsafe_parse_mode: UnsafeParseMode,
         importer: &mut dyn Importer,
         module_name: &String,
         start_func_type: StartFuncType,
         file_name: &String,
     ) -> Result<AST, Vec<Error>> {
-        let mut parser_context = ParserContext::new(is_unsafe, file_name);
+        let mut parser_context = ParserContext::new(unsafe_parse_mode, file_name);
         
         let start_func_name = match start_func_type{
             StartFuncType::WASMCallCtors => String::from("__wasm_call_ctors"),
@@ -703,10 +703,16 @@ impl<'b> Parser<'b> {
 
         //is the condition a type guard?
         let o_type_guard_inst = match &condition.expr {
-            Expr::StaticFuncCall(s, fd, v) => {
+            Expr::StaticFuncCall(_, fd, v) => {
                 let o_type_guard = &fd.type_guard;
-                if o_type_guard.is_some() {
-                    Some((o_type_guard.clone().unwrap(), v[0].clone()))
+                if o_type_guard.is_some() && v.len() == 1 {
+                    match &v[0].expr {
+                        Expr::LocalVariableUse(name) => {
+                            Some((o_type_guard.clone().unwrap(), name.clone()))
+                        },
+                        _ => None,
+                    }
+                    
                 } else {
                     None
                 }
@@ -714,23 +720,49 @@ impl<'b> Parser<'b> {
             _ => None
         };
         
-        /*
-        let o_then_type_guard_branch = if o_type_guard.is_some() {
-            let type_guard = o_type_guard.unwrap();
-            type_guard.branches.iter().find(|b| b.literal.expr == Expr::BoolLiteral(true))
+        
+        let pop_then_stack = if o_type_guard_inst.is_some() {
+            let (type_guard, variable_name) = o_type_guard_inst.as_ref().unwrap();
+            let o_branch = type_guard.branches.iter().find(|b| b.literal.expr == Expr::BoolLiteral(true));
+            if o_branch.is_some() {
+                let branch = o_branch.unwrap();
+                parser_context.push_block_scope();
+                parser_context.add_guarded_var(&variable_name, &branch.guard_type);
+            }
+            true
         } else {
-            None
+            false
         };
-        */
 
         let then_block = self.parse_block(true, parser_func_context, parser_context);
+        if pop_then_stack {
+            parser_context.pop_block_scope();
+        }
 
-            
         let next = self.peek_next_item();
         let token = &next.token;
         if token.matches_keyword(Keyword::Else) {
             self.skip_next_item();
+
+            let pop_else_stack = if o_type_guard_inst.is_some() {
+                let (type_guard, variable_name) = o_type_guard_inst.unwrap();
+                let o_branch = type_guard.branches.iter().find(|b| b.literal.expr == Expr::BoolLiteral(false));
+                if o_branch.is_some() {
+                    let branch = o_branch.unwrap();
+                    parser_context.push_block_scope();
+                    parser_context.add_guarded_var(&variable_name, &branch.guard_type);
+                }
+                true
+            } else {
+                false
+            };
+
             let else_block = self.parse_block(true, parser_func_context, parser_context);
+
+            if pop_else_stack {
+                parser_context.pop_block_scope();
+            }
+
             let then_block_type = then_block.r#type.clone();
             loc.end = else_block.loc.end.clone();
 
@@ -1152,8 +1184,9 @@ impl<'b> Parser<'b> {
         for_type: &Type,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let loc = self.peek_next_location();
+        let err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: loc.clone(), is_const: true};
         
         let scratch_malloc = String::from("__scratch_malloc");
         let scratch_malloc_type = Type::UnsafePtr;
@@ -1167,9 +1200,9 @@ impl<'b> Parser<'b> {
         parser_func_context.local_var_map.insert(scratch_malloc.clone(), idx as u32);
         
         let out = self.parse_object_literal_to_vec(for_type, &loc, parser_func_context, parser_context);
-        assert_ok!(out);
+        expect_ok!(out, parser_context, err_ret);
 
-        Ok(TypedExpr{expr: Expr::ConstructFromObjectLiteral(for_type.clone(), out), is_const: true, loc: loc, r#type: for_type.clone()})
+        TypedExpr{expr: Expr::ConstructFromObjectLiteral(for_type.clone(), out), is_const: true, loc: loc, r#type: for_type.clone()}
     }
 
     fn parse_new(&mut self,
@@ -1185,7 +1218,7 @@ impl<'b> Parser<'b> {
         match lookahead {
             Token::Punct(p) => {
                 match p {
-                    Punct::OpenBrace => self.parse_object_literal_constructor(&type_to_construct, parser_func_context, parser_context),
+                    Punct::OpenBrace => Ok(self.parse_object_literal_constructor(&type_to_construct, parser_func_context, parser_context)),
                     _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "{"),
                 }
             },
@@ -1236,7 +1269,7 @@ impl<'b> Parser<'b> {
                 self.parse_unsafe_array_dynamic_component(lhs, inner_type, parser_func_context, parser_context)
             },
             _ => {
-                parser_context.push_err(Error::NoComponents(lhs.loc.clone()));
+                parser_context.push_err(Error::NoComponents(lhs.loc.clone(), lhs_type.clone()));
                 lhs.clone()
             }
         }
@@ -1430,15 +1463,29 @@ impl<'b> Parser<'b> {
                 let o_sv = parser_context.get_scoped_var(&id.to_string());
                 match o_sv {
                     Some(sv) => match sv {
-                        ScopedVar::ClosureRef{internal_name, r#type, constant} => {
+                        ScopedVar::ClosureRef{internal_name, r#type, constant, guard_type: o_guard_type} => {
                             let is_new = !parser_func_context.closure.iter().any(|x| x.internal_name.eq(internal_name));
                             if is_new {
                                 parser_func_context.closure.push(ClosureRef{internal_name: internal_name.clone(), r#type: r#type.clone(), constant: *constant})
                             }
                             
-                            TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()}
+                            if o_guard_type.is_none() {
+                                TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()}
+                            } else {
+                                let guard_type = o_guard_type.as_ref().unwrap().clone();
+                                let inner = Box::new(TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()});
+                                cast_typed_expr(&guard_type, inner, CastType::GuardForce, parser_context)
+                            }
                         },
-                        ScopedVar::Local{internal_name, r#type, constant} => TypedExpr{expr: Expr::LocalVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()},
+                        ScopedVar::Local{internal_name, r#type, constant, guard_type: o_guard_type} => {
+                            if o_guard_type.is_none() {
+                                TypedExpr{expr: Expr::LocalVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()}
+                            } else {
+                                let guard_type = o_guard_type.as_ref().unwrap().clone();
+                                let inner = Box::new(TypedExpr{expr: Expr::LocalVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()});
+                                cast_typed_expr(&guard_type, inner, CastType::GuardForce, parser_context)
+                            }
+                        },                            
                     },
                     None => {
                         let o_g = parser_context.global_decls.iter().find(|&x| x.name == id.to_string());
@@ -1513,7 +1560,7 @@ impl<'b> Parser<'b> {
                     Type::UnsafeSizeT => self.parse_unsafe_size_t_component(&holding, &id, &next.location, parser_func_context, parser_context),
                     Type::UnsafeOption(_) => self.parse_unsafe_option_component(&holding, &id, &next.location, parser_func_context, parser_context),
                     _ => {
-                        parser_context.push_err(Error::NoComponents(next.location.clone()));
+                        parser_context.push_err(Error::NoComponents(next.location.clone(), holding.r#type.clone()));
                         //give up
                         return err_ret;
                     }
@@ -1837,7 +1884,7 @@ mod test {
         }";
 
         let mut parser = Parser::new(add).unwrap();
-        let script = parser.parse_full(false, & mut DummyImporter{}, &String::from(""), StartFuncType::Start, &String::from("")).unwrap();
+        let script = parser.parse_full(UnsafeParseMode::Safe, & mut DummyImporter{}, &String::from(""), StartFuncType::Start, &String::from("")).unwrap();
         println!("{:#?}", script);
     }
 }

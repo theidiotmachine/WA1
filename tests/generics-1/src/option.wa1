@@ -1,7 +1,43 @@
+import {*} from "./assert"
+
 export fn __Option_unwrap<T: __struct T>(x: __Option<T>) -> T {
     if (x == __null) {
-        __trap();
+        __trap()
     } else {
-        x as __ptr as T;
+        x as __ptr as T
+    }
+}
+
+export fn __Some_unwrap<T: __struct T>(x: __Some<T>) -> T {
+    x as __ptr as T
+}
+
+export fn __Option_isSome<T: __struct T>(x: __Option<T>) -> boolean __typeguard {
+    true => __Some<T>
+    false => __null
+} {
+    x != __null
+}
+
+export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> boolean __typeguard {
+    true => __null
+    false => __Some<T>
+} {
+    x == __null
+}
+
+__struct S1 {
+    x: int
+}
+
+export fn testOption() -> void {
+    let s1_1 = __static S1{ x: 3 }
+    
+    let oS = __Some(s1_1)
+    assert.assert(__Option_unwrap<S1>(oS).x == 3)
+    assert.assert(__Option_unwrap(oS).x == 3)
+
+    if (__Option_isSome(oS)) {
+        assert.assert(__Some_unwrap(oS).x == 3)
     }
 }

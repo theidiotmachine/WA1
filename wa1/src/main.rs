@@ -69,7 +69,7 @@ impl Importer for CachingImporter {
         let r_output_metadata = output_path.metadata();
         match r_output_metadata {
             Err(e) => {
-                let o_exports = parse_exports(&import_path, false);
+                let o_exports = parse_exports(&import_path);
                 match o_exports {
                     Some(exports) => {
                         write_exports(&output_path, &exports);
@@ -84,7 +84,7 @@ impl Importer for CachingImporter {
                     Err(e) => Err(e.to_string()),
                     Ok(input_metadata) => {
                         if input_metadata.modified().unwrap() > output_metadata.modified().unwrap() {
-                            let o_exports = parse_exports(&import_path, false);
+                            let o_exports = parse_exports(&import_path);
                             match o_exports {
                                 Some(exports) => {
                                     write_exports(&output_path, &exports);
@@ -120,12 +120,12 @@ fn build_simple(matches: &ArgMatches) -> i32 {
     )
 }
 
-fn parse_exports(input: &PathBuf, is_unsafe: bool) -> Option<Exports> {
+fn parse_exports(input: &PathBuf) -> Option<Exports> {
     let r_input_contents = fs::read_to_string(input);
     match r_input_contents{
         Ok(input_contents) => {
             let mut parser = Parser::new(input_contents.as_str()).unwrap();
-            Some(parser.parse_phase_1(is_unsafe, &(input.to_string_lossy().to_string())))
+            Some(parser.parse_phase_1(&(input.to_string_lossy().to_string())))
         },
         Err(err) => {
             println!("ERROR: {}", err);
@@ -176,7 +176,7 @@ fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, module_name
     match r_input_contents {
         Ok(input_contents) => {
             let mut parser = Parser::new(input_contents.as_str()).unwrap();
-            let o_script = parser.parse_full(is_unsafe, importer, module_name, start_func_type, &(sf_name.to_string_lossy().to_string()));
+            let o_script = parser.parse_full(if is_unsafe{UnsafeParseMode::Unsafe} else {UnsafeParseMode::Safe}, importer, module_name, start_func_type, &(sf_name.to_string_lossy().to_string()));
             match o_script {
                 Err(errs) => {
                     println!("Parse failed.");

@@ -35,7 +35,7 @@ pub enum Error {
     NotInLoop(SourceLocation, String),
     TypeFailureIf(SourceLocation, Type, Type),
     WhileMayNotReturn,
-    NoComponents(SourceLocation),
+    NoComponents(SourceLocation, Type),
     CantConstructUsingObjectLiteral(SourceLocation, Type),
     CantConstructUsingArrayLiteral(SourceLocation, Type),
     ObjectHasNoMember(SourceLocation, Type, String,),
@@ -44,8 +44,7 @@ pub enum Error {
     AsNeedsType(SourceLocation),
     RecursiveTypeDefinition(SourceLocation),
     UnsafeCodeNotAllowed(SourceLocation),
-    InternalError(SourceLocation),
-    CompileFailed(String),
+    InternalError(SourceLocation, String),
     ImportFailed(SourceLocation, String),
     UnrecognizedTypeArg(SourceLocation),
     UnrecognizedTypeArgConstraint(SourceLocation),
@@ -56,6 +55,7 @@ pub enum Error {
     DuplicateGlobalVariable(SourceLocation, String),
     TypeGuardExpectingLiteral(SourceLocation),
     FailedGenericDeduction(SourceLocation, String),
+    ExportedFunctionFatArrow(SourceLocation),
 }
 
 impl Display for Error {
@@ -88,7 +88,7 @@ impl Display for Error {
             Error::NotInLoop(ref loc, what) => write!(f, "ERROR {}: Used loop keyword outside a loop: {}", loc, what),
             Error::TypeFailureIf(ref loc, ref then_type, ref else_type) => write!(f, "WARNING {}: Types of branches of if statement do not match; then branch is of type {}, else branch is of type {}", loc, then_type, else_type),
             Error::WhileMayNotReturn => write!(f, "while loops may not have a return value"),
-            Error::NoComponents(ref loc) => write!(f, "ERROR {}: object has no components", loc),
+            Error::NoComponents(ref loc, ref t) => write!(f, "ERROR {}: object of type {} has no components", loc, t),
             Error::CantConstructUsingObjectLiteral(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {} from an object literal", loc, t),
             Error::CantConstructUsingArrayLiteral(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {} from an array literal", loc, t),
             Error::ObjectHasNoMember(ref loc, ref t, ref m) => write!(f, "ERROR {}: object of type {} has no member {}", loc, t, m),
@@ -97,8 +97,7 @@ impl Display for Error {
             Error::AsNeedsType(ref loc) => write!(f, "ERROR {}: 'as' must have a type literal on its rhs", loc),
             Error::RecursiveTypeDefinition(ref loc) => write!(f, "ERROR {}: recursive type definition not allowed", loc),
             Error::UnsafeCodeNotAllowed(ref loc) => write!(f, "ERROR {}: unsafe code not allowed to be called without --unsafe", loc),
-            Error::InternalError(ref loc) => write!(f, "INTERNAL ERROR {}: internal error", loc),
-            Error::CompileFailed(ref err) => write!(f, "ERROR: could not compile because {}", err),
+            Error::InternalError(ref loc, ref m) => write!(f, "INTERNAL ERROR {}: {}", loc, m),
             Error::ImportFailed(ref loc, ref mes) => write!(f, "ERROR {}: import failed because {}", loc, mes),
             Error::UnrecognizedTypeArg(ref loc) => write!(f, "ERROR {}: can't parse type arg", loc),
             Error::UnrecognizedTypeArgConstraint(ref loc) => write!(f, "ERROR {}: unrecognized type arg constraint", loc),
@@ -109,6 +108,7 @@ impl Display for Error {
             Error::DuplicateGlobalVariable(ref loc, ref name) => write!(f, "ERROR {}: duplicate global variable declaration {}", loc, name),
             Error::TypeGuardExpectingLiteral(ref loc) => write!(f, "ERROR {}: type guard must be a literal", loc),
             Error::FailedGenericDeduction(ref loc, ref name) => write!(f, "ERROR {}: unable to deduce type of type arg {}", loc, name),
+            Error::ExportedFunctionFatArrow(ref loc) => write!(f, "ERROR {}: exported functions must have explicit return type", loc),
         }
     }
 }
