@@ -115,7 +115,15 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
 
         Type::UnsafeSome(inner_to) => {
             match from {
-                Type::UnsafeOption(inner_from) => if cast_type == CastType::GuardForce{ try_cast(inner_from, inner_to, cast_type) } else { TypeCast::None },
+                Type::UnsafeOption(inner_from) => if cast_type == CastType::GuardForce{ 
+                    let inner_cast = try_cast(inner_from, inner_to, cast_type);
+                    //this is a bit eww
+                    if inner_cast == TypeCast::NotNeeded {
+                        TypeCast::FreeWiden
+                    } else {
+                        inner_cast
+                    }
+                } else { TypeCast::None },
                 Type::UnsafeSome(inner_from) => try_cast(inner_from, inner_to, cast_type),
                 _ => TypeCast::None,
             }

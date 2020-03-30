@@ -361,6 +361,7 @@ cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 
         1. [x] means subsuming the number code, which is probably a good thing
     1. [ ] typescript-style const types, where a = 0 means typeof a == 0
     1. [x] move the bin op types from the ast
+    1. [ ] clean up the cast code
 1. Expression based language
     1. [x] blocks return a value
     1. [x] no need for a return statement (but still supported - what is this, scala?)
