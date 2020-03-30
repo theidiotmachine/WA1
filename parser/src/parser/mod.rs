@@ -40,7 +40,64 @@ fn filter_imports(exports: Exports, imports: &ImportFilter) -> Exports {
         ImportFilter::Named(_) => {panic!()}
     }
 }
-            
+
+fn try_get_local_variable(expr: &TypedExpr) -> Option<String> {
+    match &expr.expr {
+        Expr::LocalVariableUse(name) => {
+            Some(name.clone())
+        },
+        Expr::FreeTypeWiden(inner) => try_get_local_variable(&inner),
+        _ => None
+    }
+}
+
+/// See if this conditional is a type guard; and if it is, get it and the name of the variable it operates on
+fn get_type_guard_inst(condition: &Expr) -> Option<(TypeGuard, String)> {
+    match condition {
+        Expr::StaticFuncCall(_, fd, v) => {
+            let o_type_guard = &fd.type_guard;
+            if o_type_guard.is_some() && v.len() == 1 {
+                let o_name = try_get_local_variable(&v[0]);
+                match o_name{
+                    Some(name) => Some((o_type_guard.clone().unwrap(), name.clone())),
+                    None => None,
+                }
+            } else {
+                None
+            }
+        },
+        _ => None
+    }
+}
+
+/// If given an instance of a type guard, find the branch that corresponds to this type guard branch, 
+/// and push a guarded variable into a new block. The return value tells you whether you need to pop.
+fn apply_type_guard_inst(
+    o_type_guard_inst: &Option<(TypeGuard, String)>, 
+    branch_expr: &Expr,
+    parser_func_context: &mut ParserFuncContext,
+    parser_context: &mut ParserContext
+) -> bool {
+    if o_type_guard_inst.is_some() {
+        let (type_guard, variable_name) = o_type_guard_inst.as_ref().unwrap();
+        let o_branch = type_guard.branches.iter().find(|b| b.literal.expr == *branch_expr);
+        if o_branch.is_some() {
+            let branch = o_branch.unwrap();
+            parser_context.push_block_scope();
+            let (internal_name, unguarded_type) = parser_context.add_guarded_var(&variable_name, &branch.guard_type);
+
+            let idx = parser_func_context.local_vars.len();
+            parser_func_context.local_vars.push(
+                LocalVar{internal_name: internal_name.clone(), r#type: 
+                    unguarded_type, closure_source: false, arg: false}
+            );
+            parser_func_context.local_var_map.insert(internal_name.clone(), idx as u32);
+        }
+        true
+    } else {
+        false
+    }
+}
 
 /// This is the primary interface that you would interact with.
 pub struct Parser<'a>
@@ -702,38 +759,10 @@ impl<'b> Parser<'b> {
         expect_punct!(self, parser_context, Punct::CloseParen);
 
         //is the condition a type guard?
-        let o_type_guard_inst = match &condition.expr {
-            Expr::StaticFuncCall(_, fd, v) => {
-                let o_type_guard = &fd.type_guard;
-                if o_type_guard.is_some() && v.len() == 1 {
-                    match &v[0].expr {
-                        Expr::LocalVariableUse(name) => {
-                            Some((o_type_guard.clone().unwrap(), name.clone()))
-                        },
-                        _ => None,
-                    }
-                    
-                } else {
-                    None
-                }
-            },
-            _ => None
-        };
+        let o_type_guard_inst = get_type_guard_inst(&condition.expr);
         
-        
-        let pop_then_stack = if o_type_guard_inst.is_some() {
-            let (type_guard, variable_name) = o_type_guard_inst.as_ref().unwrap();
-            let o_branch = type_guard.branches.iter().find(|b| b.literal.expr == Expr::BoolLiteral(true));
-            if o_branch.is_some() {
-                let branch = o_branch.unwrap();
-                parser_context.push_block_scope();
-                parser_context.add_guarded_var(&variable_name, &branch.guard_type);
-            }
-            true
-        } else {
-            false
-        };
-
+        //create the then block
+        let pop_then_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(true), parser_func_context, parser_context);
         let then_block = self.parse_block(true, parser_func_context, parser_context);
         if pop_then_stack {
             parser_context.pop_block_scope();
@@ -744,21 +773,9 @@ impl<'b> Parser<'b> {
         if token.matches_keyword(Keyword::Else) {
             self.skip_next_item();
 
-            let pop_else_stack = if o_type_guard_inst.is_some() {
-                let (type_guard, variable_name) = o_type_guard_inst.unwrap();
-                let o_branch = type_guard.branches.iter().find(|b| b.literal.expr == Expr::BoolLiteral(false));
-                if o_branch.is_some() {
-                    let branch = o_branch.unwrap();
-                    parser_context.push_block_scope();
-                    parser_context.add_guarded_var(&variable_name, &branch.guard_type);
-                }
-                true
-            } else {
-                false
-            };
-
+            //create the else block
+            let pop_else_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(false), parser_func_context, parser_context);
             let else_block = self.parse_block(true, parser_func_context, parser_context);
-
             if pop_else_stack {
                 parser_context.pop_block_scope();
             }
@@ -812,9 +829,16 @@ impl<'b> Parser<'b> {
         }
         expect_punct!(self, parser_context, Punct::CloseParen);
 
+        //is the condition a type guard?
+        let o_type_guard_inst = get_type_guard_inst(&condition.expr);
+
         let old_in_iteration = parser_func_context.in_iteration;
         parser_func_context.in_iteration = true;
+        let pop_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(true), parser_func_context, parser_context);
         let block = self.parse_block(true, parser_func_context, parser_context);
+        if pop_stack {
+            parser_context.pop_block_scope();
+        }
         parser_func_context.in_iteration = old_in_iteration;
         loc.end = block.loc.end.clone();
 

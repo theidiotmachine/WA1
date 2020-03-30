@@ -1,7 +1,6 @@
 use serde::{Serialize, Deserialize};
 
 use types::*;
-use types::generics::TypeArg;
 use crate::func::{FuncObjectCreation, FuncDecl};
 use crate::intrinsic::Intrinsic;
 use errs::prelude::*;

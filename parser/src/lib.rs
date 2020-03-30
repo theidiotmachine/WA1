@@ -495,27 +495,37 @@ impl ParserContext {
         }
     }
 
+    fn find_named_scoped_var_given_internal_name(&self, internal_name: &String) -> (String, ScopedVar) {
+        let o_head = self.block_var_stack.last();
+        match o_head {
+            None => panic!(),
+            Some(head) => {
+                head.var_names.iter().find(|(_, sv)| { 
+                    match sv {
+                        ScopedVar::Local{internal_name: this_internal_name, r#type: _, constant: _, guard_type: _} => this_internal_name == internal_name,
+                        ScopedVar::ClosureRef{internal_name: this_internal_name, r#type: _, constant: _, guard_type: _} => this_internal_name == internal_name,
+                    }
+                }).map(|(n, sv)| (n.clone(), sv.clone())).unwrap()
+            }
+        }
+    }
+
+    /// Add a new var with a type guard. Returns the generated internal name, and the old unguarded type.
     fn add_guarded_var(&mut self, 
         var_name: &String, 
         guard_type: &Type
-    ) -> () {
-        let internal_var_name = self.get_unique_name(var_name);
-
+    ) -> (String, Type) {
         //find the var in the block_var_stack
-        let o_head = self.block_var_stack.last_mut();
-        let shadowed_var = match o_head {
-            None => panic!(),
-            Some(head) => {
-                head.var_names.get(var_name).unwrap()
-            }
-        };
+        let (external_var_name, shadowed_var) = self.find_named_scoped_var_given_internal_name(var_name);
 
-        let new_var = match shadowed_var {
+        let internal_var_name = self.get_unique_name(&external_var_name);
+
+        let (new_var, unguarded_type) = match shadowed_var {
             ScopedVar::Local{internal_name: _, r#type, constant, guard_type: _} => {
-                ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: *constant, guard_type: Some(guard_type.clone())}
+                (ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: Some(guard_type.clone())}, r#type.clone())
             },
             ScopedVar::ClosureRef{internal_name: _, r#type, constant, guard_type: _} => {
-                ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: *constant, guard_type: Some(guard_type.clone())}
+                (ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: Some(guard_type.clone())}, r#type.clone())
             }
         };
 
@@ -523,7 +533,7 @@ impl ParserContext {
         match o_head {
             None => panic!(),
             Some(head) => {
-                head.var_names.insert(var_name.clone(), new_var.clone());
+                head.var_names.insert(external_var_name.clone(), new_var.clone());
             }
         }
 
@@ -531,9 +541,11 @@ impl ParserContext {
         match o_head {
             None => panic!(),
             Some(head) => {
-                head.var_names.insert(var_name.clone(), new_var);
+                head.var_names.insert(external_var_name.clone(), new_var);
             }
         }
+
+        (internal_var_name, unguarded_type)
     }
 
     fn get_scoped_var(&self, var_name: &String) -> Option<&ScopedVar> {
