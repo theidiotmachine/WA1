@@ -1236,8 +1236,8 @@ fn internal_mallinfo(m: malloc_state, nm: mallinfo) -> void {
 
     //FIXME option handling
     let o_s = m.seg;
-    while (o_s != __null) {
-      let s = option.__Option_unwrap<malloc_segment>(o_s);
+    while (option.__Option_isSome(o_s)) {
+      let s = option.__Some_unwrap<malloc_segment>(o_s);
       let q = align_as_chunk(s.base);
       while (segment_holds(s, q as __ptr) && __Some(q) != m.top && q.head != (7 as __size_t)) {
         let sz = chunksize(q);

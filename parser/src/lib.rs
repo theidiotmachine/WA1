@@ -191,13 +191,13 @@ fn cast_int_to_bigint(expr: &TypedExpr) -> TypedExpr {
     TypedExpr{expr: Expr::IntToBigInt(Box::new(expr.clone())), r#type: Type::BigInt, is_const: true, loc: expr.loc}
 }
 
-fn free_type_widen(expr: &TypedExpr, to: &Type) -> TypedExpr {
-    TypedExpr{expr: Expr::FreeTypeWiden(Box::new(expr.clone())), r#type: to.clone(), is_const: expr.is_const, loc: expr.loc}
+fn free_upcast(expr: &TypedExpr, to: &Type) -> TypedExpr {
+    TypedExpr{expr: Expr::FreeUpcast(Box::new(expr.clone())), r#type: to.clone(), is_const: expr.is_const, loc: expr.loc}
 }
 
 fn create_cast(want: &Type, got: &TypedExpr, cast: &TypeCast) -> Option<TypedExpr> {
     match cast {
-        TypeCast::FreeWiden => Some(free_type_widen(got, want)),
+        TypeCast::FreeUpcast => Some(free_upcast(got, want)),
         TypeCast::IntToBigIntWiden => Some(cast_int_to_bigint(got)),
         TypeCast::IntToNumberWiden => Some(cast_int_to_number(got)),
         TypeCast::None => None,
@@ -215,21 +215,35 @@ fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, cast_type: CastType, parser
     let loc = got.loc.clone();
     let got_is_const = got.is_const;
     match type_cast {
-        TypeCast::FreeWiden => TypedExpr{expr: Expr::FreeTypeWiden(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
+        TypeCast::FreeUpcast => TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
         TypeCast::IntToBigIntWiden => TypedExpr{expr: Expr::IntToBigInt(got), r#type: Type::BigInt, is_const: true, loc: loc},
         TypeCast::IntToNumberWiden => TypedExpr{expr: Expr::IntToNumber(got), r#type: Type::Number, is_const: true, loc: loc},
         TypeCast::None => {
             match cast_type {
                 CastType::Implicit => 
                     parser_context.push_err(Error::TypeFailure(loc, want.clone(), got.r#type.clone())),
-                CastType::Explicit | CastType::GuardForce => 
+                CastType::Explicit  => 
                     parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone())),
                 CastType::GenericForce => 
                     parser_context.push_err(Error::InternalError(loc, format!("can't cast from {} to {}", got.r#type, want))),
             }
-            TypedExpr{expr: Expr::FreeTypeWiden(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
         },
         TypeCast::NotNeeded => got.as_ref().clone(),
+    }
+}
+
+fn guard_downcast_expr(want: &Type, got: Box<TypedExpr>, parser_context: &mut ParserContext) -> TypedExpr {
+    let type_cast = types::cast::try_guard_downcast_expr(&got.r#type, want);
+    let loc = got.loc.clone();
+    let got_is_const = got.is_const;
+    match type_cast {
+        TypeGuardDowncast::FreeDowncast => TypedExpr{expr: Expr::FreeDowncast(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
+        TypeGuardDowncast::None => {
+            parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone()));
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
+        },
+        TypeGuardDowncast::NotNeeded => got.as_ref().clone(),
     }
 }
 
