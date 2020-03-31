@@ -212,7 +212,7 @@ impl<'a> Parser<'a> {
 
         let inner_loc = inner.loc.clone();
         let inner_type = inner.r#type.clone();
-        TypedExpr{expr: Expr::FreeTypeWiden(Box::new(inner)), r#type: Type::UnsafeSome(Box::new(inner_type)), loc: inner_loc, is_const: true}
+        TypedExpr{expr: Expr::UnsafeSome(Box::new(inner)), r#type: Type::UnsafeSome(Box::new(inner_type)), loc: inner_loc, is_const: true}
     }
 
     pub(crate) fn parse_unsafe_option_component(&mut self,

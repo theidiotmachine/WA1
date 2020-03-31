@@ -872,7 +872,9 @@ pub(crate) fn compile_expr(
             ret_val = false;
         },
 
-        Expr::FreeTypeWiden(t) => compile_expr(&t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
+        Expr::FreeUpcast(t) => compile_expr(&t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
+        Expr::FreeDowncast(t) => compile_expr(&t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
+        Expr::UnsafeSome(t) => compile_expr(&t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
 
         Expr::StructDecl(_) => {
             //all done at compile time

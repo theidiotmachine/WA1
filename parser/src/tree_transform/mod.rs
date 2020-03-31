@@ -132,7 +132,8 @@ pub fn transform_expr(
             Expr::DynamicFuncCall(Box::new(transform_typed_expr(te, transform, parser_context)), transform_typed_exprs(v, transform, parser_context)),
         Expr::DynamicMember(te1, te2) =>
             Expr::DynamicMember(Box::new(transform_typed_expr(te1, transform, parser_context)), Box::new(transform_typed_expr(te2, transform, parser_context))),
-        Expr::FreeTypeWiden(te) => Expr::FreeTypeWiden(Box::new(transform_typed_expr(te, transform, parser_context))),
+        Expr::FreeUpcast(te) => Expr::FreeUpcast(Box::new(transform_typed_expr(te, transform, parser_context))),
+        Expr::FreeDowncast(te) => Expr::FreeDowncast(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::FuncDecl(foc) => Expr::FuncDecl(foc.clone()),
         Expr::GlobalVariableDecl(gvd) => 
             Expr::GlobalVariableDecl(Box::new(GlobalVariableDecl{name: gvd.name.clone(), r#type: gvd.r#type.clone(), constant: gvd.constant, export: gvd.export, 
@@ -178,6 +179,7 @@ pub fn transform_expr(
         Expr::TupleLiteral(v) => Expr::TupleLiteral(transform_typed_exprs(v, transform, parser_context)),
         Expr::TypeLiteral(t) => Expr::TypeLiteral(t.clone()),
         Expr::UnaryOperator{expr: te, op} => Expr::UnaryOperator{expr: Box::new(transform_typed_expr(te, transform, parser_context)), op: *op},
+        Expr::UnsafeSome(te) => Expr::UnsafeSome(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::UnresolvedGenericFuncCall{name, unresolved_func_decl, args, unresolved_types} => 
             Expr::UnresolvedGenericFuncCall{name: name.clone(), unresolved_func_decl: transform_func_decl(unresolved_func_decl, transform, loc, parser_context),
                 args: transform_typed_exprs(args, transform, parser_context), unresolved_types: unresolved_types.clone()

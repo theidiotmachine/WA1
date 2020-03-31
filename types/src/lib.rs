@@ -337,7 +337,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
                     let out_lhs_type_cast = arg_type_casts.get(0).unwrap().clone();
                     let out_lhs_type = match &out_lhs_type_cast{
                         TypeCast::NotNeeded => func_type.in_types.get(0).unwrap().clone(),
-                        TypeCast::FreeWiden => lhs_type.clone(),
+                        TypeCast::FreeUpcast => lhs_type.clone(),
                         TypeCast::IntToBigIntWiden => Type::BigInt,
                         TypeCast::IntToNumberWiden => Type::Number,
                         TypeCast::None => {
@@ -348,7 +348,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
                     let out_rhs_type_cast = arg_type_casts.get(1).unwrap().clone();
                     let out_rhs_type = match &out_rhs_type_cast{
                         TypeCast::NotNeeded => func_type.in_types.get(1).unwrap().clone(),
-                        TypeCast::FreeWiden => lhs_type.clone(),
+                        TypeCast::FreeUpcast => lhs_type.clone(),
                         TypeCast::IntToBigIntWiden => Type::BigInt,
                         TypeCast::IntToNumberWiden => Type::Number,
                         TypeCast::None => {
@@ -368,7 +368,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             let type_cast = try_cast(rhs_type, lhs_type, CastType::Implicit);
             let out_rhs_type = match &type_cast{
                 TypeCast::NotNeeded => lhs_type.clone(),
-                TypeCast::FreeWiden => lhs_type.clone(),
+                TypeCast::FreeUpcast => lhs_type.clone(),
                 TypeCast::IntToBigIntWiden => Type::BigInt,
                 TypeCast::IntToNumberWiden => Type::Number,
                 TypeCast::None => {
@@ -387,7 +387,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
                 let type_cast = try_cast(rhs_type, lhs_type, CastType::Implicit);
                 let out_rhs_type = match &type_cast{
                     TypeCast::NotNeeded => lhs_type.clone(),
-                    TypeCast::FreeWiden => lhs_type.clone(),
+                    TypeCast::FreeUpcast => lhs_type.clone(),
                     TypeCast::IntToBigIntWiden => Type::BigInt,
                     TypeCast::IntToNumberWiden => Type::Number,
                     TypeCast::None => {
@@ -407,7 +407,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             match &type_cast{
                 TypeCast::NotNeeded => 
                     Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
-                TypeCast::FreeWiden | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden => 
+                TypeCast::FreeUpcast | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden => 
                     Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
                 TypeCast::None => {
                     //now try going the other way
@@ -415,7 +415,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
                     match &type_cast{
                         TypeCast::NotNeeded => 
                             Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
-                        TypeCast::FreeWiden | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden =>
+                        TypeCast::FreeUpcast | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden =>
                             Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean}),
                         TypeCast::None => None
                     }    

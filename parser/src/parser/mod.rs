@@ -24,7 +24,7 @@ use crate::{ParserContext, ScopedVar, UnsafeParseMode};
 use crate::ParserFuncContext;
 use crate::Res;
 use crate::{assert_punct, assert_ok,assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_ident, expect_string_literal, expect_keyword, StartFuncType, expect_ok, expect_semicolon};
-use crate::{try_create_cast, cast_typed_expr};
+use crate::{try_create_cast, cast_typed_expr, guard_downcast_expr};
 use crate::parser::parser_op::{get_unary_operator_data, Fix, get_binary_operator_data, Association, get_op_type_for_unop};
 use crate::Commitment;
 use crate::Importer;
@@ -46,7 +46,8 @@ fn try_get_local_variable(expr: &TypedExpr) -> Option<String> {
         Expr::LocalVariableUse(name) => {
             Some(name.clone())
         },
-        Expr::FreeTypeWiden(inner) => try_get_local_variable(&inner),
+        Expr::FreeUpcast(inner) => try_get_local_variable(&inner),
+        Expr::FreeDowncast(inner) => try_get_local_variable(&inner),
         _ => None
     }
 }
@@ -1498,7 +1499,7 @@ impl<'b> Parser<'b> {
                             } else {
                                 let guard_type = o_guard_type.as_ref().unwrap().clone();
                                 let inner = Box::new(TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()});
-                                cast_typed_expr(&guard_type, inner, CastType::GuardForce, parser_context)
+                                guard_downcast_expr(&guard_type, inner, parser_context)
                             }
                         },
                         ScopedVar::Local{internal_name, r#type, constant, guard_type: o_guard_type} => {
@@ -1507,7 +1508,7 @@ impl<'b> Parser<'b> {
                             } else {
                                 let guard_type = o_guard_type.as_ref().unwrap().clone();
                                 let inner = Box::new(TypedExpr{expr: Expr::LocalVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()});
-                                cast_typed_expr(&guard_type, inner, CastType::GuardForce, parser_context)
+                                guard_downcast_expr(&guard_type, inner, parser_context)
                             }
                         },                            
                     },
@@ -1761,11 +1762,6 @@ impl<'b> Parser<'b> {
                             Some(f) => f,
                             None => err_ret
                         }
-                    },
-                    Keyword::Some => {
-                        let e = self.parse_some(parser_func_context, parser_context);
-                        expect_ok!(e, parser_context, err_ret);
-                        e
                     },
                     Keyword::UnsafeSome => self.parse_unsafe_some(parser_func_context, parser_context),
                     _ => {

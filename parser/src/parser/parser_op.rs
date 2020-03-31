@@ -331,7 +331,7 @@ impl<'b> Parser<'b> {
                                 let lhs_out = match o_cast {
                                     Some(cast) => Box::new(cast),
                                     None => {
-                                        parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
                                         Box::new(lhs.clone())
                                     }
                                 };
@@ -340,7 +340,7 @@ impl<'b> Parser<'b> {
                                 let rhs_out = match o_cast {
                                     Some(cast) => Box::new(cast),
                                     None => {
-                                        parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
                                         Box::new(rhs.clone())
                                     }
                                 };
@@ -348,7 +348,7 @@ impl<'b> Parser<'b> {
                                 TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: lhs_out, rhs: rhs_out}, r#type: bin_op_type_cast.out_type, is_const: true, loc: loc}
                             },
                             None => {
-                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                parser_context.push_err(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
                                 TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone())}, r#type: Type::Unknown, is_const: true, loc: loc}
                             }
                         }
@@ -370,14 +370,14 @@ impl<'b> Parser<'b> {
                             },
                             Some(l_value) => {
                                 //now type check the assignment operator. Note that we only need a type check from the rhs
-                                let o_bin_op_type_cast = types::get_binary_op_type_cast(get_op_type_for_assop(&ass_op), &lhs.r#type, &rhs.r#type);
+                                let o_bin_op_type_cast = types::get_binary_op_type_cast(get_op_type_for_assop(&ass_op), &l_value.r#type, &rhs.r#type);
                                 match o_bin_op_type_cast {
                                     Some(bin_op_type_cast) => {
                                         let o_cast = create_cast(&bin_op_type_cast.rhs_type, rhs, &bin_op_type_cast.rhs_type_cast);
                                         let rhs_out = match o_cast {
                                             Some(cast) => Box::new(cast),
                                             None => {
-                                                parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                                parser_context.push_err(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
                                                 Box::new(rhs.clone())
                                             }
                                         };
@@ -388,7 +388,7 @@ impl<'b> Parser<'b> {
                                         } 
                                     },
                                     None => {
-                                        parser_context.errors.push(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
                                         TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, Box::new(rhs.clone())), r#type: Type::Unknown, is_const: false, loc: loc}
                                     }
                                 }

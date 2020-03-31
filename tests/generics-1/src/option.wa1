@@ -32,6 +32,7 @@ __struct S1 {
 
 export fn testOption() -> void {
     let s1_1 = __static S1{ x: 3 }
+    let s1_2 = __static S1{ x: 4 }
     
     let sS = __Some(s1_1)
     let oS: __Option<S1> = sS;
@@ -40,5 +41,6 @@ export fn testOption() -> void {
 
     if (__Option_isSome(oS)) {
         assert.assert(__Some_unwrap(oS).x == 3)
+        oS = __Some(s1_2);
     }
 }
