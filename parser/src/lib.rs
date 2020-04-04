@@ -524,30 +524,15 @@ impl ParserContext {
         }
     }
 
-    /// Add a new var with a type guard. Returns the generated internal name, and the old unguarded type.
-    fn add_guarded_var(&mut self, 
-        var_name: &String, 
-        guard_type: &Type
-    ) -> (String, Type) {
-        //find the var in the block_var_stack
-        let (external_var_name, shadowed_var) = self.find_named_scoped_var_given_internal_name(var_name);
-
-        let internal_var_name = self.get_unique_name(&external_var_name);
-
-        let (new_var, unguarded_type) = match shadowed_var {
-            ScopedVar::Local{internal_name: _, r#type, constant, guard_type: _} => {
-                (ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: Some(guard_type.clone())}, r#type.clone())
-            },
-            ScopedVar::ClosureRef{internal_name: _, r#type, constant, guard_type: _} => {
-                (ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: Some(guard_type.clone())}, r#type.clone())
-            }
-        };
-
+    fn patch_var(&mut self, 
+        var_name: &String,
+        new_var: &ScopedVar
+    ) -> () {
         let o_head = self.func_var_stack.last_mut();
         match o_head {
             None => panic!(),
             Some(head) => {
-                head.var_names.insert(external_var_name.clone(), new_var.clone());
+                head.var_names.insert(var_name.clone(), new_var.clone());
             }
         }
 
@@ -555,11 +540,55 @@ impl ParserContext {
         match o_head {
             None => panic!(),
             Some(head) => {
-                head.var_names.insert(external_var_name.clone(), new_var);
+                head.var_names.insert(var_name.clone(), new_var.clone());
             }
         }
+    }
 
-        (internal_var_name, unguarded_type)
+    /// Apply a type guard to an existing variable.
+    fn guard_var(&mut self, 
+        internal_var_name: &String, 
+        guard_type: &Type
+    ) -> () {
+        //find the var in the block_var_stack
+        let (var_name, shadowed_var) = self.find_named_scoped_var_given_internal_name(internal_var_name);
+
+        let new_var = match shadowed_var {
+            ScopedVar::Local{internal_name: _, r#type, constant, guard_type: _} => {
+                ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: Some(guard_type.clone())}
+            },
+            ScopedVar::ClosureRef{internal_name: _, r#type, constant, guard_type: _} => {
+                ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: Some(guard_type.clone())}
+            }
+        };
+
+        self.patch_var(&var_name, &new_var)
+    }
+
+    fn unguard_var(&mut self, 
+        internal_var_name: &String, 
+    ) -> () {
+        let (var_name, shadowed_var) = self.find_named_scoped_var_given_internal_name(internal_var_name);
+
+        let o_new_var = match shadowed_var {
+            ScopedVar::Local{internal_name: _, r#type, constant, guard_type: o_guard_type} => {
+                match o_guard_type {
+                    Some(_) => Some(ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: None}),
+                    None => None
+                }
+            },
+            ScopedVar::ClosureRef{internal_name: _, r#type, constant, guard_type: o_guard_type} => {
+                match o_guard_type {
+                    Some(_) => Some(ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: None}),
+                    None => None
+                }
+            }
+        };
+
+        match o_new_var {
+            Some(new_var) => self.patch_var(&var_name, &new_var),
+            None => {}
+        }
     }
 
     fn get_scoped_var(&self, var_name: &String) -> Option<&ScopedVar> {

@@ -76,7 +76,6 @@ fn get_type_guard_inst(condition: &Expr) -> Option<(TypeGuard, String)> {
 fn apply_type_guard_inst(
     o_type_guard_inst: &Option<(TypeGuard, String)>, 
     branch_expr: &Expr,
-    parser_func_context: &mut ParserFuncContext,
     parser_context: &mut ParserContext
 ) -> bool {
     if o_type_guard_inst.is_some() {
@@ -85,14 +84,7 @@ fn apply_type_guard_inst(
         if o_branch.is_some() {
             let branch = o_branch.unwrap();
             parser_context.push_block_scope();
-            let (internal_name, unguarded_type) = parser_context.add_guarded_var(&variable_name, &branch.guard_type);
-
-            let idx = parser_func_context.local_vars.len();
-            parser_func_context.local_vars.push(
-                LocalVar{internal_name: internal_name.clone(), r#type: 
-                    unguarded_type, closure_source: false, arg: false}
-            );
-            parser_func_context.local_var_map.insert(internal_name.clone(), idx as u32);
+            parser_context.guard_var(&variable_name, &branch.guard_type);
         }
         true
     } else {
@@ -763,7 +755,7 @@ impl<'b> Parser<'b> {
         let o_type_guard_inst = get_type_guard_inst(&condition.expr);
         
         //create the then block
-        let pop_then_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(true), parser_func_context, parser_context);
+        let pop_then_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(true), parser_context);
         let then_block = self.parse_block(true, parser_func_context, parser_context);
         if pop_then_stack {
             parser_context.pop_block_scope();
@@ -775,7 +767,7 @@ impl<'b> Parser<'b> {
             self.skip_next_item();
 
             //create the else block
-            let pop_else_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(false), parser_func_context, parser_context);
+            let pop_else_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(false), parser_context);
             let else_block = self.parse_block(true, parser_func_context, parser_context);
             if pop_else_stack {
                 parser_context.pop_block_scope();
@@ -794,7 +786,6 @@ impl<'b> Parser<'b> {
                         match else_to_then_cast {
                             None => {
                                 //warn that we can't figure out the type, make it the top type
-                                parser_context.push_err(Error::TypeFailureIf(loc.clone(), then_block.r#type.clone(), else_block.r#type.clone()));
                                 TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: Type::Unknown, loc: loc}
                             },
                             Some(new_else_block) => {
@@ -835,7 +826,7 @@ impl<'b> Parser<'b> {
 
         let old_in_iteration = parser_func_context.in_iteration;
         parser_func_context.in_iteration = true;
-        let pop_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(true), parser_func_context, parser_context);
+        let pop_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(true), parser_context);
         let block = self.parse_block(true, parser_func_context, parser_context);
         if pop_stack {
             parser_context.pop_block_scope();
@@ -1782,12 +1773,14 @@ impl<'b> Parser<'b> {
                     e
                 },
                 _ => {
+                    self.skip_next_item();
                     parser_context.push_err(self.unexpected_token_error_raw(lookahead_item.span, &lookahead_item.location, "unexpected punctuation"));
                     err_ret
                 },
             },
 
             _ => {
+                self.skip_next_item();
                 parser_context.push_err(self.unexpected_token_error_raw(lookahead_item.span, &lookahead_item.location, "unexpected token"));
                 err_ret
             },

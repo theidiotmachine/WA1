@@ -593,11 +593,11 @@ __struct malloc_tree_chunk {
   bk: malloc_tree_chunk;
 
   //WA1 - in dlmalloc these are an array of size 2. I don't have an 
-  //array implementation yet, and it doesn't seem that important
+  //inline array implementation, and it doesn't seem that important
   child_0: __Option<malloc_tree_chunk>; 
   child_1: __Option<malloc_tree_chunk>;
   parent: __Option<malloc_tree_chunk>;
-  index: __size_t; //actually should be a u32, but this will do
+  index: int; //actually should be a u32, but this will do
 }
 
 /* A little helper macro for trees */
@@ -608,6 +608,8 @@ fn leftmost_child(t: malloc_tree_chunk) -> __Option<malloc_tree_chunk> {
   else 
     t.child_1;
 }
+
+fn treechunksize(p: malloc_tree_chunk) -> __size_t        (p.head & ~(7 as __size_t));
 
 /* ----------------------------- Segments -------------------------------- */
 
@@ -1049,38 +1051,37 @@ fn has_segment_link(m: malloc_state, ss: malloc_segment) -> boolean {
 fn is_small(s: __size_t) -> boolean s.shiftRight(3) < (32 as __size_t);
 
 //#define small_index(s)      (bindex_t)((s)  >> SMALLBIN_SHIFT)
-fn small_index(s: __size_t) -> __size_t s.shiftRight(3);
+fn small_index(s: __size_t) -> int s.shiftRight(3) as int
 
 //#define small_index2size(i) ((i)  << SMALLBIN_SHIFT)
-fn small_index2size(i: __size_t) -> __size_t i.shiftLeft(3);
+fn small_index2size(i: int) -> __size_t i.shiftLeft(3) as __size_t
 
 //#define MIN_SMALL_INDEX     (small_index(MIN_CHUNK_SIZE))
 const MIN_SMALL_INDEX = small_index(MIN_CHUNK_SIZE);
 
 /* addressing by index. See above about smallbin repositioning *_* we don't do the repositioning trick */
 //#define smallbin_at(M, i)   ((sbinptr)((char*)&((M)->smallbins[(i)<<1])))
-fn smallbin_at(m: malloc_state, i: __size_t) -> malloc_chunk m.smallbins[i as int];
+fn smallbin_at(m: malloc_state, i: int) -> malloc_chunk m.smallbins[i];
 
 //#define treebin_at(M,i)     (&((M)->treebins[i]))
-fn treebin_at(m: malloc_state, i: __size_t) -> __Option<malloc_tree_chunk>  m.treebins[i as int];
 
 //#define compute_tree_index(S, I)\
-fn compute_tree_index(s: __size_t) -> __size_t {
+fn compute_tree_index(s: __size_t) -> int {
   const x: __size_t = s.shiftRight(8);
   if (x == (0 as __size_t))
-    0 as __size_t;
+    0
   else if (x > (0xFFFF as __size_t))
-    31 as __size_t;
+    31
   else {
-    const k: int = 31 - (x.countLeadingZeros() as int);
-    (k.shiftLeft(1) as __size_t) + (s.shiftRight(k + 7) & (1 as __size_t));
+    const k: int = 31 - (x.countLeadingZeros() as int)
+    (k.shiftLeft(1) as __size_t) + (s.shiftRight(k + 7) & (1 as __size_t)) as int
   }
 }
 
 /* Shift placing maximum resolved bit in a treebin at i as sign bit */
 //#define leftshift_for_tree_index(i) ((i == NTREEBINS-1)? 0 : ((SIZE_T_BITSIZE-SIZE_T_ONE) - (((i) >> 1) + TREEBIN_SHIFT - 2)))
-fn leftshift_for_tree_index(i: __size_t) -> int {
-  if (i == (31 as __size_t)) 0; else 31 - ((i.shiftRight(1) as int) + 6);
+fn leftshift_for_tree_index(i: int) -> int {
+  if (i == 31) 0; else 31 - (i.shiftRight(1) + 6);
 }
 
 /* The size of the smallest chunk held in bin with index i */
@@ -1090,22 +1091,22 @@ fn leftshift_for_tree_index(i: __size_t) -> int {
 
 /* bit corresponding to given index */
 //#define idx2bit(i)              ((binmap_t)(1) << (i))
-fn idx2bit(i: __size_t) -> __size_t (1 as __size_t).shiftLeft(i as int);
+fn idx2bit(i: int) -> __size_t (1 as __size_t).shiftLeft(i);
 
 /* Mark/Clear bits with given index */
 //#define mark_smallmap(M,i)      ((M)->smallmap |=  idx2bit(i))
 //fn mark_smallmap(m: malloc_state, i: __size_t) -> void m.smallmap |= idx2bit(i);
 //#define clear_smallmap(M,i)     ((M)->smallmap &= ~idx2bit(i))
-fn clear_smallmap(m: malloc_state, i: __size_t) -> void m.smallmap &= ~idx2bit(i);
+fn clear_smallmap(m: malloc_state, i: int) -> void m.smallmap &= ~idx2bit(i);
 //#define smallmap_is_marked(M,i) ((M)->smallmap &   idx2bit(i))
-fn smallmap_is_marked(m: malloc_state, i: __size_t) -> boolean (m.smallmap & idx2bit(i)) != (0 as __size_t);
+fn smallmap_is_marked(m: malloc_state, i: int) -> boolean (m.smallmap & idx2bit(i)) != (0 as __size_t);
 
 //#define mark_treemap(M,i)       ((M)->treemap  |=  idx2bit(i))
-fn mark_treemap(m: malloc_state, i: __size_t) -> void m.treemap  |=  idx2bit(i);
+fn mark_treemap(m: malloc_state, i: int) -> void m.treemap  |=  idx2bit(i);
 //#define clear_treemap(M,i)      ((M)->treemap  &= ~idx2bit(i))
-fn clear_treemap(m: malloc_state, i: __size_t) -> void m.treemap  &= ~idx2bit(i);
+fn clear_treemap(m: malloc_state, i: int) -> void m.treemap  &= ~idx2bit(i);
 //#define treemap_is_marked(M,i)  ((M)->treemap  &   idx2bit(i))
-fn treemap_is_marked(m: malloc_state, i: __size_t) -> boolean (m.treemap  &   idx2bit(i)) != (0 as __size_t);
+fn treemap_is_marked(m: malloc_state, i: int) -> boolean (m.treemap  &   idx2bit(i)) != (0 as __size_t);
 
 /* isolate the least set bit of a bitmap */
 //#define least_bit(x)         ((x) & -(x))
@@ -1282,3 +1283,106 @@ fn insert_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
   p.fd = f;
   p.bk = b;
 }
+
+/* Unlink a chunk from a smallbin  */
+fn unlink_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
+  let f = p.fd
+  let b = p.bk
+  let i = small_index(s)
+  //assert(p != b);
+  //assert(p != f);
+  //assert(chunksize(p) == small_index2size(i));
+  if (
+    (f as __ptr) == (smallbin_at(m,i) as __ptr)
+    || (ok_address(m, f as __ptr) && (f.bk as __ptr) == (p as __ptr))
+  ) {
+    if ((b as __ptr) == (f as __ptr)) {
+      clear_smallmap(m, i)
+    } else if (
+      (b as __ptr) == (smallbin_at(m,i) as __ptr) 
+      || (ok_address(m, b as __ptr) && (b.fd as __ptr) == (p as __ptr))
+    ) {
+      f.bk = b
+      b.fd = f
+    } else __trap()
+  } else __trap()
+}
+
+/* Unlink the first chunk from a smallbin */
+fn unlink_first_small_chunk(m: malloc_state, b: malloc_chunk, p: malloc_chunk, i: int) -> void {
+  let f = p.fd
+  //assert(P != B)
+  //assert(P != F);
+  //assert(chunksize(P) == small_index2size(I));
+  if ((b as __ptr) == (f as __ptr)) {
+    clear_smallmap(m, i)
+  }
+  else if (ok_address(m, f as __ptr) && (f.bk as __ptr) == (p as __ptr)) {
+    f.bk = b
+    b.fd = f
+  } else __trap()
+}
+
+/* Replace dv node, binning the old one */
+/* Used only when dvsize known to be small */
+fn replace_dv(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
+  //let dvs = m.dvsize
+  const dv = m.dv
+  if (option.__Option_isSome(dv)) {
+    let dvs = m.dvsize
+    insert_small_chunk(m, option.__Some_unwrap(dv), dvs)
+  }
+  m.dvsize = s
+  m.dv = __Some(p)
+}
+
+/* ------------------------- Operations on trees ------------------------- */
+
+/* Insert chunk into tree */
+fn insert_large_chunk(m: malloc_state, x: malloc_tree_chunk, s: __size_t) -> void {
+  let i = compute_tree_index(s)
+  x.index = i
+  x.child_0 = __null
+  x.child_1 = __null
+  if (!treemap_is_marked(m, i)) {
+    mark_treemap(m, i)
+    m.treebins[i] = __Some(x)
+    //wow
+    x.parent = __Some(0xffffffff as __size_t as __ptr as malloc_tree_chunk)
+    x.fd = x
+    x.bk = x
+  } else {
+    let o_t = m.treebins[i]
+    let k = s.shiftLeft(leftshift_for_tree_index(i))
+    while(true) {
+      let t = option.__Option_unwrap(o_t);
+      if (treechunksize(t) != s) {
+        let child_index = (k.shiftRight(31) & (1 as __size_t)) as int
+        k = k.shiftLeft(1)
+        let child_ptr = if (child_index==0) t.child_0; else t.child_1
+        if (option.__Option_isSome(child_ptr))
+          o_t = child_ptr
+        else {
+          if (child_index==0) t.child_0 = __Some(x); else t.child_1 = __Some(x)
+          x.parent = __Some(t)
+          x.fd = x
+          x.bk = x
+          break
+        }
+      } else {
+        let f = t.fd
+        if (ok_address(m, t as __ptr) && ok_address(m, f as __ptr)) {
+          t.fd = x
+          f.bk = x
+          x.fd = f
+          x.bk = t
+          x.parent = __null
+          break
+        } else {
+          __trap()
+        }
+      }
+    }
+  }
+}
+
