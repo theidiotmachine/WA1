@@ -264,6 +264,21 @@ return 4;
 You don't need it at the end of a function (and is considered bad practice), but it is useful for flow control in complicated functions. If you 
 combine fat arrow with return, we try and guess based on all the returns in the function.
 
+## Type guards
+
+Inspired by TypeScript, WA1 contains [type guards](https://www.typescriptlang.org/docs/handbook/advanced-types.html). In TypeScript these are used to tell
+one JavaScript blob from another. Here, we use them to do limited scope down-casting. What this essentially means is this. Given a bit of code of the form:
+
+```
+let x: Bar = whatever()
+if(isFoo(x)) {
+    x.methodOnFoo()
+}
+```
+
+any local access of x in the block will automatically cast x to a Foo. This lasts until the block is existed, or x is assigned to. Creating a type guard
+function is an unsafe operation, so needs to be done in unsafe mode.
+
 ## Unsafe mode
 
 Unsafe mode is designed to be a mode that library writers can write low-level code. It feels like C in that it is 
@@ -271,7 +286,7 @@ not much more than structured WASM. In order to use it you need to somehow pass 
 
 A leading `__` is pronounced 'unsafe', by the way.
 
-* `__ptr` type - not yet finished
+* `__ptr` type. Pointer to raw memory.
 * `__size_t` type - pretty much the same as a `__ptr`, but makes some things a bit type safer
 * intrinsics - wrap low level wasm calls
     * `__memorySize()` - `memory.size` instruction
@@ -284,6 +299,15 @@ A leading `__` is pronounced 'unsafe', by the way.
     is in the name...), or use `__static` (which does actually work and is a C-style static allocation). 
     You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to dynamically allocate (which uses malloc), 
     or `__static Hello {a: 3}`. A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
+* `__typeguard` This keyword lets you define type guards. Here is an example.
+```
+export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> boolean __typeguard {
+    true => __null
+    false => __Some<T>
+} {
+    x == __null
+}
+```
 
 ## Linker
 

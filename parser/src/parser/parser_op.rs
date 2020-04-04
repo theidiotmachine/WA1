@@ -369,6 +369,14 @@ impl<'b> Parser<'b> {
                                 lhs.clone()
                             },
                             Some(l_value) => {
+                                //if we got something, we need to erase the typeguard
+                                match &l_value.expr {
+                                    LValueExpr::LocalVariableAssign(name) => {
+                                        parser_context.unguard_var(name);
+                                    },
+                                    _ => {}
+                                }
+
                                 //now type check the assignment operator. Note that we only need a type check from the rhs
                                 let o_bin_op_type_cast = types::get_binary_op_type_cast(get_op_type_for_assop(&ass_op), &l_value.r#type, &rhs.r#type);
                                 match o_bin_op_type_cast {

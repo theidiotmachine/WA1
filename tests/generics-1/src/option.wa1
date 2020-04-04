@@ -34,7 +34,7 @@ export fn testOption() -> void {
     let s1_1 = __static S1{ x: 3 }
     let s1_2 = __static S1{ x: 4 }
     
-    let sS = __Some(s1_1)
+    const sS = __Some(s1_1)
     let oS: __Option<S1> = sS;
     assert.assert(__Option_unwrap<S1>(oS).x == 3)
     assert.assert(__Option_unwrap(oS).x == 3)
@@ -42,5 +42,9 @@ export fn testOption() -> void {
     if (__Option_isSome(oS)) {
         assert.assert(__Some_unwrap(oS).x == 3)
         oS = __Some(s1_2);
+        //this would fail because the typeguard is removed
+        //assert.assert(__Some_unwrap<S1>(oS).x == 3)
     }
+    //this would fail because the typeguard is out of the block
+    //assert.assert(__Some_unwrap<S1>(oS).x == 3)
 }
