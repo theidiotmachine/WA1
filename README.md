@@ -214,7 +214,7 @@ they are sort of a mix between templates and generics. Some days I like saying '
 The return value of a block is the last expression. So a function that added two numbers would be this:
 
 ```
-fn add(x: number, y: number) => x + y
+fn add(x: Number, y: Number) => x + y
 ```
 
 This works because a function expects a block; a single expression or a squiggly bracket enclosed list of expressions is a block; the last expression of a block is what it returns.
@@ -243,7 +243,7 @@ if(k != 4)
 while(a > 3) {
     a -= 1
 
-    if(a == -100)
+    if(a == 100)
         break
 }
 ```
@@ -348,26 +348,25 @@ not much more than structured WASM. In order to use it you need to somehow pass 
 
 A leading `__` is pronounced 'unsafe', by the way.
 
-* `__ptr` type. Pointer to raw memory.
-* `__size_t` type - pretty much the same as a `__ptr`, but makes some things a bit type safer
+* `__Ptr` type. Pointer to raw memory.
 * intrinsics - wrap low level wasm calls
     * `__memorySize()` - `memory.size` instruction
     * `__memoryGrow(0, numPages)` - `memory.grow` instruction
     * `__trap()` - `unreachable` instruction
-* `__Option` - is a essentially a nullable pointer. You can have it be a `__null` or `__Some<T>`. It will end up being the core of the 
+* `__Option` - is a essentially a nullable pointer. You can have it be a `__Null` or `__Some<T>`. It will end up being the core of the 
     real option. It's kind of horrible because it's pretending to be a union but it really is a nullable pointer.
 * `__struct` type - works but you need either the super secret `malloc` function for them to be useful 
-    (which doesn't exist, so good luck with that), cast from a `__ptr` (this is unsafe. The clue
+    (which doesn't exist, so good luck with that), cast from a `__Ptr` (this is unsafe. The clue
     is in the name...), or use `__static` (which does actually work and is a C-style static allocation). 
-    You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to dynamically allocate (which uses malloc), 
+    You do `__struct Hello { a: Int; }` to declare, `new Hello {a: 3}` to dynamically allocate (which uses malloc), 
     or `__static Hello {a: 3}`. A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
 * `__typeguard` This keyword lets you define type guards. Here is an example.
 ```
-export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> boolean __typeguard {
-    true => __null
+export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Boolean __typeguard {
+    true => __Null
     false => __Some<T>
 } {
-    x == __null
+    x == __Null
 }
 ```
 
