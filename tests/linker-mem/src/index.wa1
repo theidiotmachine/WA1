@@ -1,8 +1,9 @@
 import {*} from "./cache"
 import {*} from "./assert"
 import {*} from "./array"
+import {*} from "./ptr"
 
-export fn test() -> int {
+export fn test() -> Int {
     assert.assert(cache.getA() == 10);
     cache.setA(20);
     assert.assert(cache.getA() == 20);

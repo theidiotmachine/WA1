@@ -6,9 +6,10 @@ use parity_wasm::elements::{Instructions, Instruction};
 
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::{i32, i64, u32};
 
 pub use errs::Error;
-pub use types::Type;
+pub use types::{Type, Bittage, get_bittage, S_32_MAX};
 
 use crate::wasm_types::{get_wasm_value_type, get_wasm_func_type, get_wasm_return_type};
 use crate::mem::*;
@@ -21,7 +22,6 @@ use crate::wasm::wasm_instructions::{WasmInstr, opcodes};
 use crate::wasm::wasm_serialize::{serialize_i32, serialize_i64, serialize_f32, serialize_f64};
 
 use crate::compile_int::compile_int_member_func;
-use crate::compile_unsafe::compile_unsafe_size_t_member_func;
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum TranslationUnitType{
@@ -108,19 +108,63 @@ fn compile_binary_operator(
             }
         },
 
-        Type::Int => {
+        Type::Int(lhs_lower, lhs_upper) => {
             // int * ? => ?
             match return_type {
-                Type::Int => {
+                Type::Int(_, _) => {
                     // int * ? => int
                     match bin_op {
-                        BinaryOperator::Plus => wasm_expr.data.push(WasmInstr::I32Add),
-                        BinaryOperator::Minus => wasm_expr.data.push(WasmInstr::I32Sub),
-                        BinaryOperator::Multiply => wasm_expr.data.push(WasmInstr::I32Mul),
-                        BinaryOperator::Divide => wasm_expr.data.push(WasmInstr::I32DivS),
-                        BinaryOperator::BitAnd => wasm_expr.data.push(WasmInstr::I32And),
-                        BinaryOperator::BitOr => wasm_expr.data.push(WasmInstr::I32Or),
-                        BinaryOperator::BitXor => wasm_expr.data.push(WasmInstr::I32Xor),
+                        BinaryOperator::Plus => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 | Bittage::U32 => wasm_expr.data.push(WasmInstr::I32Add),
+                                Bittage::S64 | Bittage::U64 => wasm_expr.data.push(WasmInstr::I64Add),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::Minus => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 | Bittage::U32 => wasm_expr.data.push(WasmInstr::I32Sub),
+                                Bittage::S64 | Bittage::U64 => wasm_expr.data.push(WasmInstr::I64Sub),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::Multiply => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 | Bittage::U32 => wasm_expr.data.push(WasmInstr::I32Mul),
+                                Bittage::S64 | Bittage::U64 => wasm_expr.data.push(WasmInstr::I64Mul),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::Divide => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 => wasm_expr.data.push(WasmInstr::I32DivS),
+                                Bittage::U32 => wasm_expr.data.push(WasmInstr::I32DivU),
+                                Bittage::S64 => wasm_expr.data.push(WasmInstr::I64DivS),
+                                Bittage::U64 => wasm_expr.data.push(WasmInstr::I64DivU),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::BitAnd => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 | Bittage::U32 => wasm_expr.data.push(WasmInstr::I32And),
+                                Bittage::S64 | Bittage::U64 => wasm_expr.data.push(WasmInstr::I64And),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::BitOr => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 | Bittage::U32 => wasm_expr.data.push(WasmInstr::I32Or),
+                                Bittage::S64 | Bittage::U64 => wasm_expr.data.push(WasmInstr::I64Or),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::BitXor => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 | Bittage::U32 => wasm_expr.data.push(WasmInstr::I32Xor),
+                                Bittage::S64 | Bittage::U64 => wasm_expr.data.push(WasmInstr::I64Xor),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
 
                         _ => {
                             errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (int ★ ? => int)")))
@@ -130,12 +174,56 @@ fn compile_binary_operator(
                 Type::Boolean => {
                     // int * ? => boolean
                     match bin_op {
-                        BinaryOperator::GreaterThan => wasm_expr.data.push(WasmInstr::I32GtS),
-                        BinaryOperator::GreaterThanEqual => wasm_expr.data.push(WasmInstr::I32GeS),
-                        BinaryOperator::LessThan=> wasm_expr.data.push(WasmInstr::I32LtS),
-                        BinaryOperator::LessThanEqual => wasm_expr.data.push(WasmInstr::I32LeS),
-                        BinaryOperator::Equal => wasm_expr.data.push(WasmInstr::I32Eq),
-                        BinaryOperator::NotEqual => wasm_expr.data.push(WasmInstr::I32Ne),
+                        BinaryOperator::GreaterThan => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 => wasm_expr.data.push(WasmInstr::I32GtS),
+                                Bittage::S64 => wasm_expr.data.push(WasmInstr::I64GtS),
+                                Bittage::U32 => wasm_expr.data.push(WasmInstr::I32GtU),
+                                Bittage::U64 => wasm_expr.data.push(WasmInstr::I64GtU),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::GreaterThanEqual => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 => wasm_expr.data.push(WasmInstr::I32GeS),
+                                Bittage::S64 => wasm_expr.data.push(WasmInstr::I64GeS),
+                                Bittage::U32 => wasm_expr.data.push(WasmInstr::I32GeU),
+                                Bittage::U64 => wasm_expr.data.push(WasmInstr::I64GeU),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::LessThan => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 => wasm_expr.data.push(WasmInstr::I32LtS),
+                                Bittage::S64 => wasm_expr.data.push(WasmInstr::I64LtS),
+                                Bittage::U32 => wasm_expr.data.push(WasmInstr::I32LtU),
+                                Bittage::U64 => wasm_expr.data.push(WasmInstr::I64LtU),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::LessThanEqual => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 => wasm_expr.data.push(WasmInstr::I32LeS),
+                                Bittage::S64 => wasm_expr.data.push(WasmInstr::I64LeS),
+                                Bittage::U32 => wasm_expr.data.push(WasmInstr::I32LeU),
+                                Bittage::U64 => wasm_expr.data.push(WasmInstr::I64LeU),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::Equal => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 | Bittage::U32 => wasm_expr.data.push(WasmInstr::I32Eq),
+                                Bittage::S64 | Bittage::U64 => wasm_expr.data.push(WasmInstr::I64Eq),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        BinaryOperator::NotEqual => {
+                            match get_bittage(lhs_lower, lhs_upper) {
+                                Bittage::S32 | Bittage::U32 => wasm_expr.data.push(WasmInstr::I32Ne),
+                                Bittage::S64 | Bittage::U64 => wasm_expr.data.push(WasmInstr::I64Ne),
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
                         _ => {
                             errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (int ★ ? => boolean)")))
                         }
@@ -147,45 +235,7 @@ fn compile_binary_operator(
             }
         },
 
-        Type::BigInt => {
-            // bigint * ? => ?
-            match return_type {
-                Type::BigInt => {
-                    // bigint * ? => bigint
-                    match bin_op {
-                        BinaryOperator::Plus => wasm_expr.data.push(WasmInstr::I64Add),
-                        BinaryOperator::Minus => wasm_expr.data.push(WasmInstr::I64Sub),
-                        BinaryOperator::Multiply => wasm_expr.data.push(WasmInstr::I64Mul),
-                        BinaryOperator::Divide => wasm_expr.data.push(WasmInstr::I64DivS),
-                        BinaryOperator::BitAnd => wasm_expr.data.push(WasmInstr::I64And),
-                        BinaryOperator::BitOr => wasm_expr.data.push(WasmInstr::I64Or),
-                        BinaryOperator::BitXor => wasm_expr.data.push(WasmInstr::I64Xor),
-
-                        _ => {
-                            errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (bigint ★ ? => bigint)")))
-                        }
-                    }
-                },
-                Type::Boolean => {
-                    // bigint * ? => boolean
-                    match bin_op {
-                        BinaryOperator::GreaterThan => wasm_expr.data.push(WasmInstr::I64GtS),
-                        BinaryOperator::GreaterThanEqual => wasm_expr.data.push(WasmInstr::I64GeS),
-                        BinaryOperator::LessThan=> wasm_expr.data.push(WasmInstr::I64LtS),
-                        BinaryOperator::LessThanEqual => wasm_expr.data.push(WasmInstr::I64LeS),
-                        BinaryOperator::Equal => wasm_expr.data.push(WasmInstr::I64Eq),
-                        BinaryOperator::NotEqual => wasm_expr.data.push(WasmInstr::I64Ne),
-                        _ => {
-                            errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (bigint ★ ? => boolean)")))
-                        }
-                    }
-                },
-                _ => {
-                    errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (bigint ★ ? => ?)")))
-                }
-            }
-        },
-
+        //FIXME64
         Type::UnsafePtr => {
             match return_type {
                 Type::UnsafePtr => {
@@ -235,41 +285,7 @@ fn compile_binary_operator(
             }
         },
 
-        Type::UnsafeSizeT => {
-            match return_type {
-                Type::UnsafeSizeT | Type::UnsafePtr => {
-                    match bin_op {
-                        BinaryOperator::Plus => wasm_expr.data.push(WasmInstr::I32Add),
-                        BinaryOperator::Minus => wasm_expr.data.push(WasmInstr::I32Sub),
-                        BinaryOperator::Multiply => wasm_expr.data.push(WasmInstr::I32Mul),
-                        BinaryOperator::Divide => wasm_expr.data.push(WasmInstr::I32DivU),
-                        BinaryOperator::BitAnd => wasm_expr.data.push(WasmInstr::I32And),
-                        BinaryOperator::BitOr => wasm_expr.data.push(WasmInstr::I32Or),
-                        BinaryOperator::BitXor => wasm_expr.data.push(WasmInstr::I32Xor),
-                        _ => {
-                            errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (__size_t ★ ? => __size_t | __ptr)")))
-                        }
-                    }
-                },
-                Type::Boolean => {
-                    match bin_op {
-                        BinaryOperator::GreaterThan => wasm_expr.data.push(WasmInstr::I32GtU),
-                        BinaryOperator::GreaterThanEqual => wasm_expr.data.push(WasmInstr::I32GeU),
-                        BinaryOperator::LessThan=> wasm_expr.data.push(WasmInstr::I32LtU),
-                        BinaryOperator::LessThanEqual => wasm_expr.data.push(WasmInstr::I32LeU),
-                        BinaryOperator::Equal => wasm_expr.data.push(WasmInstr::I32Eq),
-                        BinaryOperator::NotEqual => wasm_expr.data.push(WasmInstr::I32Ne),
-                        _ => {
-                            errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (__size_t ★ ? => boolean)")))
-                        }
-                    }
-                },
-                _ => {
-                    errors.push(Error::NotYetImplemented(loc.clone(), String::from("binary operator (__size_t ★ ? => ?)")))
-                }
-            }
-        },
-
+        //FIXME64
         Type::UnsafeOption(_) => {
             match return_type {
                 Type::Boolean => {
@@ -287,6 +303,7 @@ fn compile_binary_operator(
             }
         },
 
+        //FIXME64
         Type::UnsafeSome(_) => {
             match return_type {
                 Type::Boolean => {
@@ -304,6 +321,7 @@ fn compile_binary_operator(
             }
         },
 
+        //FIXME64
         Type::UnsafeNull => {
             match return_type {
                 Type::Boolean => {
@@ -341,35 +359,35 @@ fn compile_unary_operator(
     compile_expr(expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
     
     match return_type {
-        Type::Int => {
+        Type::Int(lower, upper) => {
             match op {
                 UnaryOperator::BitNot => {
-                    wasm_expr.data.push(WasmInstr::I32Const(-1));
-                    wasm_expr.data.push(WasmInstr::I32Xor);
+                    match get_bittage(*lower, *upper){
+                        Bittage::S64 | Bittage::U64 => {
+                            wasm_expr.data.push(WasmInstr::I64Const(-1));
+                            wasm_expr.data.push(WasmInstr::I64Xor);
+                        },
+                        Bittage::S32 | Bittage::U32 => {
+                            wasm_expr.data.push(WasmInstr::I32Const(-1));
+                            wasm_expr.data.push(WasmInstr::I32Xor);
+                        },
+                        Bittage::OOR => {panic!()}
+                    }
                 },
 
                 UnaryOperator::Plus => {},
                 UnaryOperator::Minus => {
-                    wasm_expr.data.push(WasmInstr::I32Const(-1));
-                    wasm_expr.data.push(WasmInstr::I32Mul);
-                },
-                _ => {
-                    errors.push(Error::NotYetImplemented(loc.clone(), String::from("unary operator")))
-                }
-            }
-        },
-
-        Type::UnsafeSizeT => {
-            match op {
-                UnaryOperator::BitNot => {
-                    wasm_expr.data.push(WasmInstr::I32Const(-1));
-                    wasm_expr.data.push(WasmInstr::I32Xor);
-                },
-
-                UnaryOperator::Plus => {},
-                UnaryOperator::Minus => {
-                    wasm_expr.data.push(WasmInstr::I32Const(-1));
-                    wasm_expr.data.push(WasmInstr::I32Mul);
+                    match get_bittage(*lower, *upper){
+                        Bittage::S64 | Bittage::U64 => {
+                            wasm_expr.data.push(WasmInstr::I64Const(-1));
+                            wasm_expr.data.push(WasmInstr::I64Mul);
+                        },
+                        Bittage::S32 | Bittage::U32 => {
+                            wasm_expr.data.push(WasmInstr::I32Const(-1));
+                            wasm_expr.data.push(WasmInstr::I32Mul);
+                        },
+                        Bittage::OOR => {panic!()}
+                    }
                 },
                 _ => {
                     errors.push(Error::NotYetImplemented(loc.clone(), String::from("unary operator")))
@@ -678,8 +696,7 @@ fn compile_member_func_call(
     errors: &mut Vec<Error>
 ) {
     match lhs.r#type {
-        Type::Int | Type::IntLiteral(_) => compile_int_member_func(lhs, component, args, context, local_var_map, wasm_module, wasm_expr, errors), 
-        Type::UnsafeSizeT => compile_unsafe_size_t_member_func(lhs, component, args, context, local_var_map, wasm_module, wasm_expr, errors), 
+        Type::Int(lower, upper) => compile_int_member_func(lhs, component, args, lower, upper, context, local_var_map, wasm_module, wasm_expr, errors), 
         _ => unreachable!()
     }
 }
@@ -714,10 +731,24 @@ pub(crate) fn compile_expr(
             }
         },
         
-        Expr::IntLiteral(v) => wasm_expr.data.push(WasmInstr::I32Const(*v)),
+        Expr::IntLiteral(v) => {
+            match typed_expr.r#type {
+                Type::Int(lower, upper) => {
+                    let bittage = get_bittage(lower, upper);
+                    match bittage {
+                        //Bittage::S32 | Bittage::U32 => wasm_expr.data.push(WasmInstr::I32Const((*v).try_into().unwrap())),
+                        Bittage::S32 => wasm_expr.data.push(WasmInstr::I32Const((*v) as i32)),
+                        Bittage::U32 => wasm_expr.data.push(WasmInstr::I32Const((*v) as u32 as i32)),
+                        Bittage::S64 => wasm_expr.data.push(WasmInstr::I64Const((*v) as i64)),
+                        Bittage::U64 => wasm_expr.data.push(WasmInstr::I64Const((*v) as u64 as i64)),
+                        //Bittage::S64 | Bittage::U64 => wasm_expr.data.push(WasmInstr::I64Const((*v).try_into().unwrap())),
+                        Bittage::OOR => errors.push(Error::IntegerOutOfRange(typed_expr.loc.clone(), *v, i64::MIN.into())),
+                    }
+                },
+                _ => unreachable!()
+            }
+        },
         
-        Expr::BigIntLiteral(v) => wasm_expr.data.push(WasmInstr::I64Const(*v)),
-
         Expr::BinaryOperator{lhs, rhs, op} => compile_binary_operator(&op, &lhs, &rhs, &typed_expr.r#type, &typed_expr.loc, context, local_var_map, wasm_module, wasm_expr, errors),
 
         Expr::UnaryOperator{expr, op} => compile_unary_operator(&op, &expr, &typed_expr.r#type, &typed_expr.loc, context, local_var_map, wasm_module, wasm_expr, errors),
@@ -751,13 +782,63 @@ pub(crate) fn compile_expr(
         },
 
         Expr::IntToNumber(p) => {
-            compile_expr(&p, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            wasm_expr.data.push(WasmInstr::F64ConvertSI32);
+            match &p.r#type {
+                Type::Int(lower, upper) => {
+                    compile_expr(&p, context, local_var_map, true, wasm_module, wasm_expr, errors);
+                    match get_bittage(*lower, *upper) {
+                        Bittage::S32 => wasm_expr.data.push(WasmInstr::F64ConvertSI32),
+                        Bittage::S64 => wasm_expr.data.push(WasmInstr::F64ConvertSI64),
+                        Bittage::U32 => wasm_expr.data.push(WasmInstr::F64ConvertUI32),
+                        Bittage::U64 => wasm_expr.data.push(WasmInstr::F64ConvertUI64),
+                        Bittage::OOR => {panic!()}
+                    }
+                },
+                _ => unreachable!()
+            }
         },
 
-        Expr::IntToBigInt(p) => {
+        Expr::IntWiden(p) => {
             compile_expr(&p, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            wasm_expr.data.push(WasmInstr::I64ExtendSI32);
+            match &typed_expr.r#type {
+                Type::Int(to_lower, to_upper) => {
+                    match p.r#type {
+                        Type::Int(from_lower, from_upper) => {
+                            match get_bittage(from_lower, from_upper) {
+                                Bittage::S64 | Bittage::U64 => {},
+                                Bittage::S32 => {
+                                    match get_bittage(*to_lower, *to_upper) {
+                                        Bittage::S64 => {
+                                            wasm_expr.data.push(WasmInstr::I64ExtendSI32);
+                                        },
+                                        Bittage::S32 => {},
+                                        _ => {panic!()}
+                                    }
+                                },
+                                Bittage::U32 => {
+                                    match get_bittage(*to_lower, *to_upper) {
+                                        Bittage::U64 | Bittage::S64 => {
+                                            wasm_expr.data.push(WasmInstr::I64ExtendUI32);
+                                        },
+                                        Bittage::U32 => {},
+                                        Bittage::S32 => {
+                                            if from_upper >= S_32_MAX {
+                                                panic!();
+                                            } 
+                                        },
+                                        Bittage::OOR => {panic!()}
+                                    }
+                                },
+                                Bittage::OOR => {panic!()}
+                            }
+                        },
+                        _ => unreachable!()
+                    }
+                },
+                _ => unreachable!()
+            }
+
+            
+            
         },
 
         Expr::Return(bo_expr) => {
@@ -874,12 +955,8 @@ pub(crate) fn compile_expr(
 
         Expr::FreeUpcast(t) => compile_expr(&t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
         Expr::FreeDowncast(t) => compile_expr(&t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
+        Expr::FreeGenericCast(t) => compile_expr(&t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
         Expr::UnsafeSome(t) => compile_expr(&t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
-
-        Expr::StructDecl(_) => {
-            //all done at compile time
-            ret_val = false;
-        },
 
         Expr::NamedMember(lhs, member_name) => {
             compile_expr(&lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);

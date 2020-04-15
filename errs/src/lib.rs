@@ -19,7 +19,7 @@ pub enum Error {
     VariableNotRecognized(SourceLocation, String),
     FuncNotRecognized(SourceLocation, String),
     TypeFailureUnaryOperator(SourceLocation),
-    TypeFailureBinaryOperator(SourceLocation, String, String),
+    TypeFailureBinaryOperator(SourceLocation, String, Type, Type),
     TypeFailureVariableCreation(SourceLocation, String, String),
     TypeFailureMemberCreation(SourceLocation, String, Type, Type),
     TypeFailure(SourceLocation, Type, Type),
@@ -27,11 +27,10 @@ pub enum Error {
     NoValueReturned(SourceLocation),
     TypeFailureReturn(SourceLocation, Type, Type),
     NotAnLValue(SourceLocation),
-    ConstFailure,
     TypeFailureFuncCall(SourceLocation),
     TooManyArgs(SourceLocation),
     NotEnoughArgs(SourceLocation),
-    DuplicateTypeName(String),
+    DuplicateTypeName(SourceLocation, String),
     NotInLoop(SourceLocation, String),
     WhileMayNotReturn,
     NoComponents(SourceLocation, Type),
@@ -53,8 +52,10 @@ pub enum Error {
     UnresolvedTypeArg(SourceLocation, String),
     DuplicateGlobalVariable(SourceLocation, String),
     TypeGuardExpectingLiteral(SourceLocation),
-    FailedGenericDeduction(SourceLocation, String),
+    FailedGenericDeduction(SourceLocation, String, Type),
     ExportedFunctionFatArrow(SourceLocation),
+    IntegerOutOfRange(SourceLocation, i128, i128),
+    TypeGuardReapply(SourceLocation, Type),
 }
 
 impl Display for Error {
@@ -70,8 +71,8 @@ impl Display for Error {
             Error::VariableNotRecognized(ref loc, ref var_name) => write!(f, "ERROR {}: identifier not recognized: {}", loc, var_name),
             Error::FuncNotRecognized(ref loc, ref func_name) => write!(f, "ERROR {}: function not recognized: {}", loc, func_name),
             Error::TypeFailureUnaryOperator(ref loc) => write!(f, "ERROR {}: Type failure unary operator", loc),
-            Error::TypeFailureBinaryOperator(ref loc, ref lhs_type, ref rhs_type) => 
-                write!(f, "ERROR {}: can't make type of lhs ({}) and rhs ({}) of binary operator agree", loc, lhs_type, rhs_type),
+            Error::TypeFailureBinaryOperator(ref loc, ref op, ref lhs_type, ref rhs_type) => 
+                write!(f, "ERROR {}: can't make type of lhs ({}) and rhs ({}) of binary operator {} agree", loc, lhs_type, rhs_type, op),
             Error::TypeFailureVariableCreation(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: initializer type {} doesn't match variable type {}", loc, got, wanted),
             Error::TypeFailureMemberCreation(ref loc, ref m, ref wanted, ref got) => write!(f, "ERROR {}: initializer of type {} of member {} doesn't match member type {}", loc, got, m, wanted),
             Error::TypeFailure(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: expecting expression of type {}, found {}", loc, wanted, got),
@@ -79,11 +80,10 @@ impl Display for Error {
             Error::NoValueReturned(ref loc) => write!(f, "ERROR {}: must return a value", loc),
             Error::TypeFailureReturn(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: Expecting return value of type {}, found {}", loc, wanted, got),
             Error::NotAnLValue(ref loc) => write!(f, "ERROR {}: expression is not a l value", loc),
-            Error::ConstFailure => write!(f, "Expression is const and may not be assigned to"),
             Error::TypeFailureFuncCall(ref loc) => write!(f, "ERROR: {}: Variable is not a function", loc),
             Error::TooManyArgs(ref loc) => write!(f, "ERROR {}: too many args for function call", loc),
             Error::NotEnoughArgs(ref loc) => write!(f, "ERROR {}: not enough args for function call", loc),
-            Error::DuplicateTypeName(name) => write!(f, "Duplicate type name: {}", name),
+            Error::DuplicateTypeName(ref loc, name) => write!(f, "ERROR {}: Duplicate type name: {}", loc, name),
             Error::NotInLoop(ref loc, what) => write!(f, "ERROR {}: Used loop keyword outside a loop: {}", loc, what),
             Error::WhileMayNotReturn => write!(f, "while loops may not have a return value"),
             Error::NoComponents(ref loc, ref t) => write!(f, "ERROR {}: object of type {} has no components", loc, t),
@@ -105,8 +105,10 @@ impl Display for Error {
             Error::UnresolvedTypeArg(ref loc, ref name) => write!(f, "INTERNAL ERROR {}: unresolved type arg {}", loc, name),
             Error::DuplicateGlobalVariable(ref loc, ref name) => write!(f, "ERROR {}: duplicate global variable declaration {}", loc, name),
             Error::TypeGuardExpectingLiteral(ref loc) => write!(f, "ERROR {}: type guard must be a literal", loc),
-            Error::FailedGenericDeduction(ref loc, ref name) => write!(f, "ERROR {}: unable to deduce type of type arg {}", loc, name),
+            Error::FailedGenericDeduction(ref loc, ref name, ref t) => write!(f, "ERROR {}: unable to deduce type of type arg {}. Setting it to {}", loc, name, t),
             Error::ExportedFunctionFatArrow(ref loc) => write!(f, "ERROR {}: exported functions must have explicit return type", loc),
+            Error::IntegerOutOfRange(ref loc, v, bound) => write!(f, "ERROR {}: integer out of bounds. Value {} does not conform to bound {}", loc, v, bound),
+            Error::TypeGuardReapply(ref loc, ref t) => write!(f, "WARNING {}: typeguard {} is already in place", loc, t),
         }
     }
 }
@@ -114,6 +116,7 @@ impl Display for Error {
 impl Error {
     pub fn is_warning(&self) -> bool {
         match self {
+            Error::TypeGuardReapply(_, _) => true,
             _ => false
         }
     }

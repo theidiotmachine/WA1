@@ -1,25 +1,25 @@
 export fn __Option_unwrap<T: __struct T>(x: __Option<T>) -> T {
-    if (x == __null) {
+    if (x == __Null) {
         __trap()
     } else {
-        x as __ptr as T
+        x as __Ptr as T
     }
 }
 
 export fn __Some_unwrap<T: __struct T>(x: __Some<T>) -> T {
-    x as __ptr as T
+    x as __Ptr as T
 }
 
-export fn __Option_isSome<T: __struct T>(x: __Option<T>) -> boolean __typeguard {
+export fn __Option_isSome<T: __struct T>(x: __Option<T>) -> Boolean __typeguard {
     true => __Some<T>
-    false => __null
+    false => __Null
 } {
-    x != __null
+    x != __Null
 }
 
-export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> boolean __typeguard {
-    true => __null
+export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Boolean __typeguard {
+    true => __Null
     false => __Some<T>
 } {
-    x == __null
+    x == __Null
 }

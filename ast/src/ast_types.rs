@@ -9,4 +9,5 @@ pub mod prelude {
 pub enum TypeDecl{
     Struct{name: String, struct_type: StructType, under_construction: bool, export: bool},
     Class{name: String, class_type: ClassType, export: bool},
+    Alias{name: String, of: Type, export: bool},
 }

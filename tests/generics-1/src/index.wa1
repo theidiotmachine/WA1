@@ -3,11 +3,11 @@ import {*} from "./assert"
 import {*} from "./basic"
 
 __struct S1 {
-    x: int
+    x: Int
 }
 
 __struct S2 {
-    y: number
+    y: Number
 }
 
 //dumb function
@@ -27,7 +27,7 @@ fn testOptionExport() => {
     assert.assert(option.__Option_unwrap(oS).x == 3)
 }
 
-export fn test() -> int {
+export fn test() -> Int {
     //test the identity function on a __struct with explicit and implicit type params
     let s1_1 = __static S1{ x: 3 }
     let s1_2 = basic.id<S1>(s1_1)
@@ -41,8 +41,8 @@ export fn test() -> int {
     assert.assert(s2_1.y == s2_2.y)
 
     //let's now use numbers
-    let n1: number = 4
-    let n2 = basic.id<number>(n1)
+    let n1: Number = 4
+    let n2 = basic.id<Number>(n1)
     assert.assert(n1 == n2)
     let n3 = basic.id(n1)
     assert.assert(n1 == n3)

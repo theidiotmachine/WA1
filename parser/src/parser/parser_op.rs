@@ -12,34 +12,47 @@ use lazy_static;
 
 lazy_static!{
     static ref COMPARISON_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Boolean},
+        FuncType{in_types: vec![INT_S_64, INT_S_64], out_type: Type::Boolean},
+        FuncType{in_types: vec![INT_S_32, INT_S_32], out_type: Type::Boolean},
+        FuncType{in_types: vec![INT_U_64, INT_U_64], out_type: Type::Boolean},
+        FuncType{in_types: vec![INT_U_32, INT_U_32], out_type: Type::Boolean},
         FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Boolean},
-        FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::Boolean},
         FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::Boolean},
-        FuncType{in_types: vec![Type::UnsafeSizeT, Type::UnsafeSizeT], out_type: Type::Boolean},
     ]);
     
     static ref MATHS_BIN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
+        FuncType{in_types: vec![INT_S_64, INT_S_64], out_type: INT_S_64},
+        FuncType{in_types: vec![INT_S_32, INT_S_32], out_type: INT_S_32},
+        FuncType{in_types: vec![INT_U_64, INT_U_64], out_type: INT_U_64},
+        FuncType{in_types: vec![INT_U_32, INT_U_32], out_type: INT_U_32},
         FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Number},
-        FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
         FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::UnsafePtr},
-        FuncType{in_types: vec![Type::UnsafeSizeT, Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
     ]);
     
     static ref MATHS_UN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![Type::Int], out_type: Type::Int},
+        FuncType{in_types: vec![INT_S_64], out_type: INT_S_64},
+        FuncType{in_types: vec![INT_U_64], out_type: INT_U_64},
+        FuncType{in_types: vec![INT_S_32], out_type: INT_S_32},
+        FuncType{in_types: vec![INT_U_32], out_type: INT_U_32},
         FuncType{in_types: vec![Type::Number], out_type: Type::Number},
-        FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt},
         FuncType{in_types: vec![Type::UnsafePtr], out_type: Type::UnsafePtr},
-        FuncType{in_types: vec![Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
+    ]);
+
+    static ref MATHS_NEG_OP: OpType = OpType::SimpleOpType(vec![
+        FuncType{in_types: vec![INT_S_64], out_type: INT_S_64},
+        FuncType{in_types: vec![INT_U_64], out_type: INT_S_64},
+        FuncType{in_types: vec![INT_S_32], out_type: INT_S_32},
+        FuncType{in_types: vec![INT_U_32], out_type: INT_S_32},
+        FuncType{in_types: vec![Type::Number], out_type: Type::Number},
+        FuncType{in_types: vec![Type::UnsafePtr], out_type: Type::UnsafePtr},
     ]);
     
     static ref BIT_BIN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![Type::Int, Type::Int], out_type: Type::Int},
-        FuncType{in_types: vec![Type::BigInt, Type::BigInt], out_type: Type::BigInt},
+        FuncType{in_types: vec![INT_S_64, INT_S_64], out_type: INT_S_64},
+        FuncType{in_types: vec![INT_U_64, INT_U_64], out_type: INT_U_64},
+        FuncType{in_types: vec![INT_S_32, INT_S_32], out_type: INT_S_32},
+        FuncType{in_types: vec![INT_U_32, INT_U_32], out_type: INT_U_32},
         FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::UnsafePtr},
-        FuncType{in_types: vec![Type::UnsafeSizeT, Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
     ]);
     
     static ref EQUALITY_OP: OpType = OpType::EqualityOpType;
@@ -57,23 +70,26 @@ lazy_static!{
     ]);
     
     static ref BIT_UN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![Type::Int], out_type: Type::Int},
-        FuncType{in_types: vec![Type::UnsafeSizeT], out_type: Type::UnsafeSizeT},
-        FuncType{in_types: vec![Type::BigInt], out_type: Type::BigInt},
+        FuncType{in_types: vec![INT_S_64], out_type: INT_S_64},
+        FuncType{in_types: vec![INT_U_64], out_type: INT_U_64},
+        FuncType{in_types: vec![INT_S_32], out_type: INT_S_32},
+        FuncType{in_types: vec![INT_U_32], out_type: INT_U_32},
     ]);
     
     static ref MATHS_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
-        Type::Int,
+        INT_S_32,
+        INT_U_32,
+        INT_S_64,
+        INT_U_64,
         Type::Number,
-        Type::BigInt,
         Type::UnsafePtr,
-        Type::UnsafeSizeT,
     ]);
     
     static ref BIT_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
-        Type::Int,
-        Type::BigInt,
-        Type::UnsafeSizeT,
+        INT_S_32,
+        INT_U_32,
+        INT_S_64,
+        INT_U_64,
     ]);
     
     static ref ASSIGN_OP: OpType = OpType::AssignmentOpType;
@@ -116,7 +132,7 @@ pub fn get_op_type_for_unop(unop: &UnaryOperator) -> &OpType {
         UnaryOperator::BitNot => &BIT_UN_OP,
         UnaryOperator::PostfixIncrement => &MATHS_UN_OP,
         UnaryOperator::PostfixDecrement=> &MATHS_UN_OP,
-        UnaryOperator::Minus => &MATHS_UN_OP,
+        UnaryOperator::Minus => &MATHS_NEG_OP,
         UnaryOperator::Plus => &MATHS_UN_OP,
         UnaryOperator::PrefixIncrement => &MATHS_UN_OP,
         UnaryOperator::PrefixDecrement => &MATHS_UN_OP,
@@ -331,7 +347,7 @@ impl<'b> Parser<'b> {
                                 let lhs_out = match o_cast {
                                     Some(cast) => Box::new(cast),
                                     None => {
-                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), lhs.r#type.clone(), rhs.r#type.clone()));
                                         Box::new(lhs.clone())
                                     }
                                 };
@@ -340,7 +356,7 @@ impl<'b> Parser<'b> {
                                 let rhs_out = match o_cast {
                                     Some(cast) => Box::new(cast),
                                     None => {
-                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), lhs.r#type.clone(), rhs.r#type.clone()));
                                         Box::new(rhs.clone())
                                     }
                                 };
@@ -348,7 +364,7 @@ impl<'b> Parser<'b> {
                                 TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: lhs_out, rhs: rhs_out}, r#type: bin_op_type_cast.out_type, is_const: true, loc: loc}
                             },
                             None => {
-                                parser_context.push_err(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), lhs.r#type.clone(), rhs.r#type.clone()));
                                 TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone())}, r#type: Type::Unknown, is_const: true, loc: loc}
                             }
                         }
@@ -385,7 +401,7 @@ impl<'b> Parser<'b> {
                                         let rhs_out = match o_cast {
                                             Some(cast) => Box::new(cast),
                                             None => {
-                                                parser_context.push_err(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                                parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), lhs.r#type.clone(), rhs.r#type.clone()));
                                                 Box::new(rhs.clone())
                                             }
                                         };
@@ -396,7 +412,7 @@ impl<'b> Parser<'b> {
                                         } 
                                     },
                                     None => {
-                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, format!("{}", lhs.r#type), format!("{}", rhs.r#type)));
+                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), lhs.r#type.clone(), rhs.r#type.clone()));
                                         TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, Box::new(rhs.clone())), r#type: Type::Unknown, is_const: false, loc: loc}
                                     }
                                 }

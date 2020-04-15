@@ -93,9 +93,9 @@ pub fn transform_expr(
         None => {}
     }
     match expr {
-        Expr::BigIntLiteral(_) | Expr::BoolLiteral(_) | Expr::Break | Expr::ClassDecl(_) | Expr::ClosureVariableUse(_) 
+        Expr::BoolLiteral(_) | Expr::Break | Expr::ClassDecl(_) | Expr::ClosureVariableUse(_) 
             | Expr::Continue | Expr::FloatLiteral(_) | Expr::GlobalVariableUse(_) | Expr::IntLiteral(_) 
-            | Expr::LocalVariableUse(_) | Expr::NoOp | Expr::Null | Expr::StringLiteral(_) | Expr::StructDecl(_) 
+            | Expr::LocalVariableUse(_) | Expr::NoOp | Expr::Null | Expr::StringLiteral(_)
             | Expr::UnsafeNull | Expr::Void
             => expr.clone(),
 
@@ -132,8 +132,9 @@ pub fn transform_expr(
             Expr::DynamicFuncCall(Box::new(transform_typed_expr(te, transform, parser_context)), transform_typed_exprs(v, transform, parser_context)),
         Expr::DynamicMember(te1, te2) =>
             Expr::DynamicMember(Box::new(transform_typed_expr(te1, transform, parser_context)), Box::new(transform_typed_expr(te2, transform, parser_context))),
-        Expr::FreeUpcast(te) => Expr::FreeUpcast(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::FreeDowncast(te) => Expr::FreeDowncast(Box::new(transform_typed_expr(te, transform, parser_context))),
+        Expr::FreeGenericCast(te) => Expr::FreeGenericCast(Box::new(transform_typed_expr(te, transform, parser_context))),
+        Expr::FreeUpcast(te) => Expr::FreeUpcast(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::FuncDecl(foc) => Expr::FuncDecl(foc.clone()),
         Expr::GlobalVariableDecl(gvd) => 
             Expr::GlobalVariableDecl(Box::new(GlobalVariableDecl{name: gvd.name.clone(), r#type: gvd.r#type.clone(), constant: gvd.constant, export: gvd.export, 
@@ -154,7 +155,7 @@ pub fn transform_expr(
                 Intrinsic::Trap => Expr::Intrinsic(Intrinsic::Trap),
             }
         },
-        Expr::IntToBigInt(te) => Expr::IntToBigInt(Box::new(transform_typed_expr(te, transform, parser_context))),
+        Expr::IntWiden(te) => Expr::IntWiden(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::IntToNumber(te) => Expr::IntToNumber(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::MemberFuncCall(te, s, vs) => Expr::MemberFuncCall(Box::new(transform_typed_expr(te, transform, parser_context)), s.clone(), transform_typed_exprs(vs, transform, parser_context)),
         Expr::ModifyAssignment(ao, te1, tle, te2) =>

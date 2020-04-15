@@ -14,7 +14,7 @@ Because we are not monsters, classic control flow also works, so you can still u
 So, a simple function is written like this. In simple build mode, use the export keyword to make it visible outside web assembly.
 
 ```
-export fn mul(x: number, y: number) -> number {
+export fn mul(x: Number, y: Number) -> Number {
     x * y
 }
 ```
@@ -22,7 +22,7 @@ export fn mul(x: number, y: number) -> number {
 But this is also fine:
 
 ```
-fn mul3(x: number, y: number, z: number) -> number {
+fn mul3(x: Number, y: Number, z: Number) -> Number {
     return x * y * z
 }
 ```
@@ -30,7 +30,7 @@ fn mul3(x: number, y: number, z: number) -> number {
 `if` is an expression too!
 
 ```
-export fn negMax(x: number, y: number) -> number {
+export fn negMax(x: Number, y: Number) -> Number {
     if(x > y)
         -x
     else {
@@ -42,11 +42,11 @@ export fn negMax(x: number, y: number) -> number {
 But it doesn't need to be.
 
 ```
-export fn bang(x: number) -> number {
+export fn bang(x: Number) -> Number {
     if(x <= 0)
         return 0
 
-    let out: number = 1.0
+    let out: Number = 1.0
 
     while(x > 0) {
         out *= x
@@ -136,17 +136,14 @@ The type of `s` is inferred from the expression you assign it.
 
 You don't need 'em; a return character is equivalent. The things in javascript, like getting weird problems with `return`, are not an issue here. 
 
-Wise up kids, and say no. I forget and put them in sometimes, though, so don't feel too bad.
-
 ## Types
 
-* number - a 64 bit float.
-* bigint - a 64 bit int.
-* int - a 32 bit int. Will be auto-casted to number and bigint if needed. This means that an expression like this will actually be an int.
+* Number - a 64 bit float.
+* Int - by default a 32 bit int. Will be auto-casted to number and bigint if needed. This means that an expression like this will actually be an int.
 ```
 let a = 0
 ```
-* boolean
+* Boolean
 
 ### Casting
 
@@ -154,7 +151,7 @@ As mentioned above, numeric types will auto-cast. If you need to manually invoke
 
 ```
 //totally spurious example
-let a = 9 as number
+let a = 9 as Number
 ```
 
 ### Member functions on ints
@@ -199,8 +196,8 @@ fn id<T>(x: T) -> T { x }
 To use them you can provide the types, or have it deduce them. 
 
 ```
-let n1: number = 4
-let n2 = id<number>(n1)
+let n1: Number = 4
+let n2 = id<Number>(n1)
 let n3 = id(n1)
 ```
 
@@ -279,36 +276,6 @@ if(isFoo(x)) {
 any local access of x in the block will automatically cast x to a Foo. This lasts until the block is existed, or x is assigned to. Creating a type guard
 function is an unsafe operation, so needs to be done in unsafe mode.
 
-## Unsafe mode
-
-Unsafe mode is designed to be a mode that library writers can write low-level code. It feels like C in that it is 
-not much more than structured WASM. In order to use it you need to somehow pass the unsafe arg to the compiler. Syntax is deliberately scary.
-
-A leading `__` is pronounced 'unsafe', by the way.
-
-* `__ptr` type. Pointer to raw memory.
-* `__size_t` type - pretty much the same as a `__ptr`, but makes some things a bit type safer
-* intrinsics - wrap low level wasm calls
-    * `__memorySize()` - `memory.size` instruction
-    * `__memoryGrow(0, numPages)` - `memory.grow` instruction
-    * `__trap()` - `unreachable` instruction
-* `__Option` - is a essentially a nullable pointer. You can have it be a `__null` or `__Some<T>`. It will end up being the core of the 
-    real option. It's kind of horrible because it's pretending to be a union but it really is a nullable pointer.
-* `__struct` type - works but you need either the super secret `malloc` function for them to be useful 
-    (which doesn't exist, so good luck with that), cast from a `__ptr` (this is unsafe. The clue
-    is in the name...), or use `__static` (which does actually work and is a C-style static allocation). 
-    You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to dynamically allocate (which uses malloc), 
-    or `__static Hello {a: 3}`. A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
-* `__typeguard` This keyword lets you define type guards. Here is an example.
-```
-export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> boolean __typeguard {
-    true => __null
-    false => __Some<T>
-} {
-    x == __null
-}
-```
-
 ## Linker
 
 Instead of using the simple build mode described above, you may use a full build mode. For this we generate [WASM object files](https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md), which, 
@@ -323,9 +290,10 @@ On Ubuntu you can get that by calling
 sudo apt install lld
 ```
 
-On Windows and OSX you are on your own, I am afraid. I found building it from source was not impossible. Once you have an exe name (and in in Ubuntu 
+On Windows probably the easiest is to install a pre-built binary from [the releases page, here](https://releases.llvm.org/download.html). MacOS you are on your own, I am afraid. 
+I found building it from source was not impossible, but I imagine you may be able to install from the above link. Once you have an exe name (and in in Ubuntu 
 it is `wasm-ld-9`, surprisingly) you need to edit the `build-wsb.json `file you are building to point to the right location. Yes, I know. This should get better
-as either the LLVM WASM toolchain matures, or I get fed up and write a compatible linker.
+as either the LLVM WASM toolchain matures, or I finally build a configuration tool.
 
 ### Using it
 
@@ -371,6 +339,36 @@ to test the example you would run
 
 ```
 cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 2);'
+```
+
+## Unsafe mode
+
+Unsafe mode is designed to be a mode that library writers can write low-level code. It feels like C in that it is 
+not much more than structured WASM. In order to use it you need to somehow pass the unsafe arg to the compiler. Syntax is deliberately scary.
+
+A leading `__` is pronounced 'unsafe', by the way.
+
+* `__ptr` type. Pointer to raw memory.
+* `__size_t` type - pretty much the same as a `__ptr`, but makes some things a bit type safer
+* intrinsics - wrap low level wasm calls
+    * `__memorySize()` - `memory.size` instruction
+    * `__memoryGrow(0, numPages)` - `memory.grow` instruction
+    * `__trap()` - `unreachable` instruction
+* `__Option` - is a essentially a nullable pointer. You can have it be a `__null` or `__Some<T>`. It will end up being the core of the 
+    real option. It's kind of horrible because it's pretending to be a union but it really is a nullable pointer.
+* `__struct` type - works but you need either the super secret `malloc` function for them to be useful 
+    (which doesn't exist, so good luck with that), cast from a `__ptr` (this is unsafe. The clue
+    is in the name...), or use `__static` (which does actually work and is a C-style static allocation). 
+    You do `__struct Hello { a: int; }` to declare, `new Hello {a: 3}` to dynamically allocate (which uses malloc), 
+    or `__static Hello {a: 3}`. A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
+* `__typeguard` This keyword lets you define type guards. Here is an example.
+```
+export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> boolean __typeguard {
+    true => __null
+    false => __Some<T>
+} {
+    x == __null
+}
 ```
 
 
@@ -448,6 +446,7 @@ cargo run --bin test-runner -- tests/linker/out/linker.wasm -f 'linker.hello(1, 
             union members, route to the appropriate type, insert that. Not free, but not terrible either.
     1. [ ] option is union T | null
         1. [ ] means map over a union is well understood, I guess
+    1. [ ] make small ints fit into small spaces
     1. opt: booleans are 1 bit in structs, 32 bits on the heap?
 1. Types
     1. [ ] tuples - are just collections of locals, so pass by value (needs wasm multi value for some things)

@@ -1,8 +1,8 @@
-export fn addd(x: number, y: number) -> number {
+export fn addd(x: Number, y: Number) -> Number {
     x + y
 }
 
-export fn negMax(x: number, y: number) -> number {
+export fn negMax(x: Number, y: Number) -> Number {
     let b = true
     if(b && x > y)
         -x
@@ -11,11 +11,11 @@ export fn negMax(x: number, y: number) -> number {
     }
 }
 
-export fn bang(x: number) -> number {
+export fn bang(x: Number) -> Number {
     if(x <= 0)
         return 0
 
-    let out: number = 1
+    let out: Number = 1
 
     while(x > 0) {
         out *= x
@@ -26,84 +26,62 @@ export fn bang(x: number) -> number {
 }
 
 //test of non block function. The syntax is pretty weird
-fn mul(x: number, y: number) -> number x * y
+fn mul(x: Number, y: Number) -> Number x * y
 
 //test of function call
-export fn fourTimes(x: number) -> number{
+export fn fourTimes(x: Number) -> Number{
     mul(x, 2) * 2
 }
 
-export fn mul3(x: number, y: number, z: number) -> number {
+export fn mul3(x: Number, y: Number, z: Number) -> Number {
     return x * y * z
 }
 
-export fn idNumber(x:  number) -> number {
+export fn idNumber(x:  Number) -> Number {
     x
 }
 
-fn assert(x: boolean) -> void {
+fn assert(x: Boolean) -> Void {
     if(!x) __trap()
 }
 
-fn inferReturnTypeInt(x: int) => x
-fn inferReturnTypeBool(x: int) => true
+fn inferReturnTypeInt(x: Int) => x
+fn inferReturnTypeBool(x: Int) => true
 
 //should warn of unused value
-fn badReturnTypeVoid() -> void 8
+fn badReturnTypeVoid() -> Void 8
 
-fn returnTypeTest() -> void {
+fn returnTypeTest() -> Void {
     assert(inferReturnTypeInt(3) == 3)
     assert(inferReturnTypeBool(3) == true)
     badReturnTypeVoid()
 }
 
-/*
-__struct Simple{
-    a: int;
-    b: int;
-}*/
-
-fn structTest() -> void {
-    /*
-    //need malloc
-    let c = new Simple {a: 3, b: 4}
-    assert(c.a == 3)
-    assert(c.b == 4)
-    c.a = 8
-    assert(c.a == 8)
-    assert(c.b == 4)
-    c.b = 9
-    assert(c.a == 8)
-    assert(c.b == 9)
-    */
-}
-
-fn intTest() -> void {
-    const e = 8
+fn intTest() -> Void {
+    const e: Int<0, 4294967295> = 8
     assert(e.countTrailingZeros() == 3)
 }
 
-fn asTest() -> void {
+fn asTest() -> Void {
     const a = 9
-    const b = a as number
-    const c: number = b
+    const b = a as Number
+    const c: Number = b
     //would fail
     //const d: int = b
 }
 
 const g = 5
-fn globalTest() -> void {
+fn globalTest() -> Void {
     assert(g == 5)
 }
 
-export fn testSuite() -> int {
+export fn testSuite() -> Int {
     assert(idNumber(3) == 3)
     assert(idNumber(-3.0) == -3)
     assert(addd(3, 5) == 8)
     assert(negMax(8, 9.1) == -9.1)
     assert(bang(3) == 6)
     assert(fourTimes(3) == 12)
-    structTest()
     intTest()
     globalTest()
     returnTypeTest()

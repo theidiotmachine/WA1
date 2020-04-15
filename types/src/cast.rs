@@ -1,27 +1,30 @@
 use crate::generics::TypeConstraint;
 use crate::Type;
 use crate::FuncType;
+use crate::{Bittage, get_bittage, PTR_MAX, U_32_MAX};
 use std::cmp;
+use std::{i128};
 
 pub mod prelude {
     pub use super::TypeCast;
     pub use super::try_cast;
     pub use super::FuncCallTypeCast;
-    pub use super::get_type_casts_for_function_set;
+    pub use super::{get_type_casts_for_function_set};
     pub use super::CastType;
     pub use super::TypeGuardDowncast;
     pub use super::try_guard_downcast_expr;
+    pub use super::GenericCast;
+    pub use super::{try_generic_unwrap, try_generic_wrap};
 }
 
 /// Enum describing the types of implicit casts available
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeCast{
-    /// A free type widening that is legal in the system but costs nothing at runtime, e.g.
-    /// from Type::IntLiteral(4) tp Type::Int
-    FreeUpcast,
-    /// One of the int casts that we support. This is a cast from i32 to i64
-    IntToBigIntWiden,
-    /// One of the int casts that we support. This is a cast from i32 to f64
+    /// This is an upcast that costs nothing at runtime.
+    FreeUpcast(Type),
+    /// One of the int casts that we support. This is a cast from a narrower int to a wider int. This may or may not be a thing at runtime.
+    IntWiden(i128, i128),
+    /// One of the int casts that we support. This is a cast from i32 to f64 and will definitely have runtime cost.
     IntToNumberWiden,
     /// Not possible to cast these types
     None,
@@ -36,8 +39,6 @@ pub enum CastType{
     Implicit,
     /// Explicit cast caused by an 'as' keyword
     Explicit,
-    /// Force cast due to compiler internals. A generic runtime cast to __ptr
-    GenericForce,
 }
 
 /// Try casting a type to another type.
@@ -53,38 +54,37 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
 
     if *from == Type::Never {
         // we can always cast from never, it's the bottom type
-        return TypeCast::FreeUpcast;
+        return TypeCast::FreeUpcast(to.clone());
     }
 
     match to {
         //we can always widen to unknown, it's the top type
-        Type::Unknown => TypeCast::FreeUpcast,
-        Type::Int => {
+        Type::Unknown => TypeCast::FreeUpcast(Type::Unknown),
+        Type::Int(lower_to, upper_to) => {
             match from {
-                Type::IntLiteral(_) => TypeCast::FreeUpcast,
-                Type::UnsafeSizeT => if cast_type == CastType::Implicit { TypeCast::None } else {TypeCast::FreeUpcast}
+                Type::Int(lower_from, upper_from) => {
+                    if lower_from >= lower_to && upper_from <= upper_to { TypeCast::IntWiden(*lower_to, *upper_to) } else { TypeCast::None }
+                },
+                Type::UnsafePtr => {
+                    if cast_type == CastType::Explicit && *lower_to == 0 && *upper_to == PTR_MAX {
+                        TypeCast::FreeUpcast(Type::UnsafePtr)
+                    } else {
+                        TypeCast::None
+                    }
+                },
                 _ => TypeCast::None,
             }
         },
         Type::Number => {
             match from {
-                Type::IntLiteral(_) => TypeCast::IntToNumberWiden,
-                Type::Int => TypeCast::IntToNumberWiden,
-                Type::FloatLiteral(_) => TypeCast::FreeUpcast,
-                _ => TypeCast::None,
-            }
-        },
-        Type::BigInt => {
-            match from {
-                Type::IntLiteral(_) => TypeCast::IntToBigIntWiden,
-                Type::Int => TypeCast::IntToBigIntWiden,
-                Type::BigIntLiteral(_) => TypeCast::FreeUpcast,
+                Type::Int(lower_from, lower_to) => if *lower_from >= -9007199254740991 && *lower_to <= 9007199254740991 { TypeCast::IntToNumberWiden } else { TypeCast::None},
+                Type::FloatLiteral(_) => TypeCast::FreeUpcast(Type::Number),
                 _ => TypeCast::None,
             }
         },
         Type::String => {
             match from {
-                Type::StringLiteral(_) => TypeCast::FreeUpcast,
+                Type::StringLiteral(_) => TypeCast::FreeUpcast(Type::String),
                 _ => TypeCast::None,
             }
         },
@@ -92,23 +92,11 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
         // you cast them from all sorts of things
         Type::UnsafePtr => {
             match from {
-                Type::IntLiteral(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast },
-                Type::Int => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast },
-                Type::UnsafeStruct{name: _} => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast },
-                Type::UnsafeSizeT => TypeCast::FreeUpcast,
-                Type::UnsafeOption(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast },
-                Type::UnsafeSome(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast },
-                Type::UnsafeNull => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast },
-                _ => TypeCast::None,
-            }
-        },
-        
-        //again, this is wrong, but
-        Type::UnsafeSizeT => {
-            match from {
-                Type::IntLiteral(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast },
-                Type::Int => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast },
-                Type::UnsafePtr => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast },
+                Type::Int(lower_from, upper_from) => if cast_type == CastType::Implicit || *lower_from < 0 || *upper_from > PTR_MAX { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
+                Type::UnsafeStruct{name: _} => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
+                Type::UnsafeOption(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
+                Type::UnsafeSome(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
+                Type::UnsafeNull => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
                 _ => TypeCast::None,
             }
         },
@@ -123,7 +111,7 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
         Type::UnsafeOption(inner_to) => {
             match from {
                 Type::UnsafeOption(inner_from) => try_cast(inner_from, inner_to, cast_type),
-                Type::UnsafeNull => TypeCast::FreeUpcast,
+                Type::UnsafeNull => TypeCast::FreeUpcast(to.clone()),
                 Type::UnsafeSome(inner_from) => try_cast(inner_from, inner_to, cast_type),
                 _ => TypeCast::None,
             }
@@ -131,8 +119,7 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
 
         Type::UnsafeStruct{name: _} => {
             match from {
-                Type::UnsafePtr => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast },
-                Type::Int => if cast_type == CastType::GenericForce { TypeCast::FreeUpcast } else { TypeCast::None },
+                Type::UnsafePtr => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
                 _ => TypeCast::None,
             }
         },
@@ -148,6 +135,129 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
 
         _ => TypeCast::None,
     }
+}
+
+/// Enum describing the types of implicit casts available
+#[derive(Debug, Clone, PartialEq)]
+pub enum GenericCast{
+    /// This is a cast that costs nothing at runtime.
+    FreeCast,
+    /// Not possible to cast these types
+    None,
+    /// Used by some places to indicate that the types are exact matches and don't need 
+    /// a cast.
+    NotNeeded,
+}
+
+pub fn try_generic_wrap(from: &Type, to: &Type) -> GenericCast{
+    if *from == *to {
+        return GenericCast::NotNeeded;
+    }
+
+    match to {
+        Type::Int(lower_to, upper_to) => {
+            match from {
+                //FIXME64BIT
+                Type::UnsafePtr | Type::UnsafeNull | Type::UnsafeOption(_) | Type::UnsafeSome(_) | Type::UnsafeStruct{name: _} => 
+                    if *lower_to < 0 || *upper_to > PTR_MAX { GenericCast::None } else {GenericCast::FreeCast},
+                Type::Int(lower_from, upper_from) => {
+                    let bittage_from = get_bittage(*lower_from, *upper_from);
+                    let bitage_to = get_bittage(*lower_to, *upper_to);
+                    match bittage_from{
+                        Bittage::S32 | Bittage::U32 => match bitage_to {
+                            Bittage::S32 | Bittage::U32 => GenericCast::FreeCast,
+                            Bittage::S64 | Bittage::U64 | Bittage::OOR => GenericCast::None,
+                        },
+                        Bittage::S64 | Bittage::U64 => match bitage_to {
+                            Bittage::S64 | Bittage::U64 => GenericCast::FreeCast,
+                            Bittage::S32 | Bittage::U32 | Bittage::OOR => GenericCast::None,
+                        },
+                        Bittage::OOR => GenericCast::None
+                    }
+                },
+                Type::Boolean => 
+                    if *lower_to == 0 && *upper_to == U_32_MAX { GenericCast::FreeCast } else { GenericCast::None },
+                _ => GenericCast::None
+            }
+        },
+        Type::UnsafeOption(t) => {
+            match from {
+                Type::UnsafeOption(f) | Type::UnsafeSome(f) => try_generic_wrap(&f, &t),
+                _ => GenericCast::None
+            }
+        },
+        Type::UnsafeSome(t) => {
+            match from {
+                Type::UnsafeSome(f) => try_generic_wrap(&f, &t),
+                _ => GenericCast::None
+            }
+        },
+        _ => GenericCast::None
+    }
+}
+
+pub fn try_generic_unwrap(from: &Type, to: &Type) -> GenericCast{
+    if *from == *to {
+        return GenericCast::NotNeeded;
+    }
+
+    match to {
+        Type::UnsafePtr | Type::UnsafeNull | Type::UnsafeStruct{name: _} => {
+            match from {
+                Type::Int(lower_from, upper_from) => {
+                    if *lower_from < 0 || *upper_from > PTR_MAX { GenericCast::None } else {GenericCast::FreeCast}
+                },
+                _ => GenericCast::None
+            }
+        },
+        Type::Int(lower_to, upper_to) => {
+            match from {
+                Type::Int(lower_from, upper_from) => {
+                    let bittage_from = get_bittage(*lower_from, *upper_from);
+                    let bitage_to = get_bittage(*lower_to, *upper_to);
+                    match bittage_from{
+                        Bittage::S32 | Bittage::U32 => match bitage_to {
+                            Bittage::S32 | Bittage::U32 => GenericCast::FreeCast,
+                            Bittage::S64 | Bittage::U64 | Bittage::OOR => GenericCast::None,
+                        },
+                        Bittage::S64 | Bittage::U64 => match bitage_to {
+                            Bittage::S64 | Bittage::U64 => GenericCast::FreeCast,
+                            Bittage::S32 | Bittage::U32 | Bittage::OOR => GenericCast::None,
+                        },
+                        Bittage::OOR => GenericCast::None
+                    }
+                },
+                _ => GenericCast::None
+            }
+        },
+        Type::Boolean => {
+            match from {
+                Type::Int(lower_from, upper_from) =>
+                    if *lower_from == 0 && *upper_from == U_32_MAX { GenericCast::FreeCast } else { GenericCast::None },
+                _ => GenericCast::None
+            }
+        },
+        Type::UnsafeOption(t) => {
+            match from {
+                Type::UnsafeOption(f) => try_generic_unwrap(&f, &t),
+                Type::Int(lower_from, upper_from) => {
+                    if *lower_from < 0 || *upper_from > PTR_MAX { GenericCast::None } else {GenericCast::FreeCast}
+                },
+                _ => GenericCast::None
+            }
+        },
+        Type::UnsafeSome(t) => {
+            match from {
+                Type::UnsafeSome(f) => try_generic_unwrap(&f, &t),
+                Type::Int(lower_from, upper_from) => {
+                    if *lower_from < 0 || *upper_from > PTR_MAX { GenericCast::None } else {GenericCast::FreeCast}
+                },
+                _ => GenericCast::None
+            }
+        },
+        _ => GenericCast::None
+    }
+
 }
 
 /// Enum describing the types of implicit casts available
@@ -183,6 +293,13 @@ pub fn try_guard_downcast_expr(from: &Type, to: &Type) -> TypeGuardDowncast {
             }
         },
 
+        Type::Int(_, _) => {
+            match from {
+                Type::Int(_,_) => TypeGuardDowncast::FreeDowncast,
+                _ => TypeGuardDowncast::None,
+            }
+        },
+
         _ => TypeGuardDowncast::None,
     }
 }
@@ -200,11 +317,13 @@ pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, prop
     let mut out: Option<FuncCallTypeCast> = None;
     let proposed_arg_types_len = proposed_arg_types.len();
     let mut level_out = -1;
+    let mut int_widen_cost_out: i128 = i128::MAX;
 
     for possible_func_type in possible_func_types {
         let mut this_arg_type_casts: Vec<TypeCast> = vec![];
         let mut idx = 0;
         let mut level = 3;
+        let mut int_widen_cost: i128 = 0;
         // if the arg lengths are different, don't even bother
         if proposed_arg_types_len != possible_func_type.in_types.len() {
             continue;
@@ -215,12 +334,21 @@ pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, prop
             let type_cast = try_cast(proposed_arg_type, wanted_type, CastType::Implicit);
             match type_cast {
                 TypeCast::NotNeeded => this_arg_type_casts.push(type_cast),
-                TypeCast::FreeUpcast => {
-                    level = cmp::min(level, 2);
+                TypeCast::FreeUpcast(_) => {
+                    level = cmp::min(level, 3);
                     this_arg_type_casts.push(type_cast);
                 },
-                TypeCast::IntToBigIntWiden => {
-                    level = cmp::min(level, 1);
+                TypeCast::IntWiden(lower, upper) => {
+                    level = cmp::min(level, 2);
+                    let this_int_widen_cost = match proposed_arg_type{
+                        Type::Int(lower_from, upper_from) => {
+                            //the multiply is to make signed more likely than unsigned
+                            2 * (upper - upper_from) + (lower_from - lower)
+                        },
+                        _ => unreachable!()     
+                    };
+                    int_widen_cost = cmp::max(this_int_widen_cost, int_widen_cost);
+
                     this_arg_type_casts.push(type_cast);
                 },
                 TypeCast::IntToNumberWiden => {
@@ -239,7 +367,14 @@ pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, prop
             3 => { 
                 return Some(FuncCallTypeCast{arg_type_casts: this_arg_type_casts, func_type: possible_func_type.clone()});
             },
-            1 | 2 => { 
+            2 => {
+                if level >= level_out && int_widen_cost < int_widen_cost_out {
+                    level_out = level;
+                    int_widen_cost_out = int_widen_cost; 
+                    out = Some(FuncCallTypeCast{arg_type_casts: this_arg_type_casts, func_type: possible_func_type.clone()});
+                }
+            },
+            1 => { 
                 if level > level_out {
                     level_out = level;
                     out = Some(FuncCallTypeCast{arg_type_casts: this_arg_type_casts, func_type: possible_func_type.clone()});

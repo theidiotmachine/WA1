@@ -1,0 +1,6 @@
+import {*} from "./int"
+
+export fn test() -> Int {
+    int.testInt()
+    1
+}
