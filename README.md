@@ -443,7 +443,7 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Boolean __typeguard 
     1. [ ] union types are discriminated unions like Rust enums - yeah!
         1. [ ] typescript lets us call members that are in all the types in the unions. This is very convenient, but hard here. Proposal: generate accessor functions for all
             union members, route to the appropriate type, insert that. Not free, but not terrible either.
-    1. [ ] option is union T | null
+    1. [ ] option is union T | null... maybe?
         1. [ ] means map over a union is well understood, I guess
     1. [ ] make small ints fit into small spaces
     1. opt: booleans are 1 bit in structs, 32 bits on the heap?
