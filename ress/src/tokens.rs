@@ -354,10 +354,8 @@ pub trait NumberExt {
     fn is_deci(&self) -> bool;
     fn is_decf(&self) -> bool;
     fn has_exponent(&self) -> bool;
-    fn parse_u64(&self) -> Result<u64, <u64 as FromStr>::Err>;
     fn parse_f64(&self) -> Result<f64, <f64 as FromStr>::Err>;
-    fn parse_i64(&self) -> Result<i64, <i64 as FromStr>::Err>;
-    fn parse_i32(&self) -> Result<i32, <i32 as FromStr>::Err>;
+    fn parse_i128(&self) -> Result<i128, <i128 as FromStr>::Err>;
     
     fn str_len(&self) -> usize;
 }
@@ -403,30 +401,17 @@ impl<'a> NumberExt for Number<&'a str> {
         }
     }
 
-    fn parse_u64(&self) -> Result<u64, <u64 as FromStr>::Err> {
-        self.0.parse()
+    fn parse_i128(&self) -> Result<i128, <i128 as FromStr>::Err> {
+        match self.kind() {
+            NumberKind::DecF | NumberKind::DecI => self.0.parse(),
+            NumberKind::Hex => u128::from_str_radix(self.0.trim_start_matches("0x"), 16).map(|i| i as i128),
+            NumberKind::Oct => u128::from_str_radix(self.0.trim_start_matches("0o"), 8).map(|i| i as i128),
+            NumberKind::Bin => u128::from_str_radix(self.0.trim_start_matches("0b"), 2).map(|i| i as i128),
+        }
     }
 
     fn parse_f64(&self) -> Result<f64, <f64 as FromStr>::Err> {
         self.0.parse()
-    }
-
-    fn parse_i64(&self) -> Result<i64, <i64 as FromStr>::Err> {
-        match self.kind() {
-            NumberKind::DecF | NumberKind::DecI => self.0.parse(),
-            NumberKind::Hex => u64::from_str_radix(self.0.trim_start_matches("0x"), 16).map(|i| i as i64),
-            NumberKind::Oct => u64::from_str_radix(self.0.trim_start_matches("0o"), 8).map(|i| i as i64),
-            NumberKind::Bin => u64::from_str_radix(self.0.trim_start_matches("0b"), 2).map(|i| i as i64),
-        }
-    }
-
-    fn parse_i32(&self) -> Result<i32, <i32 as FromStr>::Err> {
-        match self.kind() {
-            NumberKind::DecF | NumberKind::DecI => self.0.parse(),
-            NumberKind::Hex => u32::from_str_radix(self.0.trim_start_matches("0x"), 16).map(|i| i as i32),
-            NumberKind::Oct => u32::from_str_radix(self.0.trim_start_matches("0o"), 8).map(|i| i as i32),
-            NumberKind::Bin => u32::from_str_radix(self.0.trim_start_matches("0b"), 2).map(|i| i as i32),
-        }
     }
 
     fn str_len(&self) -> usize {
@@ -474,30 +459,17 @@ impl NumberExt for Number<String> {
         }
     }
 
-    fn parse_u64(&self) -> Result<u64, <u64 as FromStr>::Err> {
-        self.0.parse()
+    fn parse_i128(&self) -> Result<i128, <i128 as FromStr>::Err> {
+        match self.kind() {
+            NumberKind::DecF | NumberKind::DecI => self.0.parse(),
+            NumberKind::Hex => u128::from_str_radix(self.0.as_str().trim_start_matches("0x"), 16).map(|i| i as i128),
+            NumberKind::Oct => u128::from_str_radix(self.0.as_str().trim_start_matches("0o"), 8).map(|i| i as i128),
+            NumberKind::Bin => u128::from_str_radix(self.0.as_str().trim_start_matches("0b"), 2).map(|i| i as i128),
+        }
     }
 
     fn parse_f64(&self) -> Result<f64, <f64 as FromStr>::Err> {
         self.0.parse()
-    }
-
-    fn parse_i64(&self) -> Result<i64, <i64 as FromStr>::Err> {
-        match self.kind() {
-            NumberKind::DecF | NumberKind::DecI => self.0.parse(),
-            NumberKind::Hex => u64::from_str_radix(self.0.as_str().trim_start_matches("0x"), 16).map(|i| i as i64),
-            NumberKind::Oct => u64::from_str_radix(self.0.as_str().trim_start_matches("0o"), 8).map(|i| i as i64),
-            NumberKind::Bin => u64::from_str_radix(self.0.as_str().trim_start_matches("0b"), 2).map(|i| i as i64),
-        }
-    }
-
-    fn parse_i32(&self) -> Result<i32, <i32 as FromStr>::Err> {
-        match self.kind() {
-            NumberKind::DecF | NumberKind::DecI => self.0.parse(),
-            NumberKind::Hex => u32::from_str_radix(self.0.as_str().trim_start_matches("0x"), 16).map(|i| i as i32),
-            NumberKind::Oct => u32::from_str_radix(self.0.as_str().trim_start_matches("0o"), 8).map(|i| i as i32),
-            NumberKind::Bin => u32::from_str_radix(self.0.as_str().trim_start_matches("0b"), 2).map(|i| i as i32),
-        }
     }
 
     fn str_len(&self) -> usize {
@@ -1115,7 +1087,6 @@ pub enum Keyword {
     Extends,
     Any,
     Array,
-    BigInt,
     Boolean,
     Never,
     Number,
@@ -1126,7 +1097,6 @@ pub enum Keyword {
     Unknown,
     Int,
     UnsafePtr,
-    UnsafeSizeT,
     UnsafeStruct,
     UnsafeOption,
     UnsafeSome,
@@ -1135,12 +1105,14 @@ pub enum Keyword {
     UnsafeArray,
     UnsafeStatic,
     UnsafeTypeGuard,
+    Alias,
 }
 
 impl Keyword {
     /// convert a &str into a Keyword
     pub fn from(s: &str) -> Option<Self> {
         Some(match s {
+            "alias" => Keyword::Alias,
             "await" => Keyword::Await,
             "break" => Keyword::Break,
             "case" => Keyword::Case,
@@ -1158,7 +1130,7 @@ impl Keyword {
             "fn" => Keyword::Fn,
             "from" => Keyword::From,
             "if" => Keyword::If,
-            "int" => Keyword::Int,
+            "Int" => Keyword::Int,
             "instanceof" => Keyword::InstanceOf,
             "in" => Keyword::In,
             "new" => Keyword::New,
@@ -1169,7 +1141,7 @@ impl Keyword {
             "try" => Keyword::Try,
             "typeof" => Keyword::TypeOf,
             "var" => Keyword::Var,
-            "void" => Keyword::Void,
+            "Void" => Keyword::Void,
             "while" => Keyword::While,
             "with" => Keyword::With,
             "export" => Keyword::Export,
@@ -1191,23 +1163,21 @@ impl Keyword {
             "constructor" => Keyword::Constructor,
             "any" => Keyword::Any,
             "Array" => Keyword::Array,
-            "bigint" => Keyword::BigInt,
-            "boolean" => Keyword::Boolean,
-            "never" => Keyword::Never,
-            "number" => Keyword::Number,
+            "Boolean" => Keyword::Boolean,
+            "Never" => Keyword::Never,
+            "Number" => Keyword::Number,
             "object" => Keyword::Object,
-            "string" => Keyword::String,
+            "String" => Keyword::String,
             "Tuple" => Keyword::Tuple,
-            "undefined" => Keyword::Undefined,
-            "unknown" => Keyword::Unknown,
-            "__ptr" => Keyword::UnsafePtr,
-            "__size_t" => Keyword::UnsafeSizeT,
+            "Undefined" => Keyword::Undefined,
+            "Unknown" => Keyword::Unknown,
+            "__Ptr" => Keyword::UnsafePtr,
             "__struct" => Keyword::UnsafeStruct,
             "__Option" => Keyword::UnsafeOption,
             "Option" => Keyword::Option,
             "Some" => Keyword::Some,
             "__Some" => Keyword::UnsafeSome,
-            "__array" => Keyword::UnsafeArray,
+            "__Array" => Keyword::UnsafeArray,
             "__static" => Keyword::UnsafeStatic,
             "__typeguard" => Keyword::UnsafeTypeGuard,
             _ => return None,
@@ -1226,6 +1196,7 @@ impl Keyword {
     pub fn as_str(&self) -> &str {
         match self {
             Keyword::Await => "await",
+            Keyword::Alias => "alias",
             Keyword::Break => "break",
             Keyword::Case => "case",
             Keyword::Catch => "catch",
@@ -1246,7 +1217,7 @@ impl Keyword {
             Keyword::Fn => "fn",
             Keyword::If => "if",
             Keyword::In => "in",
-            Keyword::Int => "int",
+            Keyword::Int => "Int",
             Keyword::Implements => "implements",
             Keyword::InstanceOf => "instanceof",
             Keyword::Interface => "interface",
@@ -1265,7 +1236,7 @@ impl Keyword {
             Keyword::Try => "try",
             Keyword::TypeOf => "typeof",
             Keyword::Var => "var",
-            Keyword::Void => "void",
+            Keyword::Void => "Void",
             Keyword::While => "while",
             Keyword::With => "with",
             Keyword::Yield => "yield",
@@ -1273,24 +1244,22 @@ impl Keyword {
             Keyword::Async => "async",
             Keyword::Extends => "extends",
             Keyword::Constructor => "constructor",
-            Keyword::Any => "any",
+            Keyword::Any => "Any",
             Keyword::Array => "Array",
-            Keyword::BigInt => "bigint",
-            Keyword::Boolean => "boolean",
-            Keyword::Never => "never",
-            Keyword::Number => "number",
+            Keyword::Boolean => "Boolean",
+            Keyword::Never => "Never",
+            Keyword::Number => "Number",
             Keyword::Object => "object",
-            Keyword::String => "string",
+            Keyword::String => "String",
             Keyword::Tuple => "Tuple",
-            Keyword::Undefined => "undefined",
-            Keyword::Unknown => "unknown",
-            Keyword::UnsafePtr => "__ptr",
+            Keyword::Undefined => "Undefined",
+            Keyword::Unknown => "Unknown",
+            Keyword::UnsafePtr => "__Ptr",
             Keyword::UnsafeStruct => "__struct",
             Keyword::Option => "Option",
-            Keyword::UnsafeSizeT => "__size_t",
             Keyword::Some => "Some",
             Keyword::UnsafeSome => "__Some",
-            Keyword::UnsafeArray => "__array",
+            Keyword::UnsafeArray => "__Array",
             Keyword::UnsafeStatic => "__static",
             Keyword::UnsafeOption => "__Option",
             Keyword::UnsafeTypeGuard => "__typeguard",

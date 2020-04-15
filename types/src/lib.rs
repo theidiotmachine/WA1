@@ -1,3 +1,4 @@
+use std::{u64};
 use serde::{Serialize, Deserialize};
 
 pub mod cast;
@@ -16,13 +17,74 @@ pub mod prelude {
     pub use super::ClassType;
     pub use super::ClassMember;
     pub use super::Privacy;
-    pub use super::get_unary_op_type;
-    pub use super::get_binary_op_type_cast;
+    pub use super::{get_unary_op_type_cast, UnOpTypeCast};
+    pub use super::{get_binary_op_type_cast, get_type_from_type_cast};
     pub use super::StructType;
     pub use super::StructMember;
     pub use super::cast::prelude::*;
     pub use super::generics::prelude::*;
+    pub use super::{S_32_MAX, S_32_MIN, S_64_MAX, S_64_MIN, U_32_MAX, U_64_MAX, PTR_MAX};
+    pub use super::{SIZE_T, INT_S_64, INT_S_32, INT_U_32, INT_U_64};
+    pub use super::{Bittage, get_bittage, get_literal_bittage};
 }
+
+pub const S_64_MAX: i128 = 9_223_372_036_854_775_807;
+pub const S_64_MIN: i128 = -9_223_372_036_854_775_808;
+pub const U_64_MAX: i128 = 18_446_744_073_709_551_615;
+pub const S_32_MAX: i128 = 2_147_483_647;
+pub const S_32_MIN: i128 = -2_147_483_648;
+pub const U_32_MAX: i128 = 4_294_967_295;
+//FIXME64BIT
+pub const PTR_MAX: i128 = 4_294_967_295;
+
+pub enum Bittage{
+    S32,
+    S64,
+    U32,
+    U64,
+    OOR,
+}
+
+pub fn get_bittage(lower: i128, upper: i128) -> Bittage {
+    if lower >= 0 {
+        if upper <= U_32_MAX {
+            Bittage::U32
+        } else if upper <= U_64_MAX {
+            Bittage::U64
+        } else {
+            Bittage::OOR
+        }
+    } else {
+        if lower >= S_32_MIN && upper <= S_32_MAX {
+            Bittage::S32
+        } else if lower >= S_64_MIN && upper <= S_64_MAX {
+            Bittage::S64
+        } else {
+            Bittage::OOR
+        }
+    }
+}
+
+pub fn get_literal_bittage(v: i128) -> Bittage {
+    if v <= S_32_MAX {
+        if v >= S_32_MIN {
+            Bittage::S32
+        } else if v >= S_64_MIN {
+            Bittage::S64
+        } else {
+            Bittage::OOR
+        }
+    } else if v <= U_32_MAX {
+        Bittage::U32
+    } else if v <= S_64_MAX {
+        Bittage::S64
+    } else if v <= U_64_MAX {
+        Bittage::U64
+    } else {
+        Bittage::OOR
+    }
+}
+
 
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -124,10 +186,8 @@ pub enum Type {
     String,
     ///Array
     Array(Box<Type>),
-    ///64 bit int
-    BigInt,
-    ///32 bit int 
-    Int,
+    ///integer type. First number is lower bound, inclusive. Second number is upper bound, inclusive 
+    Int(i128, i128),
     ///boolean
     Boolean,
     ///Func
@@ -158,16 +218,10 @@ pub enum Type {
     VariableUsage{name: String, constraint: TypeConstraint},
     ///numeric literal of type 'number'
     FloatLiteral(f64),
-    //numeric literal - big int
-    BigIntLiteral(i64),
-    //numeric literal - int
-    IntLiteral(i32),
     /// string literal
     StringLiteral(String),
     ///ptr - internal type. Param is alignment
     UnsafePtr,
-    ///
-    UnsafeSizeT,
     ///type literal. Not something that will ever appear at runtime, but is useful for parts of the AST
     TypeLiteral(Box<Type>),
     ///Type of a module. Not something that will ever appear at runtime.
@@ -187,9 +241,9 @@ impl Type{
     ///Is this an unresolved type variable?
     pub fn is_type_variable(&self) -> bool {
         match &self {
-            Type::Any | Type::BigInt | Type::BigIntLiteral(_) | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) | Type::Int | Type::IntLiteral(_) 
+            Type::Any | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) | Type::Int(_, _)
                 | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String | Type::StringLiteral(_) | Type::Undeclared 
-                | Type::Unknown | Type::UnsafeNull | Type::UnsafePtr | Type::UnsafeSizeT | Type::UnsafeStruct{name:_} 
+                | Type::Unknown | Type::UnsafeNull | Type::UnsafePtr | Type::UnsafeStruct{name:_} 
                 | Type::UserClass{name:_} => false,
             Type::Array(t) | Type::Option(t) | Type::Some(t) | Type::TypeLiteral(t) | Type::UnsafeArray(t) | Type::UnsafeOption(t) 
                 | Type::UnsafeSome(t) => t.is_type_variable(),
@@ -209,16 +263,15 @@ impl Type{
 
     pub fn get_mangled_name(&self) -> String {
         match self {
-            Type::RealVoid => String::from("!void"),
+            Type::RealVoid => String::from("!Void"),
             Type::FakeVoid => String::from("!fakeVoid"),
-            Type::Unknown => String::from("!unknown"),
-            Type::Never => String::from("!never"),
-            Type::Number => String::from("!number"),
-            Type::String => String::from("!string"),
+            Type::Unknown => String::from("!Unknown"),
+            Type::Never => String::from("!Never"),
+            Type::Number => String::from("!Number"),
+            Type::String => String::from("!String"),
             Type::Array(inner) => format!("!Array<{}>", inner.get_mangled_name()),
-            Type::BigInt => String::from("!bigint"),
-            Type::Int => String::from("!int"),
-            Type::Boolean => String::from("!boolean"),
+            Type::Int(lower, upper) => format!("!Int<{}, {}>", lower, upper),
+            Type::Boolean => String::from("!Boolean"),
             Type::Func{func_type} => format!("!func_{}", func_type),
             Type::Tuple(types) => {
                 let mut vec: Vec<String> = vec![];
@@ -228,25 +281,22 @@ impl Type{
                 format!("!Tuple<{}>", vec.join(",")) 
             },
             //Type::Object => write!(f, "object"),
-            Type::Any => String::from("!any"),
+            Type::Any => String::from("!Any"),
             Type::Option(inner) => format!("!Option<{}>", inner.get_mangled_name()),
             Type::UnsafeOption(inner) => format!("!__Option<{}>", inner.get_mangled_name()),
             Type::UnsafeSome(inner) => format!("!__Some<{}>", inner.get_mangled_name()),
-            Type::UnsafeNull => format!("!__null"),
+            Type::UnsafeNull => format!("!__Null"),
             Type::Some(inner) => format!("!Some<{}>", inner.get_mangled_name()),
             Type::UserClass{name} => format!("!class_{}", name),
             Type::UnsafeStruct{name} => format!("!__struct_{}", name),
-            Type::Undeclared => format!("!undeclared"),
+            Type::Undeclared => format!("!Undeclared"),
             Type::VariableUsage{name, constraint: _} => format!("!var_{}", name),
-            Type::UnsafePtr => format!("!__ptr"),
-            Type::UnsafeSizeT => format!( "!__size_t"),
+            Type::UnsafePtr => format!("!__Ptr"),
             Type::FloatLiteral(n) => format!("!fl_{}", n),
-            Type::IntLiteral(n) => format!("!il_{}", n),
-            Type::BigIntLiteral(n) => format!("!bil_{}", n),
             Type::StringLiteral(n) => format!("!sl_\"{}\"", n),
             Type::ObjectLiteral(_) => format!("!ol_{{}}"),
             Type::TypeLiteral(inner) => format!("!TypeLiteral_{}", inner.get_mangled_name()),
-            Type::UnsafeArray(inner) => format!("!__array<{}>", inner.get_mangled_name()),
+            Type::UnsafeArray(inner) => format!("!__Array<{}>", inner.get_mangled_name()),
             Type::ModuleLiteral(name) => format!("!ModuleLiteral_{}", name),
         }
     }
@@ -255,16 +305,15 @@ impl Type{
 impl Display for Type {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::RealVoid => write!(f, "void"),
-            Type::FakeVoid => write!(f, "void"),
-            Type::Unknown => write!(f, "unknown"),
-            Type::Never => write!(f, "never"),
-            Type::Number => write!(f, "number"),
-            Type::String => write!(f, "string"),
+            Type::RealVoid => write!(f, "Void"),
+            Type::FakeVoid => write!(f, "Void"),
+            Type::Unknown => write!(f, "Unknown"),
+            Type::Never => write!(f, "Never"),
+            Type::Number => write!(f, "Number"),
+            Type::String => write!(f, "String"),
             Type::Array(inner) => write!(f, "Array<{}>", inner),
-            Type::BigInt => write!(f, "bigint"),
-            Type::Int => write!(f, "int"),
-            Type::Boolean => write!(f, "boolean"),
+            Type::Int(lower, upper) => write!(f, "Int<{}, {}>", lower, upper),
+            Type::Boolean => write!(f, "Boolean"),
             Type::Func{func_type} => write!(f, "{}", func_type),
             Type::Tuple(types) => {
                 let mut vec: Vec<String> = vec![];
@@ -274,41 +323,65 @@ impl Display for Type {
                 write!(f, "Tuple<{}>", vec.join(",")) 
             },
             //Type::Object => write!(f, "object"),
-            Type::Any => write!(f, "any"),
+            Type::Any => write!(f, "Any"),
             Type::Option(inner) => write!(f, "Option<{}>", inner),
             Type::UnsafeOption(inner) => write!(f, "__Option<{}>", inner),
             Type::UnsafeSome(inner) => write!(f, "__Some<{}>", inner),
-            Type::UnsafeNull => write!(f, "__null"),
+            Type::UnsafeNull => write!(f, "__Null"),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
             Type::UserClass{name} => write!(f, "{}", name),
             Type::UnsafeStruct{name} => write!(f, "{}", name),
-            Type::Undeclared => write!(f, "undeclared"),
+            Type::Undeclared => write!(f, "Undeclared"),
             Type::VariableUsage{name, constraint: _} => write!(f, "{}", name),
-            Type::UnsafePtr => write!(f, "__ptr"),
-            Type::UnsafeSizeT => write!(f, "__size_t"),
+            Type::UnsafePtr => write!(f, "__Ptr"),
             Type::FloatLiteral(n) => write!(f, "{}", n),
-            Type::IntLiteral(n) => write!(f, "{}", n),
-            Type::BigIntLiteral(n) => write!(f, "{}", n),
             Type::StringLiteral(n) => write!(f, "\"{}\"", n),
             Type::ObjectLiteral(_) => write!(f, "{{}}"),
             Type::TypeLiteral(t) => write!(f, "type: {}", t),
-            Type::UnsafeArray(t) => write!(f, "__array<{}>", t),
+            Type::UnsafeArray(t) => write!(f, "__Array<{}>", t),
             Type::ModuleLiteral(n) => write!(f, "module: {}", n),
+        }
+    }
+}
+
+pub const INT_S_64: Type = Type::Int(S_64_MIN, S_64_MAX);
+pub const INT_S_32: Type = Type::Int(S_32_MIN, S_32_MAX);
+pub const INT_U_64: Type = Type::Int(0, U_64_MAX);
+pub const INT_U_32: Type = Type::Int(0, U_32_MAX);
+pub const SIZE_T: Type = Type::Int(0, PTR_MAX);
+
+pub struct UnOpTypeCast{
+    pub r#type: Type,
+    pub type_cast: TypeCast,
+}
+
+pub fn get_type_from_type_cast(type_cast: &TypeCast, orig_type: &Type) -> Type {
+    match type_cast{
+        TypeCast::NotNeeded => orig_type.clone(),
+        TypeCast::FreeUpcast(to) => to.clone(),
+        TypeCast::IntWiden(to_lower, to_upper) => Type::Int(*to_lower, *to_upper),
+        TypeCast::IntToNumberWiden => Type::Number,
+        TypeCast::None => {
+            //if we get a return from get_type_casts_for_function_set it won't have a None
+            unreachable!()
         }
     }
 }
 
 /// Given an operator type, and the type of the operand, find the type of
 /// the resulting intermediate value.
-pub fn get_unary_op_type(op_type: &OpType, operand_type: &Type) -> Option<Type> {
+pub fn get_unary_op_type_cast(op_type: &OpType, operand_type: &Type) -> Option<UnOpTypeCast>{
     match op_type {
         // given unary operators can only be simple, maybe I should change this
         OpType::SimpleOpType(func_types) => {
-            // find the instance that matches this
-            let o_this_func_type = func_types.iter().find(|&func_type| func_type.in_types.len() == 1 && func_type.in_types[0] == *operand_type);
-            match o_this_func_type {
-                Some(this_func_type) => Some(this_func_type.out_type.clone()),
-                None => None
+            let t = get_type_casts_for_function_set(&func_types, &vec![operand_type.clone()]);
+            match t {
+                None => None,
+                Some(FuncCallTypeCast{func_type, arg_type_casts}) => {
+                    let out_type_cast = arg_type_casts.get(0).unwrap().clone();
+                    let out_type = get_type_from_type_cast(&out_type_cast, &func_type.in_types.get(0).unwrap());
+                    Some(UnOpTypeCast{r#type: out_type, type_cast: out_type_cast})
+                },
             }
         },
         _ => None
@@ -335,27 +408,10 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
                 None => None,
                 Some(FuncCallTypeCast{func_type, arg_type_casts}) => {
                     let out_lhs_type_cast = arg_type_casts.get(0).unwrap().clone();
-                    let out_lhs_type = match &out_lhs_type_cast{
-                        TypeCast::NotNeeded => func_type.in_types.get(0).unwrap().clone(),
-                        TypeCast::FreeUpcast => lhs_type.clone(),
-                        TypeCast::IntToBigIntWiden => Type::BigInt,
-                        TypeCast::IntToNumberWiden => Type::Number,
-                        TypeCast::None => {
-                            //if we get a return from get_type_casts_for_function_set it won't have a None
-                            return None;
-                        }
-                    };
+                    let out_lhs_type = get_type_from_type_cast(&out_lhs_type_cast, &func_type.in_types.get(0).unwrap());
+
                     let out_rhs_type_cast = arg_type_casts.get(1).unwrap().clone();
-                    let out_rhs_type = match &out_rhs_type_cast{
-                        TypeCast::NotNeeded => func_type.in_types.get(1).unwrap().clone(),
-                        TypeCast::FreeUpcast => lhs_type.clone(),
-                        TypeCast::IntToBigIntWiden => Type::BigInt,
-                        TypeCast::IntToNumberWiden => Type::Number,
-                        TypeCast::None => {
-                            //if we get a return from get_type_casts_for_function_set it won't have a None
-                            return None;
-                        }
-                    };
+                    let out_rhs_type = get_type_from_type_cast(&out_rhs_type_cast, &func_type.in_types.get(1).unwrap());
 
                     Some(BinOpTypeCast{lhs_type: out_lhs_type, lhs_type_cast: out_lhs_type_cast.clone(), rhs_type: out_rhs_type, rhs_type_cast: out_rhs_type_cast.clone(), out_type: func_type.out_type.clone()})
                 }
@@ -367,9 +423,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             //this is simple; either rhs can be cast to lhs or it can't
             let type_cast = try_cast(rhs_type, lhs_type, CastType::Implicit);
             let out_rhs_type = match &type_cast{
-                TypeCast::NotNeeded => lhs_type.clone(),
-                TypeCast::FreeUpcast => lhs_type.clone(),
-                TypeCast::IntToBigIntWiden => Type::BigInt,
+                TypeCast::NotNeeded | TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) => lhs_type.clone(),
                 TypeCast::IntToNumberWiden => Type::Number,
                 TypeCast::None => {
                     return None;
@@ -386,9 +440,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
                 //if it is, see if the rhs can be cast to the lhs
                 let type_cast = try_cast(rhs_type, lhs_type, CastType::Implicit);
                 let out_rhs_type = match &type_cast{
-                    TypeCast::NotNeeded => lhs_type.clone(),
-                    TypeCast::FreeUpcast => lhs_type.clone(),
-                    TypeCast::IntToBigIntWiden => Type::BigInt,
+                    TypeCast::NotNeeded | TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) => lhs_type.clone(),
                     TypeCast::IntToNumberWiden => Type::Number,
                     TypeCast::None => {
                         return None;
@@ -407,7 +459,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             match &type_cast{
                 TypeCast::NotNeeded => 
                     Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
-                TypeCast::FreeUpcast | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden => 
+                TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::IntToNumberWiden => 
                     Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
                 TypeCast::None => {
                     //now try going the other way
@@ -415,7 +467,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
                     match &type_cast{
                         TypeCast::NotNeeded => 
                             Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
-                        TypeCast::FreeUpcast | TypeCast::IntToBigIntWiden | TypeCast::IntToNumberWiden =>
+                        TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::IntToNumberWiden =>
                             Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean}),
                         TypeCast::None => None
                     }    

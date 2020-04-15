@@ -1,14 +1,18 @@
 import {*} from "./option"
 
-const PAGE_SIZE: __size_t = 65536 as __size_t;
+//FIXME64BIT
+alias __size_t = Int<0, 4294967295>
+alias u32 = Int<0, 4294967295>
+
+const PAGE_SIZE: __size_t = 65536
 
 //this is the pointer to the first available free address
-let memTop: __ptr = __memorySize() * PAGE_SIZE;
+let memTop: __Ptr = (__memorySize() * PAGE_SIZE) as __Ptr
 
 //this is the pointer to the last available free address
-let memBottom: __ptr = __memorySize() * PAGE_SIZE;
+let memBottom: __Ptr = (__memorySize() * PAGE_SIZE) as __Ptr
 /*
-fn sbrk(sz: int) -> __ptr<0> {
+fn sbrk(sz: Int) -> __Ptr<0> {
     if(memTop + sz > memBottom) {
         const numPages = (sz / PAGE_SIZE) + 1;
         const r = __memoryGrow(0, numPages);
@@ -120,7 +124,7 @@ USE_BUILTIN_FFS: 1 (*)
 malloc_getpagesize: 64KiB
 USE_DEV_RANDOM: 0
 NO_MALLINFO: 0 (*)
-MALLINFO_FIELD_TYPE: __ptr<0>
+MALLINFO_FIELD_TYPE: __Ptr<0>
 NO_MALLOC_STATS: 1 (*)
 REALLOC_ZERO_BYTES_FREES: undefined
 LACKS_*: ???
@@ -172,29 +176,29 @@ __struct mallinfo {
 //const SIZE_T_BITSIZE: __size_t = 32;
 
 /* Some constants coerced to size_t */
-/* Annoying but necessary to avoid errors on some platforms */
+/* Annoying but necessary to aVoid errors on some platforms */
 //const SIZE_T_ZERO: __size_t =          0;
-//const SIZE_T_ONE: __ptr<0> =           1;
-//const SIZE_T_TWO: __ptr<0> =           2;
-//const SIZE_T_FOUR: __ptr<0> =          4;
-//const TWO_SIZE_T_SIZES: __ptr<0> =     8;
-//const FOUR_SIZE_T_SIZES: __ptr<0> =    16;
-//const SIX_SIZE_T_SIZES: __ptr<0> =     24;
-//const HALF_MAX_SIZE_T: __ptr<0> =      0xffffffff / 2;
+//const SIZE_T_ONE: __Ptr<0> =           1;
+//const SIZE_T_TWO: __Ptr<0> =           2;
+//const SIZE_T_FOUR: __Ptr<0> =          4;
+//const TWO_SIZE_T_SIZES: __Ptr<0> =     8;
+//const FOUR_SIZE_T_SIZES: __Ptr<0> =    16;
+//const SIX_SIZE_T_SIZES: __Ptr<0> =     24;
+//const HALF_MAX_SIZE_T: __Ptr<0> =      0xffffffff / 2;
 
 /* The bit mask value corresponding to MALLOC_ALIGNMENT */
 //manually inlined - const CHUNK_ALIGN_MASK: __size_t = 7;
 
 /* True if address a has acceptable alignment */
-fn is_aligned(A: __ptr) -> boolean (A & (7 as __size_t)) == (0 as __size_t);
+fn is_aligned(A: __Ptr) -> Boolean (A & (7 as __Ptr)) == (0 as __Ptr);
 
 /* the number of bytes to offset an address to align it */
 //#define align_offset(A) ((((size_t)(A) & CHUNK_ALIGN_MASK) == 0)? 0 : ((MALLOC_ALIGNMENT - ((size_t)(A) & CHUNK_ALIGN_MASK)) & CHUNK_ALIGN_MASK))
-fn align_offset(A: __ptr) -> __ptr if((A & (7 as __size_t)) == (0 as __size_t)) 0 as __ptr; else (((8 as __ptr) - (A & (7 as __size_t))) & (7 as __size_t));
-fn align_offset_size_t(A: __size_t) -> __size_t if((A & (7 as __size_t)) == (0 as __size_t)) 0 as __size_t; else (((8 as __size_t) - (A & (7 as __size_t))) & (7 as __size_t));
+fn align_offset(A: __Ptr) -> __Ptr if((A & (7 as __Ptr)) == (0 as __Ptr)) 0 as __Ptr; else (((8 as __Ptr) - (A & (7 as __Ptr))) & (7 as __Ptr));
+fn align_offset_size_t(A: __size_t) -> __size_t if((A & 7) == 0) 0; else ((8 - (A & 7)) & 7);
 
 /* MORECORE and MMAP must return MFAIL on failure */
-//#define MFAIL                ((void*)(MAX_SIZE_T))
+//#define MFAIL                ((Void*)(MAX_SIZE_T))
 //#define CMFAIL               ((char*)(MFAIL)) /* defined for convenience */
 
 //#define CALL_MORECORE(S)    MORECORE_DEFAULT(S)
@@ -375,26 +379,26 @@ typedef unsigned int binmap_t;         // Described below
 typedef unsigned int flag_t;           // The type of various bit flag sets
 */
 
-const MCHUNK_SIZE         = __sizeof(malloc_chunk);
+const MCHUNK_SIZE: __size_t         = __sizeof(malloc_chunk);
 //#define CHUNK_OVERHEAD      (SIZE_T_SIZE) = 4
 
 /* The smallest size we can malloc is an aligned minimal chunk */
 //#define MIN_CHUNK_SIZE ((MCHUNK_SIZE + CHUNK_ALIGN_MASK) & ~CHUNK_ALIGN_MASK)
-const MIN_CHUNK_SIZE: __size_t = ((MCHUNK_SIZE + (7 as __size_t)) & ~(7 as __size_t));
+const MIN_CHUNK_SIZE: __size_t = ((MCHUNK_SIZE + 7) & ~(7 as __size_t));
 
 /* conversion from malloc headers to user pointers, and back */
-//#define chunk2mem(p)        ((void*)((char*)(p)       + TWO_SIZE_T_SIZES))
-fn chunk2mem(p: malloc_chunk) -> __ptr (p as __ptr) + (8 as __size_t);
+//#define chunk2mem(p)        ((Void*)((char*)(p)       + TWO_SIZE_T_SIZES))
+fn chunk2mem(p: malloc_chunk) -> __Ptr (p as __Ptr) + (8 as __Ptr)
 //#define mem2chunk(mem)      ((mchunkptr)((char*)(mem) - TWO_SIZE_T_SIZES))
-fn mem2chunk(mem: __ptr) -> malloc_chunk (mem - (8 as __size_t)) as malloc_chunk;
+fn mem2chunk(mem: __Ptr) -> malloc_chunk (mem - (8 as __Ptr)) as malloc_chunk;
 
 /* chunk associated with aligned address A */
 //#define align_as_chunk(A)   (mchunkptr)((A) + align_offset(chunk2mem(A)))
-fn align_as_chunk(A: __ptr) -> malloc_chunk  (A + align_offset(A+(8 as __size_t))) as malloc_chunk;
+fn align_as_chunk(A: __Ptr) -> malloc_chunk  (A + align_offset(A + (8 as __Ptr))) as malloc_chunk;
 
 /* Bounds on request (not chunk) sizes. */
-/* WA1 - I kinda hard coded this based on what I know of JS. We will blow up before this anyway*/
-const MAX_REQUEST  = (1024*1024*1024) as __size_t;
+/* WA1 - I kinda hard coded this based on what I know of JS. We will blow up before this anyway FIXME64BIT*/
+const MAX_REQUEST  = 1073741824 as __size_t;
 //#define MIN_REQUEST         (MIN_CHUNK_SIZE - CHUNK_OVERHEAD - SIZE_T_ONE)
 const MIN_REQUEST  = (MIN_CHUNK_SIZE - (5 as __size_t));
 
@@ -427,61 +431,61 @@ fn request2size(req: __size_t) -> __size_t if(req < MIN_REQUEST) MIN_CHUNK_SIZE;
 /* extraction of fields from head words */
 /* WA1 - better get these guys inlined! */
 //#define cinuse(p)           ((p)->head & CINUSE_BIT)
-fn cinuse(p: malloc_chunk) -> boolean           (p.head & (2 as __size_t)) != (0 as __size_t);
+fn cinuse(p: malloc_chunk) -> Boolean           (p.head & (2 as __size_t)) != (0 as __size_t);
 //#define pinuse(p)           ((p)->head & PINUSE_BIT)
-fn pinuse(p: malloc_chunk) -> boolean           (p.head & (1 as __size_t)) != (0 as __size_t);
+fn pinuse(p: malloc_chunk) -> Boolean           (p.head & (1 as __size_t)) != (0 as __size_t);
 //#define flag4inuse(p)       ((p)->head & FLAG4_BIT)
-fn flag4inuse(p: malloc_chunk) -> boolean       (p.head & (4 as __size_t)) != (0 as __size_t);
+fn flag4inuse(p: malloc_chunk) -> Boolean       (p.head & (4 as __size_t)) != (0 as __size_t);
 //#define is_inuse(p)         (((p)->head & INUSE_BITS) != PINUSE_BIT)
-fn is_inuse(p: malloc_chunk) -> boolean         (p.head & (3 as __size_t)) != (1 as __size_t);
+fn is_inuse(p: malloc_chunk) -> Boolean         (p.head & (3 as __size_t)) != (1 as __size_t);
 //#define is_mmapped(p)       (((p)->head & INUSE_BITS) == 0)
 
 //#define chunksize(p)        ((p)->head & ~(FLAG_BITS))
-fn chunksize(p: malloc_chunk) -> __size_t        (p.head & ~(7 as __size_t));
+fn chunksize(p: malloc_chunk) -> __size_t        (p.head & ~(7 as __size_t))
 
 //#define clear_pinuse(p)     ((p)->head &= ~PINUSE_BIT)
-fn clear_pinuse(p: malloc_chunk) -> void     p.head &= ~(1 as __size_t);
+fn clear_pinuse(p: malloc_chunk) -> Void     p.head &= ~(1 as __size_t)
 //#define set_flag4(p)        ((p)->head |= FLAG4_BIT)
-fn set_flag4(p: malloc_chunk) -> void        p.head |= (4 as __size_t);
+fn set_flag4(p: malloc_chunk) -> Void        p.head |= (4 as __size_t)
 //#define clear_flag4(p)      ((p)->head &= ~FLAG4_BIT)
-fn clear_flag4(p: malloc_chunk) -> void      p.head &= ~(4 as __size_t);
+fn clear_flag4(p: malloc_chunk) -> Void      p.head &= ~(4 as __size_t)
 
 /* Treat space at ptr +/- offset as a chunk */
 /* WA1 - and this, children, is why our typesystem has a back door and an unsafe feature */
 //#define chunk_plus_offset(p, s)  ((mchunkptr)(((char*)(p)) + (s)))
-fn chunk_plus_offset(p: malloc_chunk, s: __size_t) -> malloc_chunk  ((p as __ptr) + s) as malloc_chunk;
+fn chunk_plus_offset(p: malloc_chunk, s: __size_t) -> malloc_chunk  ((p as __Ptr) + (s as __Ptr)) as malloc_chunk
 //#define chunk_minus_offset(p, s) ((mchunkptr)(((char*)(p)) - (s)))
-fn chunk_minus_offset(p: malloc_chunk, s: __size_t) -> malloc_chunk ((p as __ptr) - s) as malloc_chunk;
+fn chunk_minus_offset(p: malloc_chunk, s: __size_t) -> malloc_chunk ((p as __Ptr) - (s as __Ptr)) as malloc_chunk
 
 /* Ptr to next or previous physical malloc_chunk. */
 //#define next_chunk(p) ((mchunkptr)( ((char*)(p)) + ((p)->head & ~FLAG_BITS)))
-fn next_chunk(p: malloc_chunk) -> malloc_chunk ((p as __ptr) + (p.head & ~(7 as __size_t))) as malloc_chunk;
+fn next_chunk(p: malloc_chunk) -> malloc_chunk ((p as __Ptr) + ((p.head & ~(7 as __size_t)) as __Ptr)) as malloc_chunk
 //#define prev_chunk(p) ((mchunkptr)( ((char*)(p)) - ((p)->prev_foot) ))
-fn prev_chunk(p: malloc_chunk) -> malloc_chunk ((p as __ptr) - p.prev_foot) as malloc_chunk;
+fn prev_chunk(p: malloc_chunk) -> malloc_chunk ((p as __Ptr) - (p.prev_foot as __Ptr)) as malloc_chunk
 
 /* extract next chunk's pinuse bit */
 //#define next_pinuse(p)  ((next_chunk(p)->head) & PINUSE_BIT)
-fn next_pinuse(p: malloc_chunk) -> boolean (next_chunk(p).head & (1 as __size_t)) != (0 as __size_t);
+fn next_pinuse(p: malloc_chunk) -> Boolean (next_chunk(p).head & (1 as __size_t)) != (0 as __size_t)
 
 /* Get/set size at footer */
 //#define get_foot(p, s)  (((mchunkptr)((char*)(p) + (s)))->prev_foot)
 //#define set_foot(p, s)  (((mchunkptr)((char*)(p) + (s)))->prev_foot = (s))
-fn set_foot(p: malloc_chunk, s: __size_t) -> void { 
+fn set_foot(p: malloc_chunk, s: __size_t) -> Void { 
     // you need a temporary because the '+' operator can't be used as an lhs. 
-    let t = ((p as __ptr) + s) as malloc_chunk;
-    t.prev_foot = s;
+    let t = ((p as __Ptr) + (s as __Ptr)) as malloc_chunk
+    t.prev_foot = s
 }
 
 /* Set size, pinuse bit, and foot */
 //#define set_size_and_pinuse_of_free_chunk(p, s)  ((p)->head = (s|PINUSE_BIT), set_foot(p, s))
-fn set_size_and_pinuse_of_free_chunk(p: malloc_chunk, s: __size_t) -> void {
+fn set_size_and_pinuse_of_free_chunk(p: malloc_chunk, s: __size_t) -> Void {
     p.head = (s|(1 as __size_t));
     set_foot(p, s);
 }
 
 /* Set size, pinuse bit, foot, and clear next pinuse */
 //#define set_free_with_pinuse(p, s, n)  (clear_pinuse(n), set_size_and_pinuse_of_free_chunk(p, s))
-fn set_free_with_pinuse(p: malloc_chunk, s: __size_t, n: malloc_chunk) -> void {
+fn set_free_with_pinuse(p: malloc_chunk, s: __size_t, n: malloc_chunk) -> Void {
     clear_pinuse(n);
     set_size_and_pinuse_of_free_chunk(p, s);
 }
@@ -492,7 +496,7 @@ fn set_free_with_pinuse(p: malloc_chunk, s: __size_t, n: malloc_chunk) -> void {
 
 /* Return true if malloced space is not necessarily cleared */
 //#define calloc_must_clear(p) (1)
-//fn calloc_must_clear(p: malloc_chunk) -> boolean true;
+//fn calloc_must_clear(p: malloc_chunk) -> Boolean true;
 
 /* ---------------------- Overlaid data structures ----------------------- */
 
@@ -597,7 +601,7 @@ __struct malloc_tree_chunk {
   child_0: __Option<malloc_tree_chunk>; 
   child_1: __Option<malloc_tree_chunk>;
   parent: __Option<malloc_tree_chunk>;
-  index: int; //actually should be a u32, but this will do
+  index: u32;
 }
 
 /* A little helper macro for trees */
@@ -669,10 +673,10 @@ fn treechunksize(p: malloc_tree_chunk) -> __size_t        (p.head & ~(7 as __siz
 */
 
 __struct malloc_segment {
-  base: __ptr;                    /* base address */
+  base: __Ptr;                    /* base address */
   size: __size_t;                 /* allocated size */
   next: __Option<malloc_segment>;   /* ptr to next segment */
-  //sflags: __size_t;             /* mmap and extern flag WA1 - was a u32, but not used*/
+  //sflags: u32;             /* mmap and extern flag WA1 - was a u32, but not used*/
 }
 
 //#define is_mmapped_segment(S)  ((S)->sflags & USE_MMAP_BIT) - false
@@ -706,7 +710,7 @@ __struct malloc_segment {
     chunks of all the same size, spaced 8 bytes apart.  To simplify
     use in double-linked lists, each bin header acts as a malloc_chunk
     pointing to the real first node, if it exists (else pointing to
-    itself).  This avoids special-casing for headers.  But to avoid
+    itself).  This aVoids special-casing for headers.  But to aVoid
     waste, we allocate only the fd/bk pointers of bins, and then use
     repositioning tricks to treat these as the fields of a chunk.
     *_* note - we don't use this trick right now.
@@ -720,7 +724,7 @@ __struct malloc_segment {
   Bin maps
     There is one bit map for small bins ("smallmap") and one for
     treebins ("treemap).  Each bin sets its bit when non-empty, and
-    clears the bit when empty.  Bit operations are then used to avoid
+    clears the bit when empty.  Bit operations are then used to aVoid
     bin-by-bin searching -- nearly all "search" is done without ever
     looking at bins that won't be selected.  The bit maps
     conservatively use 32 bits per map word, even if on 64bit system.
@@ -762,7 +766,7 @@ __struct malloc_segment {
     around every public call using this mspace.
 
   Extension support
-    A void* pointer and a size_t field that can be used to help implement
+    A Void* pointer and a size_t field that can be used to help implement
     extensions to this malloc.
 */
 
@@ -777,24 +781,24 @@ __struct malloc_segment {
 //#define MAX_SMALL_REQUEST (MAX_SMALL_SIZE - CHUNK_ALIGN_MASK - CHUNK_OVERHEAD) => 256 - 7 - 4 => 245
 
 __struct malloc_state {
-  smallmap:         __size_t; //was a u32
-  treemap:          __size_t; //was a u32
+  smallmap:         u32; 
+  treemap:          u32;
   dvsize:           __size_t;
   topsize:          __size_t;
-  least_addr:       __ptr; //was a char*
+  least_addr:       __Ptr; //was a char*
   dv:               __Option<malloc_chunk>;
   top:              __Option<malloc_chunk>;
   trim_check:       __size_t;
   release_checks:   __size_t;
   magic:            __size_t;
-  smallbins:        __array<malloc_chunk>; //mchunkptr  smallbins[(NSMALLBINS+1)*2];
-  treebins:         __array<__Option<malloc_tree_chunk>>; //tbinptr    treebins[NTREEBINS];
+  smallbins:        __Array<malloc_chunk>; //mchunkptr  smallbins[(NSMALLBINS+1)*2];
+  treebins:         __Array<__Option<malloc_tree_chunk>>; //tbinptr    treebins[NTREEBINS];
   footprint:        __size_t;
   max_footprint:    __size_t;
   footprint_limit:  __size_t; /* zero means no limit */
-  mflags:           __size_t; //was a u32
+  mflags:           u32;
   seg:              __Option<malloc_segment>;
-  extp:             __ptr;      /* Unused but available for extensions */
+  extp:             __Ptr;      /* Unused but available for extensions */
   exts:             __size_t;
 }
 
@@ -814,7 +818,7 @@ __struct malloc_params {
   granularity:    __size_t;
   mmap_threshold: __size_t;
   trim_threshold: __size_t;
-  default_mflags: __size_t; // was a flag_t aka u32;
+  default_mflags: u32; // was a flag_t aka u32;
 }
 
 let mparams: malloc_params = __static malloc_params {
@@ -832,128 +836,128 @@ const gm: malloc_state = __static malloc_state{
   treemap:          (0 as __size_t),
   dvsize:           (0 as __size_t),
   topsize:          (0 as __size_t),
-  least_addr:       (0 as __ptr),
-  dv:               __null,
-  top:              __null,
+  least_addr:       (0 as __Ptr),
+  dv:               __Null,
+  top:              __Null,
   trim_check:       (0 as __size_t),
   release_checks:   (0 as __size_t),
   magic:            (0 as __size_t),
   //32 lots of malloc_chunk...
-  smallbins:        __static __array<malloc_chunk> [
+  smallbins:        __static __Array<malloc_chunk> [
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
     __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
-      fd: 0 as __ptr as malloc_chunk, bk: 0 as __ptr as malloc_chunk
+      fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
   ],
-  treebins:         __static __array<__Option<malloc_tree_chunk>>[
-      __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
-      __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
-      __null, __null, __null, __null, __null, __null, __null, __null, __null, __null, 
-      __null, __null
+  treebins:         __static __Array<__Option<malloc_tree_chunk>>[
+      __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, 
+      __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, 
+      __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, 
+      __Null, __Null
   ],
   footprint:        (0 as __size_t),
   max_footprint:    (0 as __size_t),
   footprint_limit:  (0 as __size_t),
   mflags:           (0 as __size_t),
-  seg:              __null,
-  extp:             (0 as __ptr),
+  seg:              __Null,
+  extp:             (0 as __Ptr),
   exts:             (0 as __size_t),
 };
 //#define is_global(M)       ((M) == &_gm_)
 
-fn is_initialized(m: malloc_state) -> boolean m.top != __null;
+fn is_initialized(m: malloc_state) -> Boolean m.top != __Null;
 
 /* page-align a size */
 //#define page_align(S) (((S) + (mparams.page_size - SIZE_T_ONE)) & ~(mparams.page_size - SIZE_T_ONE))
@@ -976,37 +980,37 @@ const TOP_FOOT_SIZE = align_offset_size_t(8 as __size_t) + pad_request(__sizeof(
 const SYS_ALLOC_PADDING = TOP_FOOT_SIZE + (8 as __size_t);
 
 //#define is_page_aligned(S) (((size_t)(S) & (mparams.page_size - SIZE_T_ONE)) == 0)
-fn is_page_aligned(s: __ptr) -> boolean ((s as __size_t) & (mparams.page_size - (1 as __size_t))) == (0 as __size_t);
+fn is_page_aligned(s: __Ptr) -> Boolean ((s as __size_t) & (mparams.page_size - (1 as __size_t))) == (0 as __size_t);
 //#define is_granularity_aligned(S) (((size_t)(S) & (mparams.granularity - SIZE_T_ONE)) == 0)
-fn is_granularity_aligned(s: __ptr) -> boolean ((s as __size_t) & (mparams.granularity - (1 as __size_t))) == (0 as __size_t);
+fn is_granularity_aligned(s: __Ptr) -> Boolean ((s as __size_t) & (mparams.granularity - (1 as __size_t))) == (0 as __size_t);
 
 /*  True if segment S holds address A */
 //#define segment_holds(S, A) ((char*)(A) >= S->base && (char*)(A) < S->base + S->size)
-fn segment_holds(s: malloc_segment, a: __ptr) -> boolean (a >= s.base && a < s.base + s.size);
+fn segment_holds(s: malloc_segment, a: __Ptr) -> Boolean (a >= s.base && a < s.base + (s.size as __Ptr));
 
 /* Return segment holding given address */
 /*
-fn segment_holding(m: malloc_state, addr: __ptr) -> __Option<malloc_segment> {
+fn segment_holding(m: malloc_state, addr: __Ptr) -> __Option<malloc_segment> {
   let o_sp: __Option<malloc_segment> = m.seg;
   while(true) {
     let sp = option.__Option_unwrap<malloc_segment>(o_sp);
     if (addr >= sp.base && addr < sp.base + sp.size)
       return __Some(sp);
     o_sp = sp.next;
-    if (o_sp == __null)
-      return __null;
+    if (o_sp == __Null)
+      return __Null;
   }
-  return __null;
+  return __Null;
 }
 */
 
 /* Return true if segment contains a segment link */
 /*
-fn has_segment_link(m: malloc_state, ss: malloc_segment) -> boolean {
+fn has_segment_link(m: malloc_state, ss: malloc_segment) -> Boolean {
   let o_sp: __Option<malloc_segment> = m.seg;
   while(true) {
     let sp = option.__Option_unwrap<malloc_segment>(o_sp);
-    if ((sp as __ptr) >= ss.base && (sp as __ptr) < ss.base + ss.size)
+    if ((sp as __Ptr) >= ss.base && (sp as __Ptr) < ss.base + ss.size)
       return true;
     if (sp != sp.next) 
       return false;
@@ -1048,39 +1052,42 @@ fn has_segment_link(m: malloc_state, ss: malloc_segment) -> boolean {
 
 /* ---------------------------- Indexing Bins ---------------------------- */
 //#define is_small(s)         (((s) >> SMALLBIN_SHIFT) < NSMALLBINS)
-fn is_small(s: __size_t) -> boolean s.shiftRight(3) < (32 as __size_t);
+fn is_small(s: __size_t) -> Boolean s.shiftRight(3) < 32
 
 //#define small_index(s)      (bindex_t)((s)  >> SMALLBIN_SHIFT)
-fn small_index(s: __size_t) -> int s.shiftRight(3) as int
+fn small_index(s: __size_t) -> u32 s.shiftRight(3)
 
 //#define small_index2size(i) ((i)  << SMALLBIN_SHIFT)
-fn small_index2size(i: int) -> __size_t i.shiftLeft(3) as __size_t
+fn small_index2size(i: u32) -> __size_t {
+  let out = i.shiftLeft(3)
+  out as __size_t
+}
 
 //#define MIN_SMALL_INDEX     (small_index(MIN_CHUNK_SIZE))
 const MIN_SMALL_INDEX = small_index(MIN_CHUNK_SIZE);
 
 /* addressing by index. See above about smallbin repositioning *_* we don't do the repositioning trick */
 //#define smallbin_at(M, i)   ((sbinptr)((char*)&((M)->smallbins[(i)<<1])))
-fn smallbin_at(m: malloc_state, i: int) -> malloc_chunk m.smallbins[i];
+fn smallbin_at(m: malloc_state, i: u32) -> malloc_chunk m.smallbins[i];
 
 //#define treebin_at(M,i)     (&((M)->treebins[i]))
 
 //#define compute_tree_index(S, I)\
-fn compute_tree_index(s: __size_t) -> int {
+fn compute_tree_index(s: __size_t) -> u32 {
   const x: __size_t = s.shiftRight(8);
   if (x == (0 as __size_t))
     0
   else if (x > (0xFFFF as __size_t))
     31
   else {
-    const k: int = 31 - (x.countLeadingZeros() as int)
-    (k.shiftLeft(1) as __size_t) + (s.shiftRight(k + 7) & (1 as __size_t)) as int
+    const k: u32 = 31 - (x.countLeadingZeros() as u32)
+    (k.shiftLeft(1) as __size_t) + (s.shiftRight(k + 7) & 1)
   }
 }
 
 /* Shift placing maximum resolved bit in a treebin at i as sign bit */
 //#define leftshift_for_tree_index(i) ((i == NTREEBINS-1)? 0 : ((SIZE_T_BITSIZE-SIZE_T_ONE) - (((i) >> 1) + TREEBIN_SHIFT - 2)))
-fn leftshift_for_tree_index(i: int) -> int {
+fn leftshift_for_tree_index(i: u32) -> u32 {
   if (i == 31) 0; else 31 - (i.shiftRight(1) + 6);
 }
 
@@ -1091,38 +1098,38 @@ fn leftshift_for_tree_index(i: int) -> int {
 
 /* bit corresponding to given index */
 //#define idx2bit(i)              ((binmap_t)(1) << (i))
-fn idx2bit(i: int) -> __size_t (1 as __size_t).shiftLeft(i);
+fn idx2bit(i: u32) -> __size_t (1 as u32).shiftLeft(i)
 
 /* Mark/Clear bits with given index */
 //#define mark_smallmap(M,i)      ((M)->smallmap |=  idx2bit(i))
-//fn mark_smallmap(m: malloc_state, i: __size_t) -> void m.smallmap |= idx2bit(i);
+//fn mark_smallmap(m: malloc_state, i: __size_t) -> Void m.smallmap |= idx2bit(i)
 //#define clear_smallmap(M,i)     ((M)->smallmap &= ~idx2bit(i))
-fn clear_smallmap(m: malloc_state, i: int) -> void m.smallmap &= ~idx2bit(i);
+fn clear_smallmap(m: malloc_state, i: u32) -> Void m.smallmap &= ~idx2bit(i)
 //#define smallmap_is_marked(M,i) ((M)->smallmap &   idx2bit(i))
-fn smallmap_is_marked(m: malloc_state, i: int) -> boolean (m.smallmap & idx2bit(i)) != (0 as __size_t);
+fn smallmap_is_marked(m: malloc_state, i: u32) -> Boolean (m.smallmap & idx2bit(i)) != 0
 
 //#define mark_treemap(M,i)       ((M)->treemap  |=  idx2bit(i))
-fn mark_treemap(m: malloc_state, i: int) -> void m.treemap  |=  idx2bit(i);
+fn mark_treemap(m: malloc_state, i: u32) -> Void m.treemap  |=  idx2bit(i);
 //#define clear_treemap(M,i)      ((M)->treemap  &= ~idx2bit(i))
-fn clear_treemap(m: malloc_state, i: int) -> void m.treemap  &= ~idx2bit(i);
+fn clear_treemap(m: malloc_state, i: u32) -> Void m.treemap  &= ~idx2bit(i);
 //#define treemap_is_marked(M,i)  ((M)->treemap  &   idx2bit(i))
-fn treemap_is_marked(m: malloc_state, i: int) -> boolean (m.treemap  &   idx2bit(i)) != (0 as __size_t);
+fn treemap_is_marked(m: malloc_state, i: u32) -> Boolean (m.treemap  &   idx2bit(i)) != 0
 
 /* isolate the least set bit of a bitmap */
 //#define least_bit(x)         ((x) & -(x))
-fn least_bit(x: __size_t) -> __size_t x & -x;
+fn least_bit(x: __size_t) -> __size_t x & -x
 
 /* mask with all bits to left of least bit of x on */
 //#define left_bits(x)         ((x<<1) | -(x<<1))
-fn left_bits(x: __size_t) -> __size_t x.shiftLeft(1) | -(x.shiftLeft(1));
+fn left_bits(x: __size_t) -> __size_t x.shiftLeft(1) | -(x.shiftLeft(1))
 
 /* mask with all bits to left of or equal to least bit of x on */
 //#define same_or_left_bits(x) ((x) | -(x))
-fn same_or_left_bits(x: __size_t) -> __size_t x | -x;
+fn same_or_left_bits(x: __size_t) -> __size_t x | -x
 
 /* index corresponding to given bit. Use x86 asm if possible */
 //#define compute_bit2idx(X, I) { unsigned int J; J = __builtin_ctz(X); I = (bindex_t)J; }
-fn compute_bit2idx(x: __size_t) -> __size_t x.countTrailingZeros() as __size_t;
+fn compute_bit2idx(x: __size_t) -> __size_t x.countTrailingZeros() as __size_t
 
 /* ----------------------- Runtime Check Support ------------------------- */
 
@@ -1156,19 +1163,19 @@ fn compute_bit2idx(x: __size_t) -> __size_t x.countTrailingZeros() as __size_t;
 
 /* Check if address a is at least as high as any from MORECORE or MMAP */
 //#define ok_address(M, a) ((char*)(a) >= (M)->least_addr)
-fn ok_address(m: malloc_state, a: __ptr) -> boolean a >= m.least_addr;
+fn ok_address(m: malloc_state, a: __Ptr) -> Boolean a >= m.least_addr;
 
 /* Check if address of next chunk n is higher than base chunk p */
 //#define ok_next(p, n)    ((char*)(p) < (char*)(n))
-fn ok_next(p: __ptr, n: __ptr) -> boolean p < n;
+fn ok_next(p: __Ptr, n: __Ptr) -> Boolean p < n;
 
 /* Check if p has inuse status */
 //#define ok_inuse(p)     is_inuse(p)
-fn ok_inuse(p: malloc_chunk) -> boolean is_inuse(p);
+fn ok_inuse(p: malloc_chunk) -> Boolean is_inuse(p);
 
 /* Check if p has its pinuse bit on */
 //#define ok_pinuse(p)     pinuse(p)
-fn ok_pinuse(p: malloc_chunk) -> boolean pinuse(p); 
+fn ok_pinuse(p: malloc_chunk) -> Boolean pinuse(p); 
 
 //#define ok_magic(M)      (1)
 
@@ -1176,49 +1183,49 @@ fn ok_pinuse(p: malloc_chunk) -> boolean pinuse(p);
 
 /* Set cinuse bit and pinuse bit of next chunk */
 //#define set_inuse(M,p,s)  ((p)->head = (((p)->head & PINUSE_BIT)|s|CINUSE_BIT), ((mchunkptr)(((char*)(p)) + (s)))->head |= PINUSE_BIT)
-fn set_inuse(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
-  p.head = (p.head & (1 as __size_t)) | s | (2 as __size_t);
-  (((p as __ptr) + s) as malloc_chunk).head |= (1 as __size_t);
+fn set_inuse(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
+  p.head = (p.head & 1) | s | 2
+  (((p as __Ptr) + (s as __Ptr)) as malloc_chunk).head |= 1
 }
 
 /* Set cinuse and pinuse of this chunk and pinuse of next chunk */
 //#define set_inuse_and_pinuse(M,p,s)  ((p)->head = (s|PINUSE_BIT|CINUSE_BIT),  ((mchunkptr)(((char*)(p)) + (s)))->head |= PINUSE_BIT)
-fn set_inuse_and_pinuse(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
-  p.head = (s|(1 as __size_t)|(2 as __size_t));
-  (((p as __ptr) + s) as malloc_chunk).head |= (1 as __size_t);
+fn set_inuse_and_pinuse(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
+  p.head = s | 1 | 2
+  (((p as __Ptr) + (s as __Ptr)) as malloc_chunk).head |= 1
 }
 
 /* Set size, cinuse and pinuse bit of this chunk */
 //#define set_size_and_pinuse_of_inuse_chunk(M, p, s)  ((p)->head = (s|PINUSE_BIT|CINUSE_BIT))
-fn set_size_and_pinuse_of_inuse_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
-  p.head = (s|(1 as __size_t)|(2 as __size_t));
+fn set_size_and_pinuse_of_inuse_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
+  p.head = s | 1 | 2
 }
 
 /* ---------------------------- setting mparams -------------------------- */
 
 /* Initialize mparams */
-fn init_mparams() -> boolean {
-  if (mparams.magic == (0 as __size_t)) {
-    let psize: __size_t = (65536 as __size_t); //malloc_getpagesize
-    let gsize: __size_t = (65536 as __size_t); //((DEFAULT_GRANULARITY != 0)? DEFAULT_GRANULARITY : psize);
+fn init_mparams() -> Boolean {
+  if (mparams.magic == 0) {
+    let psize: __size_t = 65536  //malloc_getpagesize
+    let gsize: __size_t = 65536  //((DEFAULT_GRANULARITY != 0)? DEFAULT_GRANULARITY : psize);
     mparams.granularity = gsize;
     mparams.page_size = psize;
-    mparams.mmap_threshold = (0xffffffff as __size_t); //DEFAULT_MMAP_THRESHOLD
-    mparams.trim_threshold = (0xffffffff as __size_t); //DEFAULT_TRIM_THRESHOLD
-    mparams.default_mflags = (0 as __size_t); //USE_LOCK_BIT|USE_MMAP_BIT;
+    mparams.mmap_threshold = 0xffffffff //DEFAULT_MMAP_THRESHOLD
+    mparams.trim_threshold = 0xffffffff //DEFAULT_TRIM_THRESHOLD
+    mparams.default_mflags = 0  //USE_LOCK_BIT|USE_MMAP_BIT;
 
     /* Set up lock for main malloc area */
-    gm.mflags = mparams.default_mflags;
+    gm.mflags = mparams.default_mflags
     // *_* there was a lot about random numbers and volatile writes here. I presume that this is when you hit malloc from
     // multiple threads. I removed that for the moment
-    mparams.magic = (1 as __size_t);
+    mparams.magic = 1
   }
 
   true;
 }
 
 /* Ensure mparams initialized */
-fn ensure_initialization() -> void { (mparams.magic != (0 as __size_t)) || init_mparams(); }
+fn ensure_initialization() -> Void { (mparams.magic != (0 as __size_t)) || init_mparams(); }
 
 /* ------------------------- Debugging Support --------------------------- */
 // *_* not implemented at present
@@ -1227,7 +1234,7 @@ fn ensure_initialization() -> void { (mparams.magic != (0 as __size_t)) || init_
 
 // *_* This has a different api - the dlmalloc allocates on the stack, but I can't do that, so
 // I accept a pre-allocated container and write in it
-fn internal_mallinfo(m: malloc_state, nm: mallinfo) -> void {
+fn internal_mallinfo(m: malloc_state, nm: mallinfo) -> Void {
   ensure_initialization();
   //check_malloc_state(m);
   if (is_initialized(m)) {
@@ -1240,7 +1247,7 @@ fn internal_mallinfo(m: malloc_state, nm: mallinfo) -> void {
     while (option.__Option_isSome(o_s)) {
       let s = option.__Some_unwrap<malloc_segment>(o_s);
       let q = align_as_chunk(s.base);
-      while (segment_holds(s, q as __ptr) && __Some(q) != m.top && q.head != (7 as __size_t)) {
+      while (segment_holds(s, q as __Ptr) && __Some(q) != m.top && q.head != (7 as __size_t)) {
         let sz = chunksize(q);
         sum += sz;
         if (!is_inuse(q)) {
@@ -1266,14 +1273,14 @@ fn internal_mallinfo(m: malloc_state, nm: mallinfo) -> void {
 
 // *_* dlmalloc defines these as macros. I obviously don't. I guess I shall
 // see if I can inline as well
-fn insert_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
+fn insert_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
   let i  = small_index(s);
   let b = smallbin_at(m, i);
   let f = b;
   //assert(S >= MIN_CHUNK_SIZE);
   if (!smallmap_is_marked(m, i))
     m.smallmap |= idx2bit(i);
-  else if (ok_address(m, b.fd as __ptr))
+  else if (ok_address(m, b.fd as __Ptr))
     f = b.fd;
   else {
     __trap();
@@ -1285,7 +1292,7 @@ fn insert_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
 }
 
 /* Unlink a chunk from a smallbin  */
-fn unlink_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
+fn unlink_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
   let f = p.fd
   let b = p.bk
   let i = small_index(s)
@@ -1293,14 +1300,14 @@ fn unlink_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
   //assert(p != f);
   //assert(chunksize(p) == small_index2size(i));
   if (
-    (f as __ptr) == (smallbin_at(m,i) as __ptr)
-    || (ok_address(m, f as __ptr) && (f.bk as __ptr) == (p as __ptr))
+    (f as __Ptr) == (smallbin_at(m,i) as __Ptr)
+    || (ok_address(m, f as __Ptr) && (f.bk as __Ptr) == (p as __Ptr))
   ) {
-    if ((b as __ptr) == (f as __ptr)) {
+    if ((b as __Ptr) == (f as __Ptr)) {
       clear_smallmap(m, i)
     } else if (
-      (b as __ptr) == (smallbin_at(m,i) as __ptr) 
-      || (ok_address(m, b as __ptr) && (b.fd as __ptr) == (p as __ptr))
+      (b as __Ptr) == (smallbin_at(m,i) as __Ptr) 
+      || (ok_address(m, b as __Ptr) && (b.fd as __Ptr) == (p as __Ptr))
     ) {
       f.bk = b
       b.fd = f
@@ -1309,15 +1316,15 @@ fn unlink_small_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
 }
 
 /* Unlink the first chunk from a smallbin */
-fn unlink_first_small_chunk(m: malloc_state, b: malloc_chunk, p: malloc_chunk, i: int) -> void {
+fn unlink_first_small_chunk(m: malloc_state, b: malloc_chunk, p: malloc_chunk, i: u32) -> Void {
   let f = p.fd
   //assert(P != B)
   //assert(P != F);
   //assert(chunksize(P) == small_index2size(I));
-  if ((b as __ptr) == (f as __ptr)) {
+  if ((b as __Ptr) == (f as __Ptr)) {
     clear_smallmap(m, i)
   }
-  else if (ok_address(m, f as __ptr) && (f.bk as __ptr) == (p as __ptr)) {
+  else if (ok_address(m, f as __Ptr) && (f.bk as __Ptr) == (p as __Ptr)) {
     f.bk = b
     b.fd = f
   } else __trap()
@@ -1325,7 +1332,7 @@ fn unlink_first_small_chunk(m: malloc_state, b: malloc_chunk, p: malloc_chunk, i
 
 /* Replace dv node, binning the old one */
 /* Used only when dvsize known to be small */
-fn replace_dv(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
+fn replace_dv(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
   //let dvs = m.dvsize
   const dv = m.dv
   if (option.__Option_isSome(dv)) {
@@ -1339,16 +1346,16 @@ fn replace_dv(m: malloc_state, p: malloc_chunk, s: __size_t) -> void {
 /* ------------------------- Operations on trees ------------------------- */
 
 /* Insert chunk into tree */
-fn insert_large_chunk(m: malloc_state, x: malloc_tree_chunk, s: __size_t) -> void {
+fn insert_large_chunk(m: malloc_state, x: malloc_tree_chunk, s: __size_t) -> Void {
   let i = compute_tree_index(s)
   x.index = i
-  x.child_0 = __null
-  x.child_1 = __null
+  x.child_0 = __Null
+  x.child_1 = __Null
   if (!treemap_is_marked(m, i)) {
     mark_treemap(m, i)
     m.treebins[i] = __Some(x)
     //wow
-    x.parent = __Some(0xffffffff as __size_t as __ptr as malloc_tree_chunk)
+    x.parent = __Some(0xffffffff as __size_t as __Ptr as malloc_tree_chunk)
     x.fd = x
     x.bk = x
   } else {
@@ -1357,7 +1364,7 @@ fn insert_large_chunk(m: malloc_state, x: malloc_tree_chunk, s: __size_t) -> voi
     while(true) {
       let t = option.__Option_unwrap(o_t);
       if (treechunksize(t) != s) {
-        let child_index = (k.shiftRight(31) & (1 as __size_t)) as int
+        let child_index = (k.shiftRight(31) & (1 as __size_t)).truncateToSigned()
         k = k.shiftLeft(1)
         let child_ptr = if (child_index==0) t.child_0; else t.child_1
         if (option.__Option_isSome(child_ptr))
@@ -1371,12 +1378,12 @@ fn insert_large_chunk(m: malloc_state, x: malloc_tree_chunk, s: __size_t) -> voi
         }
       } else {
         let f = t.fd
-        if (ok_address(m, t as __ptr) && ok_address(m, f as __ptr)) {
+        if (ok_address(m, t as __Ptr) && ok_address(m, f as __Ptr)) {
           t.fd = x
           f.bk = x
           x.fd = f
           x.bk = t
-          x.parent = __null
+          x.parent = __Null
           break
         } else {
           __trap()

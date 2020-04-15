@@ -7,3 +7,6 @@ cargo run --bin test-runner -- tests/generics-1/out/generics_1.wasm -f 'generics
 
 cargo run -- build tests/linker-mem/build-wsb.json --clean
 cargo run --bin test-runner -- tests/linker-mem/out/linker_mem.wasm -f 'linker_mem.test();'
+
+cargo run -- build tests/types-1/build-wsb.json --clean
+cargo run --bin test-runner -- tests/types-1/out/types_1.wasm -f 'types_1.test();'

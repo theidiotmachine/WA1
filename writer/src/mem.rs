@@ -70,6 +70,9 @@ pub fn generate_mem_layout_map(type_map: &HashMap<String, TypeDecl>) -> HashMap<
             TypeDecl::Struct{name: _, struct_type, under_construction: _, export: _} => {
                 out.insert(t.0.clone(), UserMemLayout::Struct(generate_struct_mem_layout(&struct_type)));
             },
+            TypeDecl::Alias{name: _, of: _, export: _} => {
+                //no mem map
+            },
             _ => panic!()
         }
     }

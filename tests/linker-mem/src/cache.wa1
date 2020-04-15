@@ -1,13 +1,13 @@
 __struct test_struct {
-  a: int;
+  a: Int;
 }
 
 let cache = __static test_struct{a: 10};
 
-export fn setA(a: int) -> void {
+export fn setA(a: Int) -> Void {
     cache.a = a;
 }
 
-export fn getA() -> int {
+export fn getA() -> Int {
     cache.a;
 }

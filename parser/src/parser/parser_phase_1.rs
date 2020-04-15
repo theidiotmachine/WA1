@@ -60,6 +60,11 @@ fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
                     types.push(td.clone())
                 }
             },
+            TypeDecl::Alias{name: _, of: _, export} => {
+                if *export {
+                    types.push(td.clone())
+                }
+            },
         }
     }
 

@@ -5,24 +5,16 @@
     },
     "source_files": [
         {
-            "file_name": "ptr.wa1",
-            "is_unsafe": true
-        },
-        {
-            "file_name": "cache.wa1",
-            "is_unsafe": true
-        },
-        {
-            "file_name": "assert.wa1",
+            "file_name": "int.wa1",
             "is_unsafe": false
         },
         {
-            "file_name": "array.wa1",
+            "file_name": "assert.wa1",
             "is_unsafe": true
         }
     ],
     "src_path": "./src",
     "out_path": "./out",
-    "module_name": "linker_mem",
+    "module_name": "types_1",
     "wasm_exe": "wasm-ld-9"
 }

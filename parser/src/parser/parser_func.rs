@@ -12,7 +12,7 @@ pub use errs::prelude::*;
 
 use crate::tree_transform::{Transform, transform_expr, transform_lvalue_expr, transform_typed_expr, transform_func_decl};
 
-use crate::{expect_keyword, expect_next, expect_ident, expect_punct, cast_typed_expr, expect_semicolon};
+use crate::{expect_keyword, expect_next, expect_ident, expect_punct, cast_typed_expr, generic_unwrap, generic_wrap, expect_semicolon};
 
 struct SimpleErrRecorder{
     errs: Vec<Error>
@@ -93,9 +93,9 @@ fn transform_type(t: &Type,
     parser_context: &mut dyn ErrRecorder,
 ) -> Type {
     match t {
-        Type::Any | Type::BigInt | Type::BigIntLiteral(_) | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) 
-        | Type::Int | Type::IntLiteral(_) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
-        | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeNull | Type::UnsafeSizeT
+        Type::Any | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) 
+        | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
+        | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeNull
         | Type::UnsafeStruct{name: _} | Type::UserClass{name: _}
             => t.clone(),
         Type::Array(t) => Type::Array(Box::new(transform_type(t, type_map, loc, parser_context))),
@@ -248,14 +248,14 @@ fn generate_generic_func_call(
     let mut idx = 0;
     let runtime_arg_types = runtime_func_decl.get_arg_types();
     for arg in args {
-        let cast_expr = cast_typed_expr(&(runtime_arg_types[idx]), Box::new(arg), CastType::GenericForce, parser_context);
+        let cast_expr = generic_wrap(&(runtime_arg_types[idx]), Box::new(arg), parser_context);
         runtime_args.push(cast_expr);
         idx += 1;
     }
 
     let runtime_call = TypedExpr{expr: Expr::StaticFuncCall(runtime_name.clone(), resolved_func_decl.clone(), runtime_args), 
         r#type: runtime_func_decl.return_type.clone(), is_const: true, loc: loc.clone()};
-    cast_typed_expr(&resolved_func_decl.return_type, Box::new(runtime_call), CastType::GenericForce, parser_context)
+    generic_unwrap(&resolved_func_decl.return_type, Box::new(runtime_call), parser_context)
 }
 
 ///Given a set of type arguments that have deduced from a set of function arguments, check them, and generate
@@ -277,7 +277,7 @@ fn generate_generic_func_call_deduced_types(
         resolved_types.push(resolved_type.clone());
 
         if *resolved_type == Type::Undeclared {
-            parser_context.push_err(Error::FailedGenericDeduction(loc, type_arg.name.clone()));
+            parser_context.push_err(Error::FailedGenericDeduction(loc, type_arg.name.clone(), Type::Undeclared));
         }
 
         if !matches_type_constraint(resolved_type, &(generic_func.type_args[idx].constraint)) {
@@ -462,9 +462,9 @@ fn deduce_generic_type(
     parser_context: &mut ParserContext,
 ) -> () {
     match wanted {
-        Type::Any | Type::BigInt | Type::BigIntLiteral(_) | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) 
-            | Type::Int | Type::IntLiteral(_) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
-            | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeNull | Type::UnsafeSizeT
+        Type::Any | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) 
+            | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
+            | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeNull
             | Type::UnsafeStruct{name: _} | Type::UserClass{name: _}
                 => {},
 
@@ -619,7 +619,7 @@ impl<'a> Parser<'a> {
         self.parse_function_call_args(&vec![], parser_func_context, parser_context);
     }
 
-    fn parse_function_call_args_unchecked(&mut self,
+    pub (crate) fn parse_function_call_args_unchecked(&mut self,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> (Vec<TypedExpr>, SourceLocation) {

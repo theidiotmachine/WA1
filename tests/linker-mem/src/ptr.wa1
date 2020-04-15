@@ -1,0 +1,12 @@
+export fn is_aligned(A: __Ptr) -> Boolean (A & (7 as __Ptr)) == (0 as __Ptr)
+
+alias __size_t = Int<0, 4294967295>
+__struct malloc_chunk {
+  prev_foot: __size_t;  // Size of previous chunk (if free)
+  head: __size_t;       // Size and inuse bits
+  fd: malloc_chunk;         // double links -- used only if free. was struct malloc_chunk*
+  bk: malloc_chunk;
+}
+const MCHUNK_SIZE: __size_t         = __sizeof(malloc_chunk)
+const NOT_SEVEN: __size_t = ~(7 as __size_t)
+const MIN_CHUNK_SIZE: __size_t = (MCHUNK_SIZE + 7) & ~(7 as __size_t)

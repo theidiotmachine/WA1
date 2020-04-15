@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-use crate::Type;
+use crate::{Type, PTR_MAX, U_32_MAX, U_64_MAX, get_bittage, Bittage};
 
 pub mod prelude {
     pub use super::TypeConstraint;
@@ -39,18 +39,21 @@ pub fn get_runtime_type_for_generic(
     arg_type: &Type
 ) -> Option<Type> {
     match arg_type {
-        Type::BigInt => Some(Type::BigInt),
-        Type::BigIntLiteral(_) => Some(Type::BigInt),
-        Type::Boolean => Some(Type::Int),
+        Type::Boolean => Some(Type::Int(0, U_32_MAX)),
         Type::FloatLiteral(_) => Some(Type::Number),
-        Type::Int => Some(Type::Int),
-        Type::IntLiteral(_) => Some(Type::Int),
+        Type::Int(lower, upper) => {
+            let bittage = get_bittage(*lower, *upper);
+            match bittage{
+                Bittage::S32 | Bittage::U32 => Some(Type::Int(0, U_32_MAX)),
+                Bittage::S64 | Bittage::U64 => Some(Type::Int(0, U_64_MAX)),
+                Bittage::OOR => None
+            }
+        },
         Type::Number => Some(Type::Number),
         Type::RealVoid => Some(Type::RealVoid),
-        Type::UnsafeOption(_) => Some(Type::UnsafePtr),
-        Type::UnsafePtr => Some(Type::UnsafePtr),
-        Type::UnsafeSizeT => Some(Type::UnsafeSizeT),
-        Type::UnsafeStruct{name: _} => Some(Type::UnsafePtr),
+        Type::UnsafeOption(_) => Some(Type::Int(0, PTR_MAX)),
+        Type::UnsafePtr => Some(Type::Int(0, PTR_MAX)),
+        Type::UnsafeStruct{name: _} => Some(Type::Int(0, PTR_MAX)),
         _ => None
     }
 }

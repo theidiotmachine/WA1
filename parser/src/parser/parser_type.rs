@@ -34,7 +34,7 @@ impl<'a> Parser<'a> {
                         },
                         None => {
                             if commitment == Commitment::Committed {
-                                parser_context.errors.push(Error::InvalidTypeName(next.location.clone(), ident.clone()));
+                                parser_context.push_err(Error::InvalidTypeName(next.location.clone(), ident.clone()));
                                 Some(Type::Undeclared)
                             } else {
                                 None
@@ -44,12 +44,9 @@ impl<'a> Parser<'a> {
                 },
                 Some(user_type) => {
                     match user_type {
-                        TypeDecl::Class{name: _, class_type: _, export: _} => {
-                            Some(Type::UserClass{name: ident.clone()})
-                        },
-                        TypeDecl::Struct{name: _, struct_type: _, under_construction: _, export: _} => {
-                            Some(Type::UnsafeStruct{name: ident.clone()})
-                        }
+                        TypeDecl::Class{name: _, class_type: _, export: _} => Some(Type::UserClass{name: ident.clone()}),
+                        TypeDecl::Struct{name: _, struct_type: _, under_construction: _, export: _} => Some(Type::UnsafeStruct{name: ident.clone()}),
+                        TypeDecl::Alias{name: _, of, export: _} => Some(of.clone())
                     }
                 }
             }
@@ -83,8 +80,56 @@ impl<'a> Parser<'a> {
                 expect_punct!(self, parser_context, Punct::GreaterThan);
                 Type::UnsafeArray(Box::new(inner))
             },
-            Keyword::BigInt => Type::BigInt,
-            Keyword::Int => Type::Int,
+            Keyword::Int => {
+                let next = self.peek_next_item();
+                if next.token.matches_punct(Punct::LessThan) {
+                    let err_ret = Type::Int(S_32_MIN, S_32_MAX);
+                    self.skip_next_item();
+                    let next = expect_next!(self, parser_context, err_ret);
+                    let token = next.token;
+                    let lower = match token {
+                        Token::Number(n) => {
+                            match n.kind() {
+                                NumberKind::Hex | NumberKind::DecI | NumberKind::Bin | NumberKind::Oct => {
+                                    n.parse_i128().unwrap()
+                                },
+                                NumberKind::DecF => {
+                                    parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("expecting integer constant")));
+                                    S_32_MIN
+                                },
+                            }
+                        },
+                        _ => {
+                            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("expecting integer constant")));
+                            S_32_MIN
+                        }
+                    };
+                    expect_punct!(self, parser_context, Punct::Comma);
+                    let next = expect_next!(self, parser_context, err_ret);
+                    let token = next.token;
+                    let upper = match token {
+                        Token::Number(n) => {
+                            match n.kind() {
+                                NumberKind::Hex | NumberKind::DecI | NumberKind::Bin | NumberKind::Oct => {
+                                    n.parse_i128().unwrap()
+                                },
+                                NumberKind::DecF => {
+                                    parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("expecting integer constant")));
+                                    S_32_MAX
+                                },
+                            }
+                        },
+                        _ => {
+                            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("expecting integer constant")));
+                            S_32_MAX
+                        }
+                    };
+                    expect_punct!(self, parser_context, Punct::GreaterThan);
+                    Type::Int(lower, upper)
+                } else {
+                    Type::Int(S_32_MIN, S_32_MAX)
+                }
+            },
             //Keyword::Tuple => Ok(Type::Tuple),
             //Keyword::Object => Ok(Type::Object),
             Keyword::Any => Type::Any,
@@ -93,12 +138,6 @@ impl<'a> Parser<'a> {
                     parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
                 }
                 Type::UnsafePtr
-            },
-            Keyword::UnsafeSizeT => {
-                if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
-                    parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
-                }
-                Type::UnsafeSizeT
             },
             Keyword::Option => {
                 expect_punct!(self, parser_context, Punct::LessThan);
@@ -145,41 +184,9 @@ impl<'a> Parser<'a> {
             },
             Token::Number(n) => {
                 match n.kind() {
-                    NumberKind::Hex => {
-                        let number_i64 = n.parse_i64().unwrap();
-                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Type::BigIntLiteral(number_i64);
-                        } else {
-                            let number_i32 = n.parse_i32().unwrap();
-                            return Type::IntLiteral(number_i32);
-                        }
-                    },
-                    NumberKind::DecI => {
-                        let number_i64 = n.parse_i64().unwrap();
-                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Type::BigIntLiteral(number_i64);
-                        } else {
-                            let number_i32 = n.parse_i32().unwrap();
-                            return Type::IntLiteral(number_i32);
-                        }
-                    },
-                    NumberKind::Bin => {
-                        let number_i64 = n.parse_i64().unwrap();
-                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Type::BigIntLiteral(number_i64);
-                        } else {
-                            let number_i32 = n.parse_i32().unwrap();
-                            return Type::IntLiteral(number_i32);
-                        }                    
-                    },
-                    NumberKind::Oct => {
-                        let number_i64 = n.parse_i64().unwrap();
-                        if number_i64 > std::i32::MAX.into() || number_i64 < std::i32::MIN.into() {
-                            return Type::BigIntLiteral(number_i64);
-                        } else {
-                            let number_i32 = n.parse_i32().unwrap();
-                            return Type::IntLiteral(number_i32);
-                        }
+                    NumberKind::Hex | NumberKind::DecI | NumberKind::Bin | NumberKind::Oct => {
+                        let number_i128 = n.parse_i128().unwrap();
+                        return Type::Int(number_i128.into(), number_i128.into());
                     },
                     NumberKind::DecF => {
                         let number = n.parse_f64();

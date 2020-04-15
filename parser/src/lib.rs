@@ -1,3 +1,5 @@
+use std::cmp;
+
 mod parser;
 pub use parser::Parser;
 
@@ -25,6 +27,34 @@ pub enum StartFuncType{
     WASMCallCtors
 }
 
+fn patch_guard_type(
+    o_old_guard_type: &Option<Type>,
+    new_guard_type: &Type, 
+    loc: &SourceLocation,
+    parser_context: &mut ParserContext
+) -> Type {
+    match o_old_guard_type {
+        None => new_guard_type.clone(),
+        Some(old_guard_type) => {
+            if old_guard_type == new_guard_type {
+                parser_context.push_err(Error::TypeGuardReapply(loc.clone(), new_guard_type.clone()));
+                new_guard_type.clone()
+            } else {
+                match new_guard_type{
+                    Type::Int(lower_to, upper_to) => {
+                        match old_guard_type {
+                            Type::Int(lower_from, upper_from) => {
+                                Type::Int(cmp::max(*lower_from, *lower_to), cmp::min(*upper_to, *upper_from))
+                            },
+                            _ => new_guard_type.clone()
+                        }
+                    },
+                    _ => new_guard_type.clone()
+                }
+            }
+        }
+    }
+}
 
 /// assert that something from an inner call was ok. Usage `let x = self.parse_x(); assert_ok!(x);`
 #[macro_export]
@@ -187,8 +217,8 @@ fn cast_int_to_number(expr: &TypedExpr) -> TypedExpr {
     TypedExpr{expr: Expr::IntToNumber(Box::new(expr.clone())), r#type: Type::Number, is_const: true, loc: expr.loc}
 }
 
-fn cast_int_to_bigint(expr: &TypedExpr) -> TypedExpr {
-    TypedExpr{expr: Expr::IntToBigInt(Box::new(expr.clone())), r#type: Type::BigInt, is_const: true, loc: expr.loc}
+fn int_widen(expr: &TypedExpr, to: &Type) -> TypedExpr {
+    TypedExpr{expr: Expr::IntWiden(Box::new(expr.clone())), r#type: to.clone(), is_const: true, loc: expr.loc}
 }
 
 fn free_upcast(expr: &TypedExpr, to: &Type) -> TypedExpr {
@@ -197,8 +227,8 @@ fn free_upcast(expr: &TypedExpr, to: &Type) -> TypedExpr {
 
 fn create_cast(want: &Type, got: &TypedExpr, cast: &TypeCast) -> Option<TypedExpr> {
     match cast {
-        TypeCast::FreeUpcast => Some(free_upcast(got, want)),
-        TypeCast::IntToBigIntWiden => Some(cast_int_to_bigint(got)),
+        TypeCast::FreeUpcast(_) => Some(free_upcast(got, want)),
+        TypeCast::IntWiden(_,_) => Some(int_widen(got, want)),
         TypeCast::IntToNumberWiden => Some(cast_int_to_number(got)),
         TypeCast::None => None,
         TypeCast::NotNeeded => Some(got.clone()),
@@ -215,8 +245,8 @@ fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, cast_type: CastType, parser
     let loc = got.loc.clone();
     let got_is_const = got.is_const;
     match type_cast {
-        TypeCast::FreeUpcast => TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
-        TypeCast::IntToBigIntWiden => TypedExpr{expr: Expr::IntToBigInt(got), r#type: Type::BigInt, is_const: true, loc: loc},
+        TypeCast::FreeUpcast(_) => TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
+        TypeCast::IntWiden(_,_) => TypedExpr{expr: Expr::IntWiden(got), r#type: want.clone(), is_const: true, loc: loc},
         TypeCast::IntToNumberWiden => TypedExpr{expr: Expr::IntToNumber(got), r#type: Type::Number, is_const: true, loc: loc},
         TypeCast::None => {
             match cast_type {
@@ -224,8 +254,6 @@ fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, cast_type: CastType, parser
                     parser_context.push_err(Error::TypeFailure(loc, want.clone(), got.r#type.clone())),
                 CastType::Explicit  => 
                     parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone())),
-                CastType::GenericForce => 
-                    parser_context.push_err(Error::InternalError(loc, format!("can't cast from {} to {}", got.r#type, want))),
             }
             TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
         },
@@ -244,6 +272,34 @@ fn guard_downcast_expr(want: &Type, got: Box<TypedExpr>, parser_context: &mut Pa
             TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
         },
         TypeGuardDowncast::NotNeeded => got.as_ref().clone(),
+    }
+}
+
+fn generic_wrap(want: &Type, got: Box<TypedExpr>, parser_context: &mut ParserContext) -> TypedExpr {
+    let generic_cast = types::cast::try_generic_wrap(&got.r#type, want);
+    let loc = got.loc.clone();
+    let got_is_const = got.is_const;
+    match generic_cast {
+        GenericCast::FreeCast => TypedExpr{expr: Expr::FreeGenericCast(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
+        GenericCast::None => {
+            parser_context.push_err(Error::InternalError(loc, format!("can't cast from {} to {}", got.r#type, want)));
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
+        },
+        GenericCast::NotNeeded => got.as_ref().clone(),
+    }
+}
+
+fn generic_unwrap(want: &Type, got: Box<TypedExpr>, parser_context: &mut ParserContext) -> TypedExpr {
+    let generic_cast = types::cast::try_generic_unwrap(&got.r#type, want);
+    let loc = got.loc.clone();
+    let got_is_const = got.is_const;
+    match generic_cast {
+        GenericCast::FreeCast => TypedExpr{expr: Expr::FreeGenericCast(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
+        GenericCast::None => {
+            parser_context.push_err(Error::InternalError(loc, format!("can't cast from {} to {}", got.r#type, want)));
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
+        },
+        GenericCast::NotNeeded => got.as_ref().clone(),
     }
 }
 
@@ -548,17 +604,20 @@ impl ParserContext {
     /// Apply a type guard to an existing variable.
     fn guard_var(&mut self, 
         internal_var_name: &String, 
-        guard_type: &Type
+        guard_type: &Type,
+        loc: &SourceLocation,
     ) -> () {
         //find the var in the block_var_stack
         let (var_name, shadowed_var) = self.find_named_scoped_var_given_internal_name(internal_var_name);
 
         let new_var = match shadowed_var {
-            ScopedVar::Local{internal_name: _, r#type, constant, guard_type: _} => {
-                ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: Some(guard_type.clone())}
+            ScopedVar::Local{internal_name: _, r#type, constant, guard_type: old_guard_type} => {
+                ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, 
+                    guard_type: Some(patch_guard_type(&old_guard_type, guard_type, loc, self))}
             },
-            ScopedVar::ClosureRef{internal_name: _, r#type, constant, guard_type: _} => {
-                ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: Some(guard_type.clone())}
+            ScopedVar::ClosureRef{internal_name: _, r#type, constant, guard_type: old_guard_type} => {
+                ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, 
+                    guard_type: Some(patch_guard_type(&old_guard_type, guard_type, loc, self))}
             }
         };
 

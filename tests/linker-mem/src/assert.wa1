@@ -1,3 +1,3 @@
-export fn assert(x: boolean) -> void {
+export fn assert(x: Boolean) -> Void {
     if(!x) __trap();
 }
