@@ -176,18 +176,15 @@ fn parse(sf_full_path: &PathBuf, sf_name: &PathBuf, is_unsafe: bool, module_name
     match r_input_contents {
         Ok(input_contents) => {
             let mut parser = Parser::new(input_contents.as_str()).unwrap();
-            let o_script = parser.parse_full(if is_unsafe{UnsafeParseMode::Unsafe} else {UnsafeParseMode::Safe}, importer, module_name, start_func_type, &(sf_name.to_string_lossy().to_string()));
-            match o_script {
-                Err(errs) => {
-                    println!("Parse failed.");
-                    pretty_print_errs(&errs);
-                    None
-                },
-                Ok(script) => {
-                    Some(script)
-                }
+            let (ast, errors) = parser.parse_full(if is_unsafe{UnsafeParseMode::Unsafe} else {UnsafeParseMode::Safe}, importer, module_name, start_func_type, &(sf_name.to_string_lossy().to_string()));
+            if errors.is_empty() || errors.iter().all(|e| e.is_warning()) {
+                pretty_print_errs(&errors);
+                Some(ast)
+            } else {
+                println!("Parse failed.");
+                pretty_print_errs(&errors);
+                None
             }
-            
         },
         Err(err) => {
             println!("ERROR: couldn't open {} because {}", sf_full_path.to_string_lossy(), err);

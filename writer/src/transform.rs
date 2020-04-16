@@ -1138,7 +1138,7 @@ fn register_func(
                 if tu_type == TranslationUnitType::LinkedSourceFile {
                     wrf.linking_section.symbol_table.new_local_exported_function(func_idx, &format!("{}.{}", module_name, func_decl.name));
                 } else { //RelocationMode::StaticEntryPoint
-                    wrf.linking_section.symbol_table.new_full_exported_function(func_idx, &format!("{}.{}", module_name, func_decl.name));
+                    wrf.linking_section.symbol_table.new_full_exported_function(func_idx, &format!("{}", func_decl.name));
                 }
             },
             _ => {}
@@ -1273,7 +1273,7 @@ pub fn compile(
                     if tu_type == TranslationUnitType::LinkedSourceFile {
                         wrf.linking_section.symbol_table.new_local_exported_global(global_idx, &format!("{}.{}", module_name, g.name));
                     } else {
-                        wrf.linking_section.symbol_table.new_full_exported_global(global_idx, &format!("{}.{}", module_name, g.name));
+                        wrf.linking_section.symbol_table.new_full_exported_global(global_idx, &format!("{}", g.name));
                     }
                 } else {
                     wrf.linking_section.symbol_table.new_local_global(global_idx, &g.name);
