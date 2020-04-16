@@ -701,8 +701,8 @@ impl<'b> Parser<'b> {
         //get condition, check it
         expect_punct!(self, parser_context, Punct::OpenParen);
         let condition = self.parse_expr(parser_func_context, parser_context);
-        if condition.r#type != Type::Boolean {
-            parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Boolean,  condition.r#type.clone()));
+        if condition.r#type != Type::Bool {
+            parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Bool,  condition.r#type.clone()));
         }
         expect_punct!(self, parser_context, Punct::CloseParen);
 
@@ -771,8 +771,8 @@ impl<'b> Parser<'b> {
 
         expect_punct!(self, parser_context, Punct::OpenParen);
         let condition = self.parse_expr(parser_func_context, parser_context);
-        if condition.r#type != Type::Boolean {
-            parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Boolean, condition.r#type.clone()));
+        if condition.r#type != Type::Bool {
+            parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Bool, condition.r#type.clone()));
         }
         expect_punct!(self, parser_context, Punct::CloseParen);
 
@@ -1644,9 +1644,9 @@ impl<'b> Parser<'b> {
         match lookahead {
             Token::Number(n) => { return self.parse_number(&n, &lookahead_item.location); },
             
-            Token::Boolean(b) => {
+            Token::Bool(b) => {
                 self.skip_next_item();
-                return TypedExpr{expr:Expr::BoolLiteral(b.is_true()), r#type: Type::Boolean, is_const: true, loc: lookahead_item.location.clone()};
+                return TypedExpr{expr:Expr::BoolLiteral(b.is_true()), r#type: Type::Bool, is_const: true, loc: lookahead_item.location.clone()};
             },
 
             Token::Null => {

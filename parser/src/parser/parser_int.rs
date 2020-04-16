@@ -67,7 +67,7 @@ impl<'a> Parser<'a> {
         };
     
         let mut arg_types: Vec<Type> = vec![holding.r#type.clone()];
-        let (args, args_loc) = self.parse_function_call_args_unchecked(parser_func_context, parser_context);
+        let (args, _) = self.parse_function_call_args_unchecked(parser_func_context, parser_context);
         for arg in args {
             arg_types.push(arg.r#type.clone());    
         }

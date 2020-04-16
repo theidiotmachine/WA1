@@ -101,6 +101,7 @@ impl<'a> Tokenizer<'a> {
             3 if ident == b"try" => Some(RawToken::Keyword(Keyword::Try)),
             3 if ident == b"var" => Some(RawToken::Keyword(Keyword::Var)),
             3 if ident == b"let" => Some(RawToken::Keyword(Keyword::Let)),
+            4 if ident == b"Bool" => Some(RawToken::Keyword(Keyword::Bool)),
             4 if ident == b"Null" => Some(RawToken::Null),
             4 if ident == b"Some" => Some(RawToken::Keyword(Keyword::Some)),
             4 if ident == b"Void" => Some(RawToken::Keyword(Keyword::Void)),
@@ -110,7 +111,7 @@ impl<'a> Tokenizer<'a> {
             4 if ident == b"with" => Some(RawToken::Keyword(Keyword::With)),
             4 if ident == b"enum" => Some(RawToken::Keyword(Keyword::Enum)),
             4 if ident == b"else" => Some(RawToken::Keyword(Keyword::Else)),
-            4 if ident == b"true" => Some(RawToken::Boolean(true)),
+            4 if ident == b"true" => Some(RawToken::Bool(true)),
             5 if ident == b"__Ptr" => Some(RawToken::Keyword(Keyword::UnsafePtr)),
             5 if ident == b"Array" => Some(RawToken::Keyword(Keyword::Array)),
             5 if ident == b"Tuple" => Some(RawToken::Keyword(Keyword::Tuple)),
@@ -126,7 +127,7 @@ impl<'a> Tokenizer<'a> {
             5 if ident == b"while" => Some(RawToken::Keyword(Keyword::While)),
             5 if ident == b"super" => Some(RawToken::Keyword(Keyword::Super)),
             5 if ident == b"yield" => Some(RawToken::Keyword(Keyword::Yield)),
-            5 if ident == b"false" => Some(RawToken::Boolean(false)),
+            5 if ident == b"false" => Some(RawToken::Bool(false)),
             6 if ident == b"__Null" => Some(RawToken::UnsafeNull),
             6 if ident == b"__Some" => Some(RawToken::Keyword(Keyword::UnsafeSome)),
             6 if ident == b"Number" => Some(RawToken::Keyword(Keyword::Number)),
@@ -142,7 +143,7 @@ impl<'a> Tokenizer<'a> {
             6 if ident == b"static" => Some(RawToken::Keyword(Keyword::Static)),
             6 if ident == b"public" => Some(RawToken::Keyword(Keyword::Public)),
             7 if ident == b"__Array" => Some(RawToken::Keyword(Keyword::UnsafeArray)),
-            7 if ident == b"Boolean" => Some(RawToken::Keyword(Keyword::Boolean)),
+            
             7 if ident == b"default" => Some(RawToken::Keyword(Keyword::Default)),
             7 if ident == b"extends" => Some(RawToken::Keyword(Keyword::Extends)),
             7 if ident == b"finally" => Some(RawToken::Keyword(Keyword::Finally)),
@@ -1148,7 +1149,7 @@ mod test {
             let mut t = Tokenizer::new(b);
             let item = t.next().unwrap();
             assert!(match item.ty {
-                RawToken::Boolean(_) => true,
+                RawToken::Bool(_) => true,
                 _ => false,
             });
             assert!(t.stream.at_end());

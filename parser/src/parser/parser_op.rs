@@ -12,12 +12,12 @@ use lazy_static;
 
 lazy_static!{
     static ref COMPARISON_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![INT_S_64, INT_S_64], out_type: Type::Boolean},
-        FuncType{in_types: vec![INT_S_32, INT_S_32], out_type: Type::Boolean},
-        FuncType{in_types: vec![INT_U_64, INT_U_64], out_type: Type::Boolean},
-        FuncType{in_types: vec![INT_U_32, INT_U_32], out_type: Type::Boolean},
-        FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Boolean},
-        FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::Boolean},
+        FuncType{in_types: vec![INT_S_64, INT_S_64], out_type: Type::Bool},
+        FuncType{in_types: vec![INT_S_32, INT_S_32], out_type: Type::Bool},
+        FuncType{in_types: vec![INT_U_64, INT_U_64], out_type: Type::Bool},
+        FuncType{in_types: vec![INT_U_32, INT_U_32], out_type: Type::Bool},
+        FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Bool},
+        FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::Bool},
     ]);
     
     static ref MATHS_BIN_OP: OpType = OpType::SimpleOpType(vec![
@@ -62,11 +62,11 @@ lazy_static!{
     static ref DOT_OP: OpType = OpType::StaticMemberOpType;
     
     static ref BOOL_BIN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![Type::Boolean, Type::Boolean], out_type: Type::Boolean},
+        FuncType{in_types: vec![Type::Bool, Type::Bool], out_type: Type::Bool},
     ]);
     
     static ref BOOL_UN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![Type::Boolean], out_type: Type::Boolean},
+        FuncType{in_types: vec![Type::Bool], out_type: Type::Bool},
     ]);
     
     static ref BIT_UN_OP: OpType = OpType::SimpleOpType(vec![

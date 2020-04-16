@@ -39,7 +39,7 @@ pub fn get_runtime_type_for_generic(
     arg_type: &Type
 ) -> Option<Type> {
     match arg_type {
-        Type::Boolean => Some(Type::Int(0, U_32_MAX)),
+        Type::Bool => Some(Type::Int(0, U_32_MAX)),
         Type::FloatLiteral(_) => Some(Type::Number),
         Type::Int(lower, upper) => {
             let bittage = get_bittage(*lower, *upper);

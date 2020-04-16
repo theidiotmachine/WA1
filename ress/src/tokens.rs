@@ -1,6 +1,6 @@
 pub mod prelude {
     pub use super::{
-        Boolean, Comment, CommentExt, Ident, IdentExt, Keyword, Number, NumberExt, Punct,
+        Bool, Comment, CommentExt, Ident, IdentExt, Keyword, Number, NumberExt, Punct,
         StringLit, StringLitExt, Template, TemplateExt, Token, TokenExt, 
         NumberKind
     };
@@ -13,7 +13,7 @@ use std::str::FromStr;
 /// JS part
 pub enum Token<T> {
     /// `true` of `false`
-    Boolean(Boolean),
+    Bool(Bool),
     /// The end of the file
     EoF,
     /// An identifier this will be either a variable name
@@ -99,7 +99,7 @@ pub trait TokenExt {
 
     fn is_single_line_comment(&self) -> bool;
 
-    fn matches_boolean(&self, b: Boolean) -> bool;
+    fn matches_boolean(&self, b: Bool) -> bool;
 
     fn matches_boolean_str(&self, b: &str) -> bool;
 
@@ -123,7 +123,7 @@ pub trait TokenExt {
 impl<'a> ToString for Token<&'a str> {
     fn to_string(&self) -> String {
         match self {
-            Token::Boolean(ref b) => b.to_string(),
+            Token::Bool(ref b) => b.to_string(),
             Token::Comment(ref c) => c.to_string(),
             Token::EoF => String::new(),
             Token::Ident(ref i) => i.to_string(),
@@ -696,82 +696,82 @@ where
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 /// The tokenized representation of `true` or `false`
-pub enum Boolean {
+pub enum Bool {
     True,
     False,
 }
-impl Boolean {
+impl Bool {
     /// Test if this instance represents `true`
     pub fn is_true(self) -> bool {
         match self {
-            Boolean::True => true,
+            Bool::True => true,
             _ => false,
         }
     }
 }
 
-impl Boolean {
-    /// Create a Boolean from raw text
+impl Bool {
+    /// Create a Bool from raw text
     pub fn from(s: &str) -> Option<Self> {
         if s == "true" {
-            Some(Boolean::True)
+            Some(Bool::True)
         } else if s == "false" {
-            Some(Boolean::False)
+            Some(Bool::False)
         } else {
             None
         }
     }
 }
 
-impl From<bool> for Boolean {
+impl From<bool> for Bool {
     /// Creates a JS Bool for a rust bool
     fn from(b: bool) -> Self {
         if b {
-            Boolean::True
+            Bool::True
         } else {
-            Boolean::False
+            Bool::False
         }
     }
 }
 
-impl Into<String> for Boolean {
-    /// Return this Boolean to the text
+impl Into<String> for Bool {
+    /// Return this Bool to the text
     /// that was parsed to create it
     fn into(self) -> String {
         match self {
-            Boolean::True => "true".into(),
-            Boolean::False => "false".into(),
+            Bool::True => "true".into(),
+            Bool::False => "false".into(),
         }
     }
 }
 
-impl ToString for Boolean {
-    /// Return this Boolean to the text
+impl ToString for Bool {
+    /// Return this Bool to the text
     /// that was parsed to create it
     fn to_string(&self) -> String {
         match self {
-            Boolean::True => "true".into(),
-            Boolean::False => "false".into(),
+            Bool::True => "true".into(),
+            Bool::False => "false".into(),
         }
     }
 }
 
-impl Into<bool> for Boolean {
+impl Into<bool> for Bool {
     /// Creates a Rust bool for a js bool
     fn into(self) -> bool {
         match self {
-            Boolean::True => true,
-            Boolean::False => false,
+            Bool::True => true,
+            Bool::False => false,
         }
     }
 }
 
-impl<'a> Into<bool> for &'a Boolean {
+impl<'a> Into<bool> for &'a Bool {
     /// Creates a js bool for a rust bool
     fn into(self) -> bool {
         match self {
-            Boolean::True => true,
-            Boolean::False => false,
+            Bool::True => true,
+            Bool::False => false,
         }
     }
 }
@@ -1087,7 +1087,7 @@ pub enum Keyword {
     Extends,
     Any,
     Array,
-    Boolean,
+    Bool,
     Never,
     Number,
     Object,
@@ -1163,7 +1163,7 @@ impl Keyword {
             "constructor" => Keyword::Constructor,
             "any" => Keyword::Any,
             "Array" => Keyword::Array,
-            "Boolean" => Keyword::Boolean,
+            "Bool" => Keyword::Bool,
             "Never" => Keyword::Never,
             "Number" => Keyword::Number,
             "object" => Keyword::Object,
@@ -1246,7 +1246,7 @@ impl Keyword {
             Keyword::Constructor => "constructor",
             Keyword::Any => "Any",
             Keyword::Array => "Array",
-            Keyword::Boolean => "Boolean",
+            Keyword::Bool => "Bool",
             Keyword::Never => "Never",
             Keyword::Number => "Number",
             Keyword::Object => "object",
@@ -1270,19 +1270,19 @@ impl Keyword {
 impl<'a> TokenExt for Token<&'a str> {
     fn is_boolean(&self) -> bool {
         match self {
-            Token::Boolean(_) => true,
+            Token::Bool(_) => true,
             _ => false,
         }
     }
     fn is_boolean_true(&self) -> bool {
         match self {
-            Token::Boolean(ref b) => b.into(),
+            Token::Bool(ref b) => b.into(),
             _ => false,
         }
     }
     fn is_boolean_false(&self) -> bool {
         match self {
-            Token::Boolean(ref b) => {
+            Token::Bool(ref b) => {
                 let b: bool = b.into();
                 !b
             }
@@ -1402,7 +1402,7 @@ impl<'a> TokenExt for Token<&'a str> {
     }
     fn is_literal(&self) -> bool {
         match self {
-            Token::Boolean(_) => true,
+            Token::Bool(_) => true,
             Token::String(_) => true,
             Token::Null => true,
             Token::Number(_) => true,
@@ -1429,16 +1429,16 @@ impl<'a> TokenExt for Token<&'a str> {
             _ => false,
         }
     }
-    fn matches_boolean(&self, b: Boolean) -> bool {
+    fn matches_boolean(&self, b: Bool) -> bool {
         match self {
-            Token::Boolean(m) => m == &b,
+            Token::Bool(m) => m == &b,
             _ => false,
         }
     }
     fn matches_boolean_str(&self, b: &str) -> bool {
         match self {
-            Token::Boolean(ref lit) => match (lit, b) {
-                (&Boolean::True, "true") | (&Boolean::False, "false") => true,
+            Token::Bool(ref lit) => match (lit, b) {
+                (&Bool::True, "true") | (&Bool::False, "false") => true,
                 _ => false,
             },
             _ => false,

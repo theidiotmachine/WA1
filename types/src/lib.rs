@@ -189,7 +189,7 @@ pub enum Type {
     ///integer type. First number is lower bound, inclusive. Second number is upper bound, inclusive 
     Int(i128, i128),
     ///boolean
-    Boolean,
+    Bool,
     ///Func
     Func{func_type: Box<FuncType>},
     ///Tuple
@@ -241,7 +241,7 @@ impl Type{
     ///Is this an unresolved type variable?
     pub fn is_type_variable(&self) -> bool {
         match &self {
-            Type::Any | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) | Type::Int(_, _)
+            Type::Any | Type::Bool | Type::FakeVoid | Type::FloatLiteral(_) | Type::Int(_, _)
                 | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String | Type::StringLiteral(_) | Type::Undeclared 
                 | Type::Unknown | Type::UnsafeNull | Type::UnsafePtr | Type::UnsafeStruct{name:_} 
                 | Type::UserClass{name:_} => false,
@@ -271,7 +271,7 @@ impl Type{
             Type::String => String::from("!String"),
             Type::Array(inner) => format!("!Array<{}>", inner.get_mangled_name()),
             Type::Int(lower, upper) => format!("!Int<{}, {}>", lower, upper),
-            Type::Boolean => String::from("!Boolean"),
+            Type::Bool => String::from("!Bool"),
             Type::Func{func_type} => format!("!func_{}", func_type),
             Type::Tuple(types) => {
                 let mut vec: Vec<String> = vec![];
@@ -313,7 +313,7 @@ impl Display for Type {
             Type::String => write!(f, "String"),
             Type::Array(inner) => write!(f, "Array<{}>", inner),
             Type::Int(lower, upper) => write!(f, "Int<{}, {}>", lower, upper),
-            Type::Boolean => write!(f, "Boolean"),
+            Type::Bool => write!(f, "Bool"),
             Type::Func{func_type} => write!(f, "{}", func_type),
             Type::Tuple(types) => {
                 let mut vec: Vec<String> = vec![];
@@ -458,17 +458,17 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             let type_cast = try_cast(lhs_type, &rhs_type, CastType::Implicit);
             match &type_cast{
                 TypeCast::NotNeeded => 
-                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
+                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Bool}),
                 TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::IntToNumberWiden => 
-                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
+                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Bool}),
                 TypeCast::None => {
                     //now try going the other way
                     let type_cast = try_cast(rhs_type, &lhs_type, CastType::Implicit);
                     match &type_cast{
                         TypeCast::NotNeeded => 
-                            Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Boolean}),
+                            Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Bool}),
                         TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::IntToNumberWiden =>
-                            Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Boolean}),
+                            Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Bool}),
                         TypeCast::None => None
                     }    
                 }

@@ -93,7 +93,7 @@ fn transform_type(t: &Type,
     parser_context: &mut dyn ErrRecorder,
 ) -> Type {
     match t {
-        Type::Any | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) 
+        Type::Any | Type::Bool | Type::FakeVoid | Type::FloatLiteral(_) 
         | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
         | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeNull
         | Type::UnsafeStruct{name: _} | Type::UserClass{name: _}
@@ -462,7 +462,7 @@ fn deduce_generic_type(
     parser_context: &mut ParserContext,
 ) -> () {
     match wanted {
-        Type::Any | Type::Boolean | Type::FakeVoid | Type::FloatLiteral(_) 
+        Type::Any | Type::Bool | Type::FakeVoid | Type::FloatLiteral(_) 
             | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
             | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeNull
             | Type::UnsafeStruct{name: _} | Type::UserClass{name: _}

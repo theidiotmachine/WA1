@@ -3,7 +3,7 @@ use crate::tokens::{CommentKind, Keyword, NumberKind, Punct};
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum RawToken {
     /// `true` of `false`
-    Boolean(bool),
+    Bool(bool),
     /// The end of the file
     EoF,
     /// An identifier this will be either a variable name

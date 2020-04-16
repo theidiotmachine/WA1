@@ -88,7 +88,7 @@ fn compile_binary_operator(
                         }
                     }
                 },
-                Type::Boolean => {
+                Type::Bool => {
                     // number * ? => boolean
                     match bin_op {
                         BinaryOperator::GreaterThan => wasm_expr.data.push(WasmInstr::F64Gt),
@@ -171,7 +171,7 @@ fn compile_binary_operator(
                         }
                     }
                 },
-                Type::Boolean => {
+                Type::Bool => {
                     // int * ? => boolean
                     match bin_op {
                         BinaryOperator::GreaterThan => {
@@ -252,7 +252,7 @@ fn compile_binary_operator(
                         }
                     }
                 },
-                Type::Boolean => {
+                Type::Bool => {
                     match bin_op {
                         BinaryOperator::GreaterThan => wasm_expr.data.push(WasmInstr::I32GtU),
                         BinaryOperator::GreaterThanEqual => wasm_expr.data.push(WasmInstr::I32GeU),
@@ -271,7 +271,7 @@ fn compile_binary_operator(
             }
         },
 
-        Type::Boolean => {
+        Type::Bool => {
             // boolean * ? => ?
             match bin_op {
                 //these are the bit instructions, but our strong typing should mean that this is safe
@@ -288,7 +288,7 @@ fn compile_binary_operator(
         //FIXME64
         Type::UnsafeOption(_) => {
             match return_type {
-                Type::Boolean => {
+                Type::Bool => {
                     match bin_op {
                         BinaryOperator::Equal => wasm_expr.data.push(WasmInstr::I32Eq),
                         BinaryOperator::NotEqual => wasm_expr.data.push(WasmInstr::I32Ne),
@@ -306,7 +306,7 @@ fn compile_binary_operator(
         //FIXME64
         Type::UnsafeSome(_) => {
             match return_type {
-                Type::Boolean => {
+                Type::Bool => {
                     match bin_op {
                         BinaryOperator::Equal => wasm_expr.data.push(WasmInstr::I32Eq),
                         BinaryOperator::NotEqual => wasm_expr.data.push(WasmInstr::I32Ne),
@@ -324,7 +324,7 @@ fn compile_binary_operator(
         //FIXME64
         Type::UnsafeNull => {
             match return_type {
-                Type::Boolean => {
+                Type::Bool => {
                     match bin_op {
                         BinaryOperator::Equal => wasm_expr.data.push(WasmInstr::I32Eq),
                         BinaryOperator::NotEqual => wasm_expr.data.push(WasmInstr::I32Ne),
@@ -407,7 +407,7 @@ fn compile_unary_operator(
             }
         },
 
-        Type::Boolean => {
+        Type::Bool => {
             match op {
                 UnaryOperator::LogicalNot => {
                     wasm_expr.data.push(WasmInstr::I32Eqz);

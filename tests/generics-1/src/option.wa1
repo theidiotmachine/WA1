@@ -12,14 +12,14 @@ export fn __Some_unwrap<T: __struct T>(x: __Some<T>) -> T {
     x as __Ptr as T
 }
 
-export fn __Option_isSome<T: __struct T>(x: __Option<T>) -> Boolean __typeguard {
+export fn __Option_isSome<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     true => __Some<T>
     false => __Null
 } {
     x != __Null
 }
 
-export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Boolean __typeguard {
+export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     true => __Null
     false => __Some<T>
 } {
