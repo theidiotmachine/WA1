@@ -144,7 +144,7 @@ impl<'b> Parser<'b> {
         module_name: &String,
         start_func_type: StartFuncType,
         file_name: &String,
-    ) -> Result<AST, Vec<Error>> {
+    ) -> (AST, Vec<Error>) {
         let mut parser_context = ParserContext::new(unsafe_parse_mode, file_name);
         
         let start_func_name = match start_func_type{
@@ -152,14 +152,11 @@ impl<'b> Parser<'b> {
             StartFuncType::Start => format!("_start_{}", module_name)
         };
         self.parse_internal(&start_func_name, start_func_type, &mut parser_context, importer);
-        if parser_context.errors.is_empty() || parser_context.errors.iter().all(|e| e.is_warning()) {
-            Ok(AST{start: start_func_name, global_decls: parser_context.global_decls, global_imports: parser_context.global_imports,
-                func_decls: parser_context.func_decls, func_imports: parser_context.func_imports, generic_func_decls: parser_context.generic_func_decls,
-                type_map: parser_context.type_map
-            })
-        } else {
-            Err(parser_context.errors)
-        }
+        
+        (AST{start: start_func_name, global_decls: parser_context.global_decls, global_imports: parser_context.global_imports,
+            func_decls: parser_context.func_decls, func_imports: parser_context.func_imports, generic_func_decls: parser_context.generic_func_decls,
+            type_map: parser_context.type_map
+        }, parser_context.errors)
     }
 
     pub fn next_position(&self) -> SourceLocation {
@@ -1825,13 +1822,13 @@ mod test {
 
     #[test]
     fn add_test() {
-        let add = "export function addd(x: number, y: number, z: number): number {
-            let a = 1;
-            return x + y + z + a;
+        let add = "export fn addd(x: Number, y: Number, z: Number) -> Number {
+            let a = 1
+            return x + y + z + a
         }";
 
         let mut parser = Parser::new(add).unwrap();
-        let script = parser.parse_full(UnsafeParseMode::Safe, & mut DummyImporter{}, &String::from(""), StartFuncType::Start, &String::from("")).unwrap();
-        println!("{:#?}", script);
+        let (ast, _) = parser.parse_full(UnsafeParseMode::Safe, & mut DummyImporter{}, &String::from(""), StartFuncType::Start, &String::from(""));
+        println!("{:#?}", ast);
     }
 }

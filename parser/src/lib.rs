@@ -158,17 +158,6 @@ macro_rules! expect_next {
 }
 
 #[macro_export]
-macro_rules! assert_peek_punct {
-    ($s:ident, $p:path) => (
-        let next = $s.peek_next_item();
-        if !next.token.matches_punct($p) {
-            return $s.expected_token_error(&next, &[&format!("{:?}", $p)]);
-        }
-    )
-}
-
-
-#[macro_export]
 macro_rules! assert_ident {
     ($n:ident, $m:expr) => (
         {
@@ -688,13 +677,6 @@ impl ParserFuncContext{
             in_iteration: false,
         }
     }
-}
-
-/// The start/end index of a line
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
-pub struct Line {
-    start: usize,
-    end: usize,
 }
 
 /// The result type for the Parser operations
