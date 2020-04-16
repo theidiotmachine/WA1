@@ -41,7 +41,7 @@ export fn idNumber(x:  Number) -> Number {
     x
 }
 
-fn assert(x: Boolean) -> Void {
+fn assert(x: Bool) -> Void {
     if(!x) __trap()
 }
 

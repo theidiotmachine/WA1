@@ -143,7 +143,7 @@ You don't need 'em; a return character is equivalent. The things in javascript, 
 ```
 let a = 0
 ```
-* Boolean
+* Bool
 
 ### Casting
 
@@ -362,7 +362,7 @@ A leading `__` is pronounced 'unsafe', by the way.
     or `__static Hello {a: 3}`. A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
 * `__typeguard` This keyword lets you define type guards. Here is an example.
 ```
-export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Boolean __typeguard {
+export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     true => __Null
     false => __Some<T>
 } {

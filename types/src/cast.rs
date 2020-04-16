@@ -175,7 +175,7 @@ pub fn try_generic_wrap(from: &Type, to: &Type) -> GenericCast{
                         Bittage::OOR => GenericCast::None
                     }
                 },
-                Type::Boolean => 
+                Type::Bool => 
                     if *lower_to == 0 && *upper_to == U_32_MAX { GenericCast::FreeCast } else { GenericCast::None },
                 _ => GenericCast::None
             }
@@ -230,7 +230,7 @@ pub fn try_generic_unwrap(from: &Type, to: &Type) -> GenericCast{
                 _ => GenericCast::None
             }
         },
-        Type::Boolean => {
+        Type::Bool => {
             match from {
                 Type::Int(lower_from, upper_from) =>
                     if *lower_from == 0 && *upper_from == U_32_MAX { GenericCast::FreeCast } else { GenericCast::None },

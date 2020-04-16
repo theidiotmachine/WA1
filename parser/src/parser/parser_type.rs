@@ -60,7 +60,7 @@ impl<'a> Parser<'a> {
     ) -> Type {
         match keyword {
             Keyword::Void => Type::RealVoid,
-            Keyword::Boolean => Type::Boolean,
+            Keyword::Bool => Type::Bool,
             Keyword::Unknown => Type::Unknown,
             Keyword::Never => Type::Never,
             Keyword::Number => Type::Number,

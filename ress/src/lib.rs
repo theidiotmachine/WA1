@@ -237,7 +237,7 @@ impl<'b> Scanner<'b> {
             let mut new_lines = 0;
             let s = &self.original[next.start..next.end];
             let token = match next.ty {
-                RawToken::Boolean(b) => Token::Boolean(b.into()),
+                RawToken::Bool(b) => Token::Bool(b.into()),
                 RawToken::Comment {
                     kind,
                     new_line_count,

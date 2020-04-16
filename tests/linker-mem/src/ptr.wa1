@@ -1,4 +1,4 @@
-export fn is_aligned(A: __Ptr) -> Boolean (A & (7 as __Ptr)) == (0 as __Ptr)
+export fn is_aligned(A: __Ptr) -> Bool (A & (7 as __Ptr)) == (0 as __Ptr)
 
 alias __size_t = Int<0, 4294967295>
 __struct malloc_chunk {

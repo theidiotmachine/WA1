@@ -222,14 +222,14 @@ impl<'a> Parser<'a> {
                 self.parse_empty_function_call_args(parser_func_context, parser_context);
                 TypedExpr{
                     expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::NotEqual, rhs: Box::new(Parser::create_unsafe_null(&loc))},
-                    r#type: Type::Boolean, is_const: true, loc: loc.clone()
+                    r#type: Type::Bool, is_const: true, loc: loc.clone()
                 }
             },
             "isNone" => {
                 self.parse_empty_function_call_args(parser_func_context, parser_context);
                 TypedExpr{
                     expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_unsafe_null(&loc))},
-                    r#type: Type::Boolean, is_const: true, loc: loc.clone()
+                    r#type: Type::Bool, is_const: true, loc: loc.clone()
                 }
             },
             "unwrap" => {

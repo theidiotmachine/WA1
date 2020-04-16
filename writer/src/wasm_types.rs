@@ -14,7 +14,7 @@ pub(crate) fn get_wasm_value_type(r#type: &Type) -> WasmValueType {
         },
         //if we end up at runtime generating such an argument, just pass an empty int and be done. It's probably a generic.
         Type::FakeVoid => WasmValueType::I32, 
-        Type::Boolean => WasmValueType::I32,
+        Type::Bool => WasmValueType::I32,
         //FIXME64BIT
         Type::UnsafePtr => WasmValueType::I32,
         Type::UnsafeStruct{name: _} => WasmValueType::I32,
@@ -55,7 +55,7 @@ pub(crate) fn get_wasm_return_type(r#type: &Type) -> WasmResultType {
         },
         //if we end up at runtime generating such an argument, just pass an empty int and be done. It's probably a generic.
         Type::FakeVoid => WasmResultType::I32, 
-        Type::Boolean => WasmResultType::I32,
+        Type::Bool => WasmResultType::I32,
         //FIXME64BIT
         Type::UnsafePtr => WasmResultType::I32,
         Type::UnsafeStruct{name: _} => WasmResultType::I32,

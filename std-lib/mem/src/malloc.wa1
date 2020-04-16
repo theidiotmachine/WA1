@@ -190,7 +190,7 @@ __struct mallinfo {
 //manually inlined - const CHUNK_ALIGN_MASK: __size_t = 7;
 
 /* True if address a has acceptable alignment */
-fn is_aligned(A: __Ptr) -> Boolean (A & (7 as __Ptr)) == (0 as __Ptr);
+fn is_aligned(A: __Ptr) -> Bool (A & (7 as __Ptr)) == (0 as __Ptr);
 
 /* the number of bytes to offset an address to align it */
 //#define align_offset(A) ((((size_t)(A) & CHUNK_ALIGN_MASK) == 0)? 0 : ((MALLOC_ALIGNMENT - ((size_t)(A) & CHUNK_ALIGN_MASK)) & CHUNK_ALIGN_MASK))
@@ -431,13 +431,13 @@ fn request2size(req: __size_t) -> __size_t if(req < MIN_REQUEST) MIN_CHUNK_SIZE;
 /* extraction of fields from head words */
 /* WA1 - better get these guys inlined! */
 //#define cinuse(p)           ((p)->head & CINUSE_BIT)
-fn cinuse(p: malloc_chunk) -> Boolean           (p.head & (2 as __size_t)) != (0 as __size_t);
+fn cinuse(p: malloc_chunk) -> Bool           (p.head & (2 as __size_t)) != (0 as __size_t);
 //#define pinuse(p)           ((p)->head & PINUSE_BIT)
-fn pinuse(p: malloc_chunk) -> Boolean           (p.head & (1 as __size_t)) != (0 as __size_t);
+fn pinuse(p: malloc_chunk) -> Bool           (p.head & (1 as __size_t)) != (0 as __size_t);
 //#define flag4inuse(p)       ((p)->head & FLAG4_BIT)
-fn flag4inuse(p: malloc_chunk) -> Boolean       (p.head & (4 as __size_t)) != (0 as __size_t);
+fn flag4inuse(p: malloc_chunk) -> Bool       (p.head & (4 as __size_t)) != (0 as __size_t);
 //#define is_inuse(p)         (((p)->head & INUSE_BITS) != PINUSE_BIT)
-fn is_inuse(p: malloc_chunk) -> Boolean         (p.head & (3 as __size_t)) != (1 as __size_t);
+fn is_inuse(p: malloc_chunk) -> Bool         (p.head & (3 as __size_t)) != (1 as __size_t);
 //#define is_mmapped(p)       (((p)->head & INUSE_BITS) == 0)
 
 //#define chunksize(p)        ((p)->head & ~(FLAG_BITS))
@@ -465,7 +465,7 @@ fn prev_chunk(p: malloc_chunk) -> malloc_chunk ((p as __Ptr) - (p.prev_foot as _
 
 /* extract next chunk's pinuse bit */
 //#define next_pinuse(p)  ((next_chunk(p)->head) & PINUSE_BIT)
-fn next_pinuse(p: malloc_chunk) -> Boolean (next_chunk(p).head & (1 as __size_t)) != (0 as __size_t)
+fn next_pinuse(p: malloc_chunk) -> Bool (next_chunk(p).head & (1 as __size_t)) != (0 as __size_t)
 
 /* Get/set size at footer */
 //#define get_foot(p, s)  (((mchunkptr)((char*)(p) + (s)))->prev_foot)
@@ -496,7 +496,7 @@ fn set_free_with_pinuse(p: malloc_chunk, s: __size_t, n: malloc_chunk) -> Void {
 
 /* Return true if malloced space is not necessarily cleared */
 //#define calloc_must_clear(p) (1)
-//fn calloc_must_clear(p: malloc_chunk) -> Boolean true;
+//fn calloc_must_clear(p: malloc_chunk) -> Bool true;
 
 /* ---------------------- Overlaid data structures ----------------------- */
 
@@ -957,7 +957,7 @@ const gm: malloc_state = __static malloc_state{
 };
 //#define is_global(M)       ((M) == &_gm_)
 
-fn is_initialized(m: malloc_state) -> Boolean m.top != __Null;
+fn is_initialized(m: malloc_state) -> Bool m.top != __Null;
 
 /* page-align a size */
 //#define page_align(S) (((S) + (mparams.page_size - SIZE_T_ONE)) & ~(mparams.page_size - SIZE_T_ONE))
@@ -980,13 +980,13 @@ const TOP_FOOT_SIZE = align_offset_size_t(8 as __size_t) + pad_request(__sizeof(
 const SYS_ALLOC_PADDING = TOP_FOOT_SIZE + (8 as __size_t);
 
 //#define is_page_aligned(S) (((size_t)(S) & (mparams.page_size - SIZE_T_ONE)) == 0)
-fn is_page_aligned(s: __Ptr) -> Boolean ((s as __size_t) & (mparams.page_size - (1 as __size_t))) == (0 as __size_t);
+fn is_page_aligned(s: __Ptr) -> Bool ((s as __size_t) & (mparams.page_size - (1 as __size_t))) == (0 as __size_t);
 //#define is_granularity_aligned(S) (((size_t)(S) & (mparams.granularity - SIZE_T_ONE)) == 0)
-fn is_granularity_aligned(s: __Ptr) -> Boolean ((s as __size_t) & (mparams.granularity - (1 as __size_t))) == (0 as __size_t);
+fn is_granularity_aligned(s: __Ptr) -> Bool ((s as __size_t) & (mparams.granularity - (1 as __size_t))) == (0 as __size_t);
 
 /*  True if segment S holds address A */
 //#define segment_holds(S, A) ((char*)(A) >= S->base && (char*)(A) < S->base + S->size)
-fn segment_holds(s: malloc_segment, a: __Ptr) -> Boolean (a >= s.base && a < s.base + (s.size as __Ptr));
+fn segment_holds(s: malloc_segment, a: __Ptr) -> Bool (a >= s.base && a < s.base + (s.size as __Ptr));
 
 /* Return segment holding given address */
 /*
@@ -1006,7 +1006,7 @@ fn segment_holding(m: malloc_state, addr: __Ptr) -> __Option<malloc_segment> {
 
 /* Return true if segment contains a segment link */
 /*
-fn has_segment_link(m: malloc_state, ss: malloc_segment) -> Boolean {
+fn has_segment_link(m: malloc_state, ss: malloc_segment) -> Bool {
   let o_sp: __Option<malloc_segment> = m.seg;
   while(true) {
     let sp = option.__Option_unwrap<malloc_segment>(o_sp);
@@ -1052,7 +1052,7 @@ fn has_segment_link(m: malloc_state, ss: malloc_segment) -> Boolean {
 
 /* ---------------------------- Indexing Bins ---------------------------- */
 //#define is_small(s)         (((s) >> SMALLBIN_SHIFT) < NSMALLBINS)
-fn is_small(s: __size_t) -> Boolean s.shiftRight(3) < 32
+fn is_small(s: __size_t) -> Bool s.shiftRight(3) < 32
 
 //#define small_index(s)      (bindex_t)((s)  >> SMALLBIN_SHIFT)
 fn small_index(s: __size_t) -> u32 s.shiftRight(3)
@@ -1106,14 +1106,14 @@ fn idx2bit(i: u32) -> __size_t (1 as u32).shiftLeft(i)
 //#define clear_smallmap(M,i)     ((M)->smallmap &= ~idx2bit(i))
 fn clear_smallmap(m: malloc_state, i: u32) -> Void m.smallmap &= ~idx2bit(i)
 //#define smallmap_is_marked(M,i) ((M)->smallmap &   idx2bit(i))
-fn smallmap_is_marked(m: malloc_state, i: u32) -> Boolean (m.smallmap & idx2bit(i)) != 0
+fn smallmap_is_marked(m: malloc_state, i: u32) -> Bool (m.smallmap & idx2bit(i)) != 0
 
 //#define mark_treemap(M,i)       ((M)->treemap  |=  idx2bit(i))
 fn mark_treemap(m: malloc_state, i: u32) -> Void m.treemap  |=  idx2bit(i);
 //#define clear_treemap(M,i)      ((M)->treemap  &= ~idx2bit(i))
 fn clear_treemap(m: malloc_state, i: u32) -> Void m.treemap  &= ~idx2bit(i);
 //#define treemap_is_marked(M,i)  ((M)->treemap  &   idx2bit(i))
-fn treemap_is_marked(m: malloc_state, i: u32) -> Boolean (m.treemap  &   idx2bit(i)) != 0
+fn treemap_is_marked(m: malloc_state, i: u32) -> Bool (m.treemap  &   idx2bit(i)) != 0
 
 /* isolate the least set bit of a bitmap */
 //#define least_bit(x)         ((x) & -(x))
@@ -1163,19 +1163,19 @@ fn compute_bit2idx(x: __size_t) -> __size_t x.countTrailingZeros() as __size_t
 
 /* Check if address a is at least as high as any from MORECORE or MMAP */
 //#define ok_address(M, a) ((char*)(a) >= (M)->least_addr)
-fn ok_address(m: malloc_state, a: __Ptr) -> Boolean a >= m.least_addr;
+fn ok_address(m: malloc_state, a: __Ptr) -> Bool a >= m.least_addr;
 
 /* Check if address of next chunk n is higher than base chunk p */
 //#define ok_next(p, n)    ((char*)(p) < (char*)(n))
-fn ok_next(p: __Ptr, n: __Ptr) -> Boolean p < n;
+fn ok_next(p: __Ptr, n: __Ptr) -> Bool p < n;
 
 /* Check if p has inuse status */
 //#define ok_inuse(p)     is_inuse(p)
-fn ok_inuse(p: malloc_chunk) -> Boolean is_inuse(p);
+fn ok_inuse(p: malloc_chunk) -> Bool is_inuse(p);
 
 /* Check if p has its pinuse bit on */
 //#define ok_pinuse(p)     pinuse(p)
-fn ok_pinuse(p: malloc_chunk) -> Boolean pinuse(p); 
+fn ok_pinuse(p: malloc_chunk) -> Bool pinuse(p); 
 
 //#define ok_magic(M)      (1)
 
@@ -1204,7 +1204,7 @@ fn set_size_and_pinuse_of_inuse_chunk(m: malloc_state, p: malloc_chunk, s: __siz
 /* ---------------------------- setting mparams -------------------------- */
 
 /* Initialize mparams */
-fn init_mparams() -> Boolean {
+fn init_mparams() -> Bool {
   if (mparams.magic == 0) {
     let psize: __size_t = 65536  //malloc_getpagesize
     let gsize: __size_t = 65536  //((DEFAULT_GRANULARITY != 0)? DEFAULT_GRANULARITY : psize);
