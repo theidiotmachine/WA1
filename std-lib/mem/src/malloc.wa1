@@ -195,7 +195,7 @@ fn is_aligned(A: __Ptr) -> Bool (A & (7 as __Ptr)) == (0 as __Ptr);
 /* the number of bytes to offset an address to align it */
 //#define align_offset(A) ((((size_t)(A) & CHUNK_ALIGN_MASK) == 0)? 0 : ((MALLOC_ALIGNMENT - ((size_t)(A) & CHUNK_ALIGN_MASK)) & CHUNK_ALIGN_MASK))
 fn align_offset(A: __Ptr) -> __Ptr if((A & (7 as __Ptr)) == (0 as __Ptr)) 0 as __Ptr; else (((8 as __Ptr) - (A & (7 as __Ptr))) & (7 as __Ptr));
-fn align_offset_size_t(A: __size_t) -> __size_t if((A & 7) == 0) 0; else ((8 - (A & 7)) & 7);
+fn align_offset_size_t(A: __size_t) -> __size_t if((A & 7) == 0) 0; else (8 - (A & 7)) & 7
 
 /* MORECORE and MMAP must return MFAIL on failure */
 //#define MFAIL                ((Void*)(MAX_SIZE_T))
@@ -1393,3 +1393,161 @@ fn insert_large_chunk(m: malloc_state, x: malloc_tree_chunk, s: __size_t) -> Voi
   }
 }
 
+/*
+  Unlink steps:
+
+  1. If x is a chained node, unlink it from its same-sized fd/bk links
+     and choose its bk node as its replacement.
+  2. If x was the last node of its size, but not a leaf node, it must
+     be replaced with a leaf node (not merely one with an open left or
+     right), to make sure that lefts and rights of descendents
+     correspond properly to bit masks.  We use the rightmost descendent
+     of x.  We could use any other leaf, but this is easy to locate and
+     tends to counteract removal of leftmosts elsewhere, and so keeps
+     paths shorter than minimally guaranteed.  This doesn't loop much
+     because on average a node in a tree is near the bottom.
+  3. If x is the base of a chain (i.e., has parent links) relink
+     x's parent and children to x's replacement (or null if none).
+*/
+
+fn unlink_large_chunk(m: malloc_state, x: malloc_tree_chunk) -> Void {
+  let o_xp = x.parent
+  let o_r: __Option<malloc_tree_chunk> = __Null;
+  if (x.bk as __Ptr != x as __Ptr) {
+    let f = x.fd
+    let r = x.bk
+    o_r = __Some(r)
+    if (ok_address(m, f as __Ptr) && (f.bk as __Ptr == x as __Ptr) && (r.fd as __Ptr == x as __Ptr)) {
+      f.bk = r
+      r.fd = f
+    } else {
+      __trap()
+    }
+  } else {
+    let o_parent_pointer: __Option<malloc_tree_chunk> = __Null
+    let parent_child_index = -1
+    let loop = false
+    if(x.child_1 != __Null) {
+        o_parent_pointer = __Some(x)
+        o_r = x.child_1
+        parent_child_index = 1
+        loop = true
+    } else if(x.child_0 != __Null) {
+        o_parent_pointer = __Some(x)
+        o_r = x.child_0
+        parent_child_index = 0
+        loop = true
+    }  
+
+    while (loop && option.__Option_isSome(o_r)) {
+      let r = option.__Some_unwrap(o_r)
+      if(r.child_1 != __Null) {
+        o_parent_pointer = o_r
+        o_r = r.child_1
+        parent_child_index = 1
+        continue
+      }
+      if(r.child_0 != __Null) {
+        o_parent_pointer = o_r
+        o_r = r.child_0
+        parent_child_index = 0
+        continue
+      }
+      loop = false
+    }
+
+    if(option.__Option_isSome(o_parent_pointer)) {
+      let parent_pointer = option.__Some_unwrap(o_parent_pointer)
+      if (parent_child_index == 0)
+        parent_pointer.child_0 = __Null 
+      else 
+        parent_pointer.child_1 = __Null 
+    }
+  }
+  if (option.__Option_isSome(o_xp)) {
+    let xp = option.__Some_unwrap(o_xp)
+    let treebinIndex = x.index;
+    let treebin = m.treebins[treebinIndex]
+    if (__Some(x) == treebin) {
+      m.treebins[treebinIndex] = o_r
+      if (option.__Option_isNull(o_r))
+        clear_treemap(m, treebinIndex);
+    } else if (ok_address(m, xp as __Ptr)) {
+      if (xp.child_0 == __Some(x))
+        xp.child_0 = o_r
+      else
+        xp.child_1 = o_r
+    } else
+      __trap()
+    if (option.__Option_isSome(o_r)) {
+      let r = option.__Some_unwrap(o_r)
+      if (ok_address(m, r as __Ptr)) {
+        r.parent = o_xp
+        let o_c0 = x.child_0
+        if (option.__Option_isSome(o_c0)) {
+          let c0 = option.__Some_unwrap(o_c0)
+          if (ok_address(m, c0 as __Ptr)) {
+            r.child_0 = o_c0
+            c0.parent = o_r
+          } else
+            __trap()
+        }
+        let o_c1 = x.child_1
+        if (option.__Option_isSome(o_c1)) {
+          let c1 = option.__Some_unwrap(o_c1)
+          if (ok_address(m, c1 as __Ptr)) {
+            r.child_1 = o_c1
+            c1.parent = o_r
+          } else
+            __trap()
+        }
+      }
+    }
+  }
+}
+
+/* Relays to large vs small bin operations */
+
+fn insert_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
+  if (is_small(s)) insert_small_chunk(m, p, s)
+  else { let tp = p as __Ptr as malloc_tree_chunk; insert_large_chunk(m, tp, s); }
+}
+
+fn unlink_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
+  if (is_small(s)) unlink_small_chunk(m, p, s)
+  else { let tp = p as __Ptr as malloc_tree_chunk; unlink_large_chunk(m, tp); }
+}
+
+/* Relays to internal calls to malloc/free from realloc, memalign etc */
+
+//#define internal_malloc(m, b) dlmalloc(b)
+//#define internal_free(m, mem) dlfree(mem)
+
+/* -------------------------- mspace management -------------------------- */
+
+/* Initialize top chunk and its size */
+fn init_top(m: malloc_state, p: malloc_chunk, psize: __size_t ) -> Void {
+  /* Ensure alignment */
+  let offset = align_offset(chunk2mem(p));
+  p = ((p as __Ptr) + offset) as malloc_chunk;
+  psize -= offset as __size_t;
+
+  m.top = __Some(p);
+  m.topsize = psize;
+  p.head = psize | 1;
+  /* set size of fake trailing chunk holding overhead space only once */
+  let c = chunk_plus_offset(p, psize)
+  c.head = TOP_FOOT_SIZE;
+  m.trim_check = mparams.trim_threshold; /* reset on each update */
+}
+
+/* Initialize bins for a new mstate that is otherwise zeroed out */
+fn init_bins(m: malloc_state) -> Void {
+  /* Establish circular links for smallbins */
+  let i: u32 = 0;
+  while(i < 32) {
+    let bin = smallbin_at(m,i);
+    bin.fd = bin.bk = bin;
+    i += 1;
+  }
+}

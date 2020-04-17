@@ -906,6 +906,7 @@ impl<'a> Parser<'a> {
             (Type::Undeclared, None)
         } else {
             parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("Expecting '->' or '=>'")));
+            self.skip_next_item();
             (Type::Undeclared, None)
         };
 
