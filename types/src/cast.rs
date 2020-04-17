@@ -1,7 +1,7 @@
 use crate::generics::TypeConstraint;
 use crate::Type;
 use crate::FuncType;
-use crate::{Bittage, get_bittage, PTR_MAX, U_32_MAX};
+use crate::{Bittage, get_bittage, PTR_MAX, U_32_MAX, S_32_MAX, S_32_MIN, S_64_MAX, S_64_MIN, U_64_MAX, INT_U_64, INT_U_32, INT_S_64, INT_S_32};
 use std::cmp;
 use std::{i128};
 
@@ -15,6 +15,7 @@ pub mod prelude {
     pub use super::try_guard_downcast_expr;
     pub use super::GenericCast;
     pub use super::{try_generic_unwrap, try_generic_wrap};
+    pub use super::{upcast_from_literal};
 }
 
 /// Enum describing the types of implicit casts available
@@ -385,4 +386,37 @@ pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, prop
     }
 
     out
+}
+
+/// Used when we widen a variable. The problem here is if you have 
+/// ```
+/// let a = 3
+/// ```
+/// Then a will end up being of type Int<3,3> which is not much use to anyone. So we widen to the closest type available.
+pub fn upcast_from_literal(t: &Type) -> Type {
+    match t {
+        Type::Int(lower_from, upper_from) => {
+            if lower_from == upper_from {
+                if *upper_from > U_64_MAX {
+                    t.clone()
+                } else if *upper_from > S_64_MAX {
+                    INT_U_64
+                } else if *upper_from > U_32_MAX {
+                    INT_S_64
+                } else if *upper_from > S_32_MAX {
+                    INT_U_32
+                } else if *upper_from > S_32_MIN {
+                    INT_S_32
+                } else if *upper_from > S_64_MIN {
+                    INT_S_64
+                } else {
+                    t.clone()
+                }
+            } else {
+                t.clone()
+            }
+        },
+        Type::UnsafeSome(s) => Type::UnsafeOption(s.clone()),
+        _ => t.clone()
+    }
 }

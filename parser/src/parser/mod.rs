@@ -492,17 +492,11 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::Const => {
                     let const_decl = self.parse_variable_decl(true, true, true, fake_parser_func_context, parser_context);
-                    match const_decl {
-                        Ok(c) => init_body.push(c),
-                        Err(e) => parser_context.errors.push(e)
-                    };
+                    init_body.push(const_decl);
                 },
                 Keyword::Let => {
                     let var_decl = self.parse_variable_decl(false, true, true, fake_parser_func_context, parser_context);
-                    match var_decl {
-                        Ok(c) => init_body.push(c),
-                        Err(e) => parser_context.errors.push(e)
-                    };
+                    init_body.push(var_decl);
                 },
                 Keyword::UnsafeStruct => self.parse_struct_decl(true, parser_context),
                 Keyword::Alias => self.parse_alias(true, parser_context),
@@ -518,13 +512,14 @@ impl<'b> Parser<'b> {
         export: bool,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let mut loc = self.peek_next_location();
         self.skip_next_item();
 
-        let next = assert_next!(self, "Expecting variable name");
-        let id = assert_ident!(next, "Expecting variable name to be an identifier");
-
+        let next = self.peek_next_item();
+        let id = expect_ident!(next, parser_context, "Expecting variable name to be an identifier");
+        self.skip_next_item();
+        
         //check to see if this shadows a pre-existing global
         if global && parser_context.get_global_decl(&id.to_string()).is_some() {
             parser_context.push_err(Error::DuplicateGlobalVariable(loc.clone(), id.to_string().clone()));
@@ -540,16 +535,23 @@ impl<'b> Parser<'b> {
             Token::Punct(Punct::Equal) => {
                 Type::Undeclared
             },
-            _ => return self.unexpected_token_error(next.span, &next.location, "variable must have a type or a value")
+            _ => {
+                parser_context.push_err(self.unexpected_token_error_raw(next.span, &next.location, "variable must have a type or a value"));
+                Type::Undeclared
+            }
         };
 
-        assert_punct!(self, Punct::Equal);
+        expect_punct!(self, parser_context, Punct::Equal);
         let mut init = self.parse_expr(parser_func_context, parser_context);
         
         loc.end = init.loc.end.clone();
 
         if var_type.is_undeclared() {
-            var_type = init.r#type.clone();
+            if constant {
+                var_type = init.r#type.clone();
+            } else {
+                var_type = upcast_from_literal(&init.r#type);
+            }
         } else if var_type != init.r#type {
             let o_cast_expr = try_create_cast(&var_type, &init, CastType::Implicit);
             match o_cast_expr {
@@ -560,7 +562,7 @@ impl<'b> Parser<'b> {
             }
         }
 
-        assert_semicolon!(self);
+        expect_semicolon!(self, parser_context);
         let name = id.to_string();
         if !global {
             let internal_name = parser_context.get_unique_name(&name);
@@ -571,12 +573,12 @@ impl<'b> Parser<'b> {
                     var_type.clone(), closure_source: false, arg: false}
             );
             parser_func_context.local_var_map.insert(internal_name.clone(), idx as u32);
-            Ok(TypedExpr{expr: Expr::VariableInit{internal_name: internal_name.clone(), init: Box::new(Some(init))}, is_const: constant, r#type: Type::RealVoid, loc: loc})
+            TypedExpr{expr: Expr::VariableInit{internal_name: internal_name.clone(), init: Box::new(Some(init))}, is_const: constant, r#type: Type::RealVoid, loc: loc}
         } else {
             let decl = GlobalVariableDecl{name: name.clone(), r#type: var_type, constant, init: Some(init), export};
             parser_context.global_decls.push(decl.clone());
             
-            Ok(TypedExpr{expr: Expr::GlobalVariableDecl(Box::new(decl)), is_const: constant, r#type: Type::RealVoid, loc: loc})
+            TypedExpr{expr: Expr::GlobalVariableDecl(Box::new(decl)), is_const: constant, r#type: Type::RealVoid, loc: loc}
         }
     }
 
@@ -605,18 +607,11 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::Const => {
                     let const_decl = self.parse_variable_decl(true, true, false, fake_parser_func_context, parser_context);
-
-                    match const_decl {
-                        Ok(c) => init_body.push(c),
-                        Err(e) => parser_context.errors.push(e)
-                    };
+                    init_body.push(const_decl);
                 },
                 Keyword::Let => {
                     let var_decl = self.parse_variable_decl(false, true, false, fake_parser_func_context, parser_context);
-                    match var_decl {
-                        Ok(c) => init_body.push(c),
-                        Err(e) => parser_context.errors.push(e)
-                    };
+                    init_body.push(var_decl);
                 },
                 Keyword::UnsafeStruct => self.parse_struct_decl(false, parser_context),
                 Keyword::Alias => self.parse_alias(false, parser_context),
@@ -866,14 +861,10 @@ impl<'b> Parser<'b> {
         match &token {
             Token::Keyword(ref k) => match k {
                 Keyword::Const => {
-                    let te = self.parse_variable_decl(true, false, false, parser_func_context, parser_context);
-                    expect_ok!(te, parser_context, err_ret);
-                    te
+                    self.parse_variable_decl(true, false, false, parser_func_context, parser_context)
                 },
                 Keyword::Let => {
-                    let te = self.parse_variable_decl(false, false, false, parser_func_context, parser_context);
-                    expect_ok!(te, parser_context, err_ret);
-                    te
+                    self.parse_variable_decl(false, false, false, parser_func_context, parser_context)
                 },
                 Keyword::Return => {
                     let loc = next.location.clone();

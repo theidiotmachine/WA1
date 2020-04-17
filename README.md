@@ -139,11 +139,10 @@ You don't need 'em; a return character is equivalent. The things in javascript, 
 ## Types
 
 * Number - a 64 bit float.
-* Int - by default a 32 bit int. Will be auto-casted to number and bigint if needed. This means that an expression like this will actually be an int.
-```
-let a = 0
-```
-* Bool
+* Int - An integer. You specify bounds as generic arguments, so `Int<-2147483648, 2147483647>` is a 32 bit signed int. You should rarely need to do that, though; by default 
+you get a 32 bit signed, and most things will take that. The compiler tries to do most safe casting for you. This is... a tiny bit crazy and I may not keep it. Ints that stay
+within the safe 64 bit float range can be auto-casted to Number.
+* Bool - A boolean. 
 
 ### Casting
 
@@ -164,6 +163,12 @@ let clz = i.countLeadingZeros()
 let ctz = i.countTrailingZeros()
 let shl = i.shiftLeft(3)
 let shr = i.shiftRight(3)
+```
+
+### alias
+To create a tyoe alias, use the `alias` keyword. A type alias is what it sounds like, a different name for the same type, not a different type.
+```
+alias __size_t = Int<0, 4294967295>
 ```
 
 ## Functions
@@ -263,6 +268,7 @@ combine fat arrow with return, we try and guess based on all the returns in the 
 
 ## Type guards
 
+### User defined
 Inspired by TypeScript, WA1 contains [type guards](https://www.typescriptlang.org/docs/handbook/advanced-types.html). In TypeScript these are used to tell
 one JavaScript blob from another. Here, we use them to do limited scope down-casting. What this essentially means is this. Given a bit of code of the form:
 
@@ -275,6 +281,9 @@ if(isFoo(x)) {
 
 any local access of x in the block will automatically cast x to a Foo. This lasts until the block is existed, or x is assigned to. Creating a type guard
 function is an unsafe operation, so needs to be done in unsafe mode.
+
+### On integers
+Type guards also work on integers. Comparison operators will narrow integer ranges, casting if necessary.
 
 ## Linker
 
@@ -380,7 +389,7 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     1. [ ] Handle `never` properly - i.e. complain about dead code
     1. [x] do proper auto-widening. means you can widen anything to unknown. Needed for templates, I think. 
         1. [x] means subsuming the number code, which is probably a good thing
-    1. [ ] typescript-style const types, where a = 0 means typeof a == 0
+    1. [x] typescript-style const types, where a = 0 means typeof a == 0
     1. [x] move the bin op types from the ast
     1. [ ] clean up the cast code
 1. Expression based language
@@ -459,8 +468,8 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     1. [x] for funcs generate meta code to turn into templates
     1. [ ] for types generate meta types
     1. [x] implicit type args on instantiation
-    1. [ ] support fat arrow
-    1. [ ] partial instantiation - specifically `fn f1<T>(x: T) => {} fn f2<U>(x: U) => f1<U>(x)` currently generates an UnresolvedTypeArg error
+    1. [x] support fat arrow
+    1. [x] partial instantiation - specifically `fn f1<T>(x: T) => {} fn f2<U>(x: U) => f1<U>(x)` currently generates an UnresolvedTypeArg error
 1. containers
     1. [ ] arrays
         1. [ ] pass by value. increment rc on creation, if function contains a modification, not otherwise
@@ -479,8 +488,8 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
         1. [ ] import {a} as x from y => means will get x.a 
         1. [x] import {*} from y => means will get y.a, y.b, etc
         1. [ ] import {a} from y => means will get y.a
-    1. [ ] A stage 1 parser that will generate a list of file exports - globals, functions, types
-    1. [ ] A file format for that
+    1. [x] A stage 1 parser that will generate a list of file exports - globals, functions, types
+    1. [x] A file format for that
     1. [x] When import commands are run, load that, pull the imports in
     1. [ ] Functions to be inlined
 1. Linker
