@@ -184,6 +184,8 @@ impl<'b> Parser<'b> {
                     if !self.found_eof {
                         self.found_eof = true;
                         return;
+                    } else {
+                        return;
                     }
                 }
             }
@@ -662,6 +664,10 @@ impl<'b> Parser<'b> {
             }
 
             while !token.matches_punct(Punct::CloseBrace) {
+                if token.is_eof() {
+                    break;
+                }
+                
                 let stmt = self.parse_statement(parser_func_context, parser_context);
                 out.push(stmt);
                 
@@ -1250,6 +1256,10 @@ impl<'b> Parser<'b> {
             if lookahead_item.token.matches_punct(Punct::CloseParen) {
                 loc.extend_right(&lookahead_item.location);
                 self.skip_next_item();
+                break;
+            }
+
+            if lookahead_item.token.is_eof() {
                 break;
             }
 
