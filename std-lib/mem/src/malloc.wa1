@@ -1861,3 +1861,65 @@ fn sys_alloc(m: malloc_state, nb: __size_t) -> __Ptr {
 
   __trap()
 }
+
+/* -----------------------  system deallocation -------------------------- */
+
+/* Consolidate and bin a chunk. Differs from exported versions
+   of free mainly in that the chunk need not be marked as inuse.
+*/
+fn dispose_chunk(m: malloc_state, p: malloc_chunk, psize: __size_t) -> Void {
+  let next = chunk_plus_offset(p, psize)
+  if (!pinuse(p)) {
+    let prevsize = p.prev_foot
+    let prev = chunk_minus_offset(p, prevsize)
+    psize += prevsize
+    p = prev
+    if (ok_address(m, prev as __Ptr)) { /* consolidate backward */
+      if (p as __Ptr != m.dv as __Ptr) {
+        unlink_chunk(m, p, prevsize);
+      } else if ((next.head & 3) == 3) {
+        m.dvsize = psize
+        set_free_with_pinuse(p, psize, next)
+        return
+      }
+    } else {
+      __trap()
+      return;
+    }
+  }
+  if (ok_address(m, next as __Ptr)) {
+    if (!cinuse(next)) {  /* consolidate forward */
+      if (next as __Ptr == m.top as __Ptr) {
+        m.topsize += psize
+        let tsize = m.topsize
+        m.top = __Some(p)
+        p.head = tsize | 1
+        if (p as __Ptr == m.dv as __Ptr) {
+          m.dv = __Null
+          m.dvsize = 0
+        }
+        return
+      } else if (next as __Ptr == m.dv as __Ptr) {
+        m.dvsize += psize
+        let dsize = m.dvsize
+        m.dv = __Some(p)
+        set_size_and_pinuse_of_free_chunk(p, dsize)
+        return
+      } else {
+        let nsize = chunksize(next)
+        psize += nsize
+        unlink_chunk(m, next, nsize)
+        set_size_and_pinuse_of_free_chunk(p, psize)
+        if (p as __Ptr == m.dv as __Ptr) {
+          m.dvsize = psize
+          return
+        }
+      }
+    } else {
+      set_free_with_pinuse(p, psize, next)
+    }
+    insert_chunk(m, p, psize)
+  } else {
+    __trap()
+  }
+}
