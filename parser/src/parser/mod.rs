@@ -184,6 +184,8 @@ impl<'b> Parser<'b> {
                     if !self.found_eof {
                         self.found_eof = true;
                         return;
+                    } else {
+                        return;
                     }
                 }
             }
@@ -233,7 +235,7 @@ impl<'b> Parser<'b> {
                         return Ok(self.look_ahead.clone());
                     }
                 } else {
-                    return Err(Error::UnexpectedEoF("".to_string()));
+                    return Err(Error::UnexpectedEoF(self.look_ahead.location.clone(), "".to_string()));
                 }
             }
         }
@@ -662,6 +664,11 @@ impl<'b> Parser<'b> {
             }
 
             while !token.matches_punct(Punct::CloseBrace) {
+                if token.is_eof() {
+                    parser_context.push_err(Error::UnexpectedEoF(next.location.clone(), String::from("expecting '}'")));
+                    break;
+                }
+                
                 let stmt = self.parse_statement(parser_func_context, parser_context);
                 out.push(stmt);
                 
@@ -1250,6 +1257,10 @@ impl<'b> Parser<'b> {
             if lookahead_item.token.matches_punct(Punct::CloseParen) {
                 loc.extend_right(&lookahead_item.location);
                 self.skip_next_item();
+                break;
+            }
+
+            if lookahead_item.token.is_eof() {
                 break;
             }
 

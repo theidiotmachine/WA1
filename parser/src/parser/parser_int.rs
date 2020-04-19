@@ -44,6 +44,11 @@ lazy_static!{
         FuncType{out_type: INT_S_32, in_types: vec![INT_U_32]},
         FuncType{out_type: INT_S_64, in_types: vec![INT_U_64]},
     ];
+
+    static ref INT_UN_METHODS: Vec<FuncType> = vec![
+        FuncType{out_type: INT_U_32, in_types: vec![INT_U_32]},
+        FuncType{out_type: INT_U_64, in_types: vec![INT_U_64]},
+    ];
 }
 
 impl<'a> Parser<'a> {
@@ -60,6 +65,7 @@ impl<'a> Parser<'a> {
             "shiftLeft" => &INT_SL_METHODS,
             "shiftRight" => &INT_SR_METHODS,
             "truncateToSigned" => &INT_TTS_METHODS,
+            "unsignedNegate" => &INT_UN_METHODS,
             _ => {
                 parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), holding.r#type.clone(), id.clone()));
                 return TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), is_const: true, loc: loc.clone()};

@@ -7,26 +7,12 @@ alias u32 = Int<0, 4294967295>
 const PAGE_SIZE: __size_t = 65536
 
 //this is the pointer to the first available free address
-let memTop: __Ptr = (__memorySize() * PAGE_SIZE) as __Ptr
+//let memTop: __Ptr = (__memorySize() * PAGE_SIZE) as __Ptr
 
 //this is the pointer to the last available free address
-let memBottom: __Ptr = (__memorySize() * PAGE_SIZE) as __Ptr
-/*
-fn sbrk(sz: Int) -> __Ptr<0> {
-    if(memTop + sz > memBottom) {
-        const numPages = (sz / PAGE_SIZE) + 1;
-        const r = __memoryGrow(0, numPages);
-        if (r == -1) {
-            __trap();
-        }
-        memBottom = __memorySize() * PAGE_SIZE;
-    }
+//let memBottom: __Ptr = (__memorySize() * PAGE_SIZE) as __Ptr
 
-    const out = memTop;
-    memTop += sz;
-    out;
-}
-*/
+
 /*
   This is a version (aka dlmalloc) of malloc/free/realloc written by
   Doug Lea and released to the public domain, as explained at
@@ -117,6 +103,12 @@ MORECORE_CANNOT_TRIM      default: NOT defined
   arguments.
 
 NO_SEGMENT_TRAVERSAL: 0
+NO_SEGMENT_TRAVERSAL       default: 0
+  If non-zero, suppresses traversals of memory segments
+  returned by either MORECORE or CALL_MMAP. This disables
+  merging of segments that are contiguous, and selectively
+  releasing them to the OS if unused, but bounds execution times.
+
 HAVE_MMAP: 0
 HAVE_MREMAP: 0
 MMAP_CLEARS: 0
@@ -160,6 +152,7 @@ DEFAULT_MMAP_THRESHOLD       default: 256K
 MAX_RELEASE_CHECK_RATE: MAX_SIZE_T (*)
 */
 
+//FIXME64BIT
 const MAX_SIZE_T: __size_t = 0xffffffff as __size_t;
 
 __struct mallinfo {
@@ -172,19 +165,21 @@ __struct mallinfo {
 }
 
 /* The byte and bit size of a size_t */
-//const SIZE_T_SIZE: __size_t = 4;
-//const SIZE_T_BITSIZE: __size_t = 32;
+//FIXME64BIT
+const SIZE_T_SIZE: __size_t = 4;
+const SIZE_T_BITSIZE: __size_t = 32;
 
 /* Some constants coerced to size_t */
-/* Annoying but necessary to aVoid errors on some platforms */
+/* Annoying but necessary to avoid errors on some platforms */
 //const SIZE_T_ZERO: __size_t =          0;
 //const SIZE_T_ONE: __Ptr<0> =           1;
 //const SIZE_T_TWO: __Ptr<0> =           2;
 //const SIZE_T_FOUR: __Ptr<0> =          4;
-//const TWO_SIZE_T_SIZES: __Ptr<0> =     8;
+const TWO_SIZE_T_SIZES: __size_t =        SIZE_T_SIZE * 2
 //const FOUR_SIZE_T_SIZES: __Ptr<0> =    16;
 //const SIX_SIZE_T_SIZES: __Ptr<0> =     24;
-//const HALF_MAX_SIZE_T: __Ptr<0> =      0xffffffff / 2;
+//FIXME64BIT
+const HALF_MAX_SIZE_T: __size_t =         2147483647 
 
 /* The bit mask value corresponding to MALLOC_ALIGNMENT */
 //manually inlined - const CHUNK_ALIGN_MASK: __size_t = 7;
@@ -200,6 +195,7 @@ fn align_offset_size_t(A: __size_t) -> __size_t if((A & 7) == 0) 0; else (8 - (A
 /* MORECORE and MMAP must return MFAIL on failure */
 //#define MFAIL                ((Void*)(MAX_SIZE_T))
 //#define CMFAIL               ((char*)(MFAIL)) /* defined for convenience */
+const CMFAIL: __Ptr = MAX_SIZE_T as __Ptr
 
 //#define CALL_MORECORE(S)    MORECORE_DEFAULT(S)
 
@@ -381,30 +377,32 @@ typedef unsigned int flag_t;           // The type of various bit flag sets
 
 const MCHUNK_SIZE: __size_t         = __sizeof(malloc_chunk);
 //#define CHUNK_OVERHEAD      (SIZE_T_SIZE) = 4
+const CHUNK_OVERHEAD: __size_t = SIZE_T_SIZE
 
 /* The smallest size we can malloc is an aligned minimal chunk */
 //#define MIN_CHUNK_SIZE ((MCHUNK_SIZE + CHUNK_ALIGN_MASK) & ~CHUNK_ALIGN_MASK)
-const MIN_CHUNK_SIZE: __size_t = ((MCHUNK_SIZE + 7) & ~(7 as __size_t));
+const MIN_CHUNK_SIZE: __size_t = (MCHUNK_SIZE + 7) & ~(7 as __size_t)
 
 /* conversion from malloc headers to user pointers, and back */
 //#define chunk2mem(p)        ((Void*)((char*)(p)       + TWO_SIZE_T_SIZES))
-fn chunk2mem(p: malloc_chunk) -> __Ptr (p as __Ptr) + (8 as __Ptr)
+fn chunk2mem(p: malloc_chunk) -> __Ptr (p as __Ptr) + (TWO_SIZE_T_SIZES as __Ptr)
+fn chunk2memPtr(p: __Ptr) -> __Ptr p + (TWO_SIZE_T_SIZES as __Ptr)
 //#define mem2chunk(mem)      ((mchunkptr)((char*)(mem) - TWO_SIZE_T_SIZES))
-fn mem2chunk(mem: __Ptr) -> malloc_chunk (mem - (8 as __Ptr)) as malloc_chunk;
+fn mem2chunk(mem: __Ptr) -> malloc_chunk (mem - (TWO_SIZE_T_SIZES as __Ptr)) as malloc_chunk
 
 /* chunk associated with aligned address A */
 //#define align_as_chunk(A)   (mchunkptr)((A) + align_offset(chunk2mem(A)))
-fn align_as_chunk(A: __Ptr) -> malloc_chunk  (A + align_offset(A + (8 as __Ptr))) as malloc_chunk;
+fn align_as_chunk(A: __Ptr) -> malloc_chunk  (A + align_offset(chunk2memPtr(A))) as malloc_chunk
 
 /* Bounds on request (not chunk) sizes. */
 /* WA1 - I kinda hard coded this based on what I know of JS. We will blow up before this anyway FIXME64BIT*/
 const MAX_REQUEST  = 1073741824 as __size_t;
 //#define MIN_REQUEST         (MIN_CHUNK_SIZE - CHUNK_OVERHEAD - SIZE_T_ONE)
-const MIN_REQUEST  = (MIN_CHUNK_SIZE - (5 as __size_t));
+const MIN_REQUEST  = (MIN_CHUNK_SIZE - CHUNK_OVERHEAD - 1);
 
 /* pad request bytes into a usable size */
 //#define pad_request(req) (((req) + CHUNK_OVERHEAD + CHUNK_ALIGN_MASK) & ~CHUNK_ALIGN_MASK)
-fn pad_request(req: __size_t) -> __size_t   ((req + (11 as __size_t)) & ~(7 as __size_t));
+fn pad_request(req: __size_t) -> __size_t   (req + CHUNK_OVERHEAD + 7) & ~(7 as __size_t)
 
 /* pad request, checking for minimum (but not maximum) */
 fn request2size(req: __size_t) -> __size_t if(req < MIN_REQUEST) MIN_CHUNK_SIZE; else pad_request(req);
@@ -427,15 +425,16 @@ fn request2size(req: __size_t) -> __size_t if(req < MIN_REQUEST) MIN_CHUNK_SIZE;
 
 /* Head value for fenceposts */
 //#define FENCEPOST_HEAD      (INUSE_BITS|SIZE_T_SIZE) //7
+const FENCEPOST_HEAD: __size_t      = 3|SIZE_T_SIZE
 
 /* extraction of fields from head words */
 /* WA1 - better get these guys inlined! */
 //#define cinuse(p)           ((p)->head & CINUSE_BIT)
-fn cinuse(p: malloc_chunk) -> Bool           (p.head & (2 as __size_t)) != (0 as __size_t);
+fn cinuse(p: malloc_chunk) -> Bool           (p.head & (2 as __size_t)) != 0;
 //#define pinuse(p)           ((p)->head & PINUSE_BIT)
-fn pinuse(p: malloc_chunk) -> Bool           (p.head & (1 as __size_t)) != (0 as __size_t);
+fn pinuse(p: malloc_chunk) -> Bool           (p.head & (1 as __size_t)) != 0;
 //#define flag4inuse(p)       ((p)->head & FLAG4_BIT)
-fn flag4inuse(p: malloc_chunk) -> Bool       (p.head & (4 as __size_t)) != (0 as __size_t);
+fn flag4inuse(p: malloc_chunk) -> Bool       (p.head & (4 as __size_t)) != 0;
 //#define is_inuse(p)         (((p)->head & INUSE_BITS) != PINUSE_BIT)
 fn is_inuse(p: malloc_chunk) -> Bool         (p.head & (3 as __size_t)) != (1 as __size_t);
 //#define is_mmapped(p)       (((p)->head & INUSE_BITS) == 0)
@@ -465,7 +464,7 @@ fn prev_chunk(p: malloc_chunk) -> malloc_chunk ((p as __Ptr) - (p.prev_foot as _
 
 /* extract next chunk's pinuse bit */
 //#define next_pinuse(p)  ((next_chunk(p)->head) & PINUSE_BIT)
-fn next_pinuse(p: malloc_chunk) -> Bool (next_chunk(p).head & (1 as __size_t)) != (0 as __size_t)
+fn next_pinuse(p: malloc_chunk) -> Bool (next_chunk(p).head & (1 as __size_t)) != 0
 
 /* Get/set size at footer */
 //#define get_foot(p, s)  (((mchunkptr)((char*)(p) + (s)))->prev_foot)
@@ -789,7 +788,7 @@ __struct malloc_state {
   dv:               __Option<malloc_chunk>;
   top:              __Option<malloc_chunk>;
   trim_check:       __size_t;
-  release_checks:   __size_t;
+  //release_checks:   __size_t;
   magic:            __size_t;
   smallbins:        __Array<malloc_chunk>; //mchunkptr  smallbins[(NSMALLBINS+1)*2];
   treebins:         __Array<__Option<malloc_tree_chunk>>; //tbinptr    treebins[NTREEBINS];
@@ -797,7 +796,7 @@ __struct malloc_state {
   max_footprint:    __size_t;
   footprint_limit:  __size_t; /* zero means no limit */
   mflags:           u32;
-  seg:              __Option<malloc_segment>;
+  seg:              malloc_segment;
   extp:             __Ptr;      /* Unused but available for extensions */
   exts:             __size_t;
 }
@@ -822,122 +821,122 @@ __struct malloc_params {
 }
 
 let mparams: malloc_params = __static malloc_params {
-  magic: 0 as __size_t, 
-  page_size: 0 as __size_t, 
-  granularity: 0 as __size_t, 
-  mmap_threshold: 0 as __size_t, 
-  trim_threshold: 0 as __size_t, 
-  default_mflags: 0 as __size_t
+  magic: 0, 
+  page_size: 0, 
+  granularity: 0, 
+  mmap_threshold: 0, 
+  trim_threshold: 0, 
+  default_mflags: 0
 };
 
 /* The global malloc_state used for all non-"mspace" calls */
 const gm: malloc_state = __static malloc_state{
-  smallmap:         (0 as __size_t),
-  treemap:          (0 as __size_t),
-  dvsize:           (0 as __size_t),
-  topsize:          (0 as __size_t),
+  smallmap:         0,
+  treemap:          0,
+  dvsize:           0,
+  topsize:          0,
   least_addr:       (0 as __Ptr),
   dv:               __Null,
   top:              __Null,
-  trim_check:       (0 as __size_t),
-  release_checks:   (0 as __size_t),
-  magic:            (0 as __size_t),
+  trim_check:       0,
+  //release_checks:   0,
+  magic:            0,
   //32 lots of malloc_chunk...
   smallbins:        __static __Array<malloc_chunk> [
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
-    __static malloc_chunk{prev_foot: 0 as __size_t, head: 0 as __size_t,
+    __static malloc_chunk{prev_foot: 0, head: 0,
       fd: 0 as __Ptr as malloc_chunk, bk: 0 as __Ptr as malloc_chunk
     },
   ],
@@ -947,13 +946,17 @@ const gm: malloc_state = __static malloc_state{
       __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, __Null, 
       __Null, __Null
   ],
-  footprint:        (0 as __size_t),
-  max_footprint:    (0 as __size_t),
-  footprint_limit:  (0 as __size_t),
-  mflags:           (0 as __size_t),
-  seg:              __Null,
+  footprint:        0,
+  max_footprint:    0,
+  footprint_limit:  0,
+  mflags:           0,
+  seg:              __static malloc_segment{
+    base: 0 as __Ptr,
+    size: 0,
+    next: __Null,
+  },
   extp:             (0 as __Ptr),
-  exts:             (0 as __size_t),
+  exts:             0,
 };
 //#define is_global(M)       ((M) == &_gm_)
 
@@ -961,11 +964,11 @@ fn is_initialized(m: malloc_state) -> Bool m.top != __Null;
 
 /* page-align a size */
 //#define page_align(S) (((S) + (mparams.page_size - SIZE_T_ONE)) & ~(mparams.page_size - SIZE_T_ONE))
-fn page_align(s: __size_t) -> __size_t ((s + (mparams.page_size - (1 as __size_t))) & ~(mparams.page_size - (1 as __size_t)));
+fn page_align(s: __size_t) -> __size_t ((s + (mparams.page_size - 1)) & ~(mparams.page_size - 1));
 
 /* granularity-align a size */
 //#define granularity_align(S)  (((S) + (mparams.granularity - SIZE_T_ONE)) & ~(mparams.granularity - SIZE_T_ONE))
-fn granularity_align(s: __size_t) -> __size_t ((s + (mparams.granularity - (1 as __size_t))) & ~(mparams.granularity - (1 as __size_t)));
+fn granularity_align(s: __size_t) -> __size_t ((s + (mparams.granularity - 1)) & ~(mparams.granularity - 1));
 
 /*
   TOP_FOOT_SIZE is padding at the end of a segment, including space
@@ -973,28 +976,27 @@ fn granularity_align(s: __size_t) -> __size_t ((s + (mparams.granularity - (1 as
   noncontiguous segments are added.
 */
 //#define TOP_FOOT_SIZE (align_offset(chunk2mem(0))+pad_request(sizeof(struct malloc_segment))+MIN_CHUNK_SIZE);
-const TOP_FOOT_SIZE = align_offset_size_t(8 as __size_t) + pad_request(__sizeof(malloc_segment)) + MIN_CHUNK_SIZE;
+const TOP_FOOT_SIZE = align_offset_size_t(TWO_SIZE_T_SIZES) + pad_request(__sizeof(malloc_segment)) + MIN_CHUNK_SIZE;
 
 /* For sys_alloc, enough padding to ensure can malloc request on success */
 //#define SYS_ALLOC_PADDING (TOP_FOOT_SIZE + MALLOC_ALIGNMENT)
 const SYS_ALLOC_PADDING = TOP_FOOT_SIZE + (8 as __size_t);
 
 //#define is_page_aligned(S) (((size_t)(S) & (mparams.page_size - SIZE_T_ONE)) == 0)
-fn is_page_aligned(s: __Ptr) -> Bool ((s as __size_t) & (mparams.page_size - (1 as __size_t))) == (0 as __size_t);
+fn is_page_aligned(s: __Ptr) -> Bool ((s as __size_t) & (mparams.page_size - (1 as __size_t))) == 0;
 //#define is_granularity_aligned(S) (((size_t)(S) & (mparams.granularity - SIZE_T_ONE)) == 0)
-fn is_granularity_aligned(s: __Ptr) -> Bool ((s as __size_t) & (mparams.granularity - (1 as __size_t))) == (0 as __size_t);
+fn is_granularity_aligned(s: __Ptr) -> Bool ((s as __size_t) & (mparams.granularity - (1 as __size_t))) == 0;
 
 /*  True if segment S holds address A */
 //#define segment_holds(S, A) ((char*)(A) >= S->base && (char*)(A) < S->base + S->size)
 fn segment_holds(s: malloc_segment, a: __Ptr) -> Bool (a >= s.base && a < s.base + (s.size as __Ptr));
 
 /* Return segment holding given address */
-/*
 fn segment_holding(m: malloc_state, addr: __Ptr) -> __Option<malloc_segment> {
-  let o_sp: __Option<malloc_segment> = m.seg;
+  let o_sp: __Option<malloc_segment> = __Some(m.seg);
   while(true) {
     let sp = option.__Option_unwrap<malloc_segment>(o_sp);
-    if (addr >= sp.base && addr < sp.base + sp.size)
+    if (addr >= sp.base && addr < sp.base + (sp.size as __Ptr))
       return __Some(sp);
     o_sp = sp.next;
     if (o_sp == __Null)
@@ -1002,7 +1004,6 @@ fn segment_holding(m: malloc_state, addr: __Ptr) -> __Option<malloc_segment> {
   }
   return __Null;
 }
-*/
 
 /* Return true if segment contains a segment link */
 /*
@@ -1060,7 +1061,7 @@ fn small_index(s: __size_t) -> u32 s.shiftRight(3)
 //#define small_index2size(i) ((i)  << SMALLBIN_SHIFT)
 fn small_index2size(i: u32) -> __size_t {
   let out = i.shiftLeft(3)
-  out as __size_t
+  out
 }
 
 //#define MIN_SMALL_INDEX     (small_index(MIN_CHUNK_SIZE))
@@ -1075,13 +1076,13 @@ fn smallbin_at(m: malloc_state, i: u32) -> malloc_chunk m.smallbins[i];
 //#define compute_tree_index(S, I)\
 fn compute_tree_index(s: __size_t) -> u32 {
   const x: __size_t = s.shiftRight(8);
-  if (x == (0 as __size_t))
+  if (x == 0)
     0
   else if (x > (0xFFFF as __size_t))
     31
   else {
     const k: u32 = 31 - (x.countLeadingZeros() as u32)
-    (k.shiftLeft(1) as __size_t) + (s.shiftRight(k + 7) & 1)
+    k.shiftLeft(1) + (s.shiftRight(k + 7) & 1)
   }
 }
 
@@ -1117,15 +1118,15 @@ fn treemap_is_marked(m: malloc_state, i: u32) -> Bool (m.treemap  &   idx2bit(i)
 
 /* isolate the least set bit of a bitmap */
 //#define least_bit(x)         ((x) & -(x))
-fn least_bit(x: __size_t) -> __size_t x & -x
+fn least_bit(x: __size_t) -> __size_t x & x.unsignedNegate()
 
 /* mask with all bits to left of least bit of x on */
 //#define left_bits(x)         ((x<<1) | -(x<<1))
-fn left_bits(x: __size_t) -> __size_t x.shiftLeft(1) | -(x.shiftLeft(1))
+fn left_bits(x: __size_t) -> __size_t x.shiftLeft(1) | x.shiftLeft(1).unsignedNegate()
 
 /* mask with all bits to left of or equal to least bit of x on */
 //#define same_or_left_bits(x) ((x) | -(x))
-fn same_or_left_bits(x: __size_t) -> __size_t x | -x
+fn same_or_left_bits(x: __size_t) -> __size_t x | x.unsignedNegate()
 
 /* index corresponding to given bit. Use x86 asm if possible */
 //#define compute_bit2idx(X, I) { unsigned int J; J = __builtin_ctz(X); I = (bindex_t)J; }
@@ -1225,7 +1226,7 @@ fn init_mparams() -> Bool {
 }
 
 /* Ensure mparams initialized */
-fn ensure_initialization() -> Void { (mparams.magic != (0 as __size_t)) || init_mparams(); }
+fn ensure_initialization() -> Void { (mparams.magic != 0) || init_mparams(); }
 
 /* ------------------------- Debugging Support --------------------------- */
 // *_* not implemented at present
@@ -1243,16 +1244,16 @@ fn internal_mallinfo(m: malloc_state, nm: mallinfo) -> Void {
     let sum = mfree;
 
     //FIXME option handling
-    let o_s = m.seg;
+    let o_s = __Some(m.seg)
     while (option.__Option_isSome(o_s)) {
       let s = option.__Some_unwrap<malloc_segment>(o_s);
       let q = align_as_chunk(s.base);
-      while (segment_holds(s, q as __Ptr) && __Some(q) != m.top && q.head != (7 as __size_t)) {
+      while (segment_holds(s, q as __Ptr) && __Some(q) != m.top && q.head != FENCEPOST_HEAD) {
         let sz = chunksize(q);
         sum += sz;
         if (!is_inuse(q)) {
           mfree += sz;
-          nfree+=(1 as __size_t);
+          nfree+= 1
         }
         q = next_chunk(q);
       }
@@ -1355,7 +1356,7 @@ fn insert_large_chunk(m: malloc_state, x: malloc_tree_chunk, s: __size_t) -> Voi
     mark_treemap(m, i)
     m.treebins[i] = __Some(x)
     //wow
-    x.parent = __Some(0xffffffff as __size_t as __Ptr as malloc_tree_chunk)
+    x.parent = __Some(MAX_SIZE_T as __Ptr as malloc_tree_chunk)
     x.fd = x
     x.bk = x
   } else {
@@ -1550,4 +1551,313 @@ fn init_bins(m: malloc_state) -> Void {
     bin.fd = bin.bk = bin;
     i += 1;
   }
+}
+
+/* Allocate chunk and prepend remainder with chunk in successor base. */
+fn prepend_alloc(m: malloc_state, newbase: __Ptr, oldbase: __Ptr, nb: __size_t) -> __Ptr {
+  let p = align_as_chunk(newbase)
+  let oldfirst = align_as_chunk(oldbase)
+  let psize: __size_t = ((oldfirst as __Ptr) - (p as __Ptr)) as __size_t
+  let q = chunk_plus_offset(p, nb)
+  let qsize = psize - nb;
+  set_size_and_pinuse_of_inuse_chunk(m, p, nb)
+
+  //assert((char*)oldfirst > (char*)q);
+  //assert(pinuse(oldfirst));
+  //assert(qsize >= MIN_CHUNK_SIZE);
+
+  /* consolidate remainder with first chunk of old base */
+  if (__Some(oldfirst) == m.top) {
+    m.topsize += qsize
+    const tsize = m.topsize
+    m.top = __Some(q)
+    q.head = tsize | 1
+    //check_top_chunk(m, q)
+  } else if (__Some(oldfirst) == m.dv) {
+    m.dvsize += qsize
+    const dsize = m.dvsize
+    m.dv = __Some(q)
+    set_size_and_pinuse_of_free_chunk(q, dsize)
+  } else {
+    if (!is_inuse(oldfirst)) {
+      const nsize = chunksize(oldfirst)
+      unlink_chunk(m, oldfirst, nsize)
+      oldfirst = chunk_plus_offset(oldfirst, nsize)
+      qsize += nsize
+    }
+    set_free_with_pinuse(q, qsize, oldfirst)
+    insert_chunk(m, q, qsize)
+    //check_free_chunk(m, q)
+  }
+
+  //check_malloced_chunk(m, chunk2mem(p), nb)
+  chunk2mem(p)
+}
+
+/* Add a segment to hold a new noncontiguous region */
+fn add_segment(m: malloc_state, tbase: __Ptr, tsize: __size_t) -> Void {
+  /*
+  // Determine locations and sizes of segment, fenceposts, old top 
+  let old_top = m.top as __Ptr
+  let o_oldsp = segment_holding(m, old_top)
+  let oldsp = option.__Option_unwrap(o_oldsp)
+  let old_end = oldsp.base + (oldsp.size as __Ptr)
+  let ssize = pad_request(__sizeof(malloc_segment))
+  let rawsp = old_end - ((ssize + 16 + 7) as __Ptr)
+  let offset = align_offset(chunk2memPtr(rawsp))
+  let asp = rawsp + offset
+  let csp = if (asp < (old_top + (MIN_CHUNK_SIZE as __Ptr))) old_top; else asp
+  let sp: malloc_chunk = csp as malloc_chunk
+  let ss: malloc_segment = chunk2mem(sp) as malloc_segment
+  let tnext = chunk_plus_offset(sp, ssize)
+  let p = tnext
+  let nfences = 0
+
+  // reset top to new space
+  init_top(m, tbase as malloc_chunk, tsize - TOP_FOOT_SIZE);
+
+  // Set up segment record
+  //assert(is_aligned(ss));
+  set_size_and_pinuse_of_inuse_chunk(m, sp, ssize);
+  *ss = m->seg; // Push current record
+  m.seg.base = tbase;
+  m.seg.size = tsize;
+  m.seg.next = __Some(ss)
+
+  // Insert trailing fenceposts
+  while(true) {
+    let nextp = chunk_plus_offset(p, SIZE_T_SIZE)
+    p.head = FENCEPOST_HEAD
+    nfences += 1
+    
+    //if ((char*)(&(nextp->head)) < old_end)
+    if(chunk_plus_offset(p, SIZE_T_SIZE * 2) as __Ptr < old_end)
+      p = nextp
+    else
+      break
+  }
+  //assert(nfences >= 2);
+
+  // Insert the rest of old top into a bin as an ordinary free chunk
+  if (csp != old_top) {
+    let q = old_top as malloc_chunk
+    let psize = (csp - old_top) as __size_t
+    let tn = chunk_plus_offset(q, psize)
+    set_free_with_pinuse(q, psize, tn)
+    insert_chunk(m, q, psize)
+  }
+
+  //check_top_chunk(m, m->top);
+  */
+  __trap()
+}
+
+/* -------------------- Alternative MORECORE functions ------------------- */
+
+/*
+  Guidelines for creating a custom version of MORECORE:
+
+  * For best performance, MORECORE should allocate in multiples of pagesize.
+  * MORECORE may allocate more memory than requested. (Or even less,
+      but this will usually result in a malloc failure.)
+  * MORECORE must not allocate memory when given argument zero, but
+      instead return one past the end address of memory from previous
+      nonzero call.
+  * For best performance, consecutive calls to MORECORE with positive
+      arguments should return increasing addresses, indicating that
+      space has been contiguously extended.
+  * Even though consecutive calls to MORECORE need not return contiguous
+      addresses, it must be OK for malloc'ed chunks to span multiple
+      regions in those cases where they do happen to be contiguous.
+  * MORECORE need not handle negative arguments -- it may instead
+      just return MFAIL when given negative arguments.
+      Negative arguments are always multiples of pagesize. MORECORE
+      must not misinterpret negative args as large positive unsigned
+      args. You can suppress all such calls from even occurring by defining
+      MORECORE_CANNOT_TRIM,
+
+*/
+
+fn CALL_MORECORE(sz: Int) -> __Ptr {
+  if (sz > 0) {
+    const numPages = (sz / PAGE_SIZE) + 1;
+    const r = __memoryGrow(0, numPages);
+    if (r == 0xffffffff) {
+      __trap();
+    }
+    r as __Ptr
+  } else if (sz < 0) {
+    CMFAIL
+  } else {
+    ((__memorySize() * PAGE_SIZE) + 1) as __Ptr
+  }
+}
+/*
+    if(memTop + sz > memBottom) {
+        const numPages = (sz / PAGE_SIZE) + 1;
+        const r = __memoryGrow(0, numPages);
+        if (r == -1) {
+            __trap();
+        }
+        memBottom = __memorySize() * PAGE_SIZE;
+    }
+
+    const out = memTop;
+    memTop += sz;
+    out;
+}
+*/
+
+/* -------------------------- System allocation -------------------------- */
+
+/* Get memory from system using MORECORE or MMAP */
+fn sys_alloc(m: malloc_state, nb: __size_t) -> __Ptr {
+  let tbase = CMFAIL
+  let tsize: __size_t = 0
+
+  ensure_initialization();
+
+  /* allocation size */
+  let asize = granularity_align(nb + SYS_ALLOC_PADDING)
+
+  if (asize <= nb)
+    __trap() /* wraparound */
+  
+  /*
+    Try getting memory in any of three ways (in most-preferred to
+    least-preferred order):
+    1. A call to MORECORE that can normally contiguously extend memory.
+       (disabled if not MORECORE_CONTIGUOUS or not HAVE_MORECORE or
+       or main space is mmapped or a previous contiguous call failed)
+    2. A call to MMAP new space (disabled if not HAVE_MMAP).
+       Note that under the default settings, if MORECORE is unable to
+       fulfill a request, and HAVE_MMAP is true, then mmap is
+       used as a noncontiguous system allocator. This is a useful backup
+       strategy for systems with holes in address spaces -- in this case
+       sbrk cannot contiguously expand the heap, but mmap may be able to
+       find space. *_* not used
+    3. A call to MORECORE that cannot usually contiguously extend memory.
+       (disabled if not HAVE_MORECORE) *_* not used
+
+   In all cases, we need to request enough bytes from system to ensure
+   we can malloc nb bytes upon success, so pad with enough space for
+   top_foot, plus alignment-pad to make sure we don't lose bytes if
+   not on boundary, and round this up to a granularity unit.
+  */
+
+  let br = CMFAIL
+  let ssize = asize // sbrk call size
+  let o_ss = if(m.top == __Null) __Null; else segment_holding(m, m.top as __Ptr)
+  //ACQUIRE_MALLOC_GLOBAL_LOCK();
+
+  if (option.__Option_isNull(o_ss)) {  // First time through or recovery
+    let base = CALL_MORECORE(0)
+    if (base != CMFAIL) {
+      // Adjust to end on a page boundary
+      if (!is_page_aligned(base))
+        ssize += (page_align(base as __size_t) - (base as __size_t))
+      let fp = m.footprint + ssize // recheck limits
+      if (ssize > nb 
+        && ssize < 2147483647 // HALF_MAX_SIZE_T - inlined to make the type guard work FIXME64BIT
+        && (m.footprint_limit == 0 || (fp > m.footprint && fp <= m.footprint_limit))
+      ) {
+        br = CALL_MORECORE(ssize)
+        if (br == base) {
+          tbase = base
+          tsize = ssize
+        }
+      }
+    }
+  } else {
+    let ss = option.__Some_unwrap(o_ss)
+    // Subtract out existing available top space from MORECORE request.
+    ssize = granularity_align(nb - m.topsize + SYS_ALLOC_PADDING)
+    // Use mem here only if it did continuously extend old space
+    if (ssize < 2147483647 // HALF_MAX_SIZE_T - inlined to make the type guard work FIXME64BIT
+    ) {
+      br = CALL_MORECORE(ssize)
+      if (br == (ss.base+(ss.size as __Ptr))) {
+        tbase = br;
+        tsize = ssize;
+      }
+    }
+  }
+
+  if (tbase == CMFAIL) {    // Cope with partial failure
+    if (br != CMFAIL) {    // Try to use/extend the space we did get
+      if (ssize < 2147483647 // HALF_MAX_SIZE_T - inlined to make the type guard work FIXME64BIT
+        && ssize < nb + SYS_ALLOC_PADDING) {
+        let esize = granularity_align(nb + SYS_ALLOC_PADDING - ssize);
+        if (
+          esize < 2147483647 // HALF_MAX_SIZE_T - inlined to make the type guard work FIXME64BIT
+          ) {
+          let end = CALL_MORECORE(esize)
+          if (end != CMFAIL)
+            ssize += esize
+          else {            // Can't use; try to release
+            //CALL_MORECORE(-ssize)
+            br = CMFAIL
+          }
+        }
+      }
+    }
+    if (br != CMFAIL) {    // Use the space we did get
+      tbase = br
+      tsize = ssize
+    } else
+      __trap() 
+  }
+  //RELEASE_MALLOC_GLOBAL_LOCK();
+
+  if (tbase != CMFAIL) {
+    m.footprint += tsize
+    if (m.footprint > m.max_footprint)
+      m.max_footprint = m.footprint;
+
+    if (!is_initialized(m)) { 
+      // first-time initialization
+      if (m.least_addr == (0 as __Ptr) || tbase < m.least_addr)
+        m.least_addr = tbase
+      m.seg.base = tbase
+      m.seg.size = tsize
+      m.magic = mparams.magic
+      init_bins(m)
+      init_top(m, tbase as malloc_chunk, tsize - TOP_FOOT_SIZE)
+    } else {
+      // Try to merge with an existing segment
+      let o_sp = __Some(m.seg);
+      while (option.__Option_isSome(o_sp)) {
+        let sp = option.__Some_unwrap(o_sp);
+        if(tbase != sp.base + (sp.size as __Ptr))
+          o_sp = sp.next
+        else
+          break
+      }
+      if (option.__Option_isSome(o_sp) &&
+          segment_holds(option.__Option_unwrap(o_sp), m.top as __Ptr)) { 
+        // append
+        let sp = option.__Some_unwrap(o_sp);
+        sp.size += tsize
+        init_top(m, m.top as __Ptr as malloc_chunk, m.topsize + tsize);
+      } else
+      __trap()
+    }
+
+    if (nb < m.topsize) { 
+      // Allocate from new or extended top space
+      m.topsize -= nb
+      let rsize = m.topsize;
+      let o_p = m.top
+      let p = option.__Option_unwrap(o_p)
+      let r = chunk_plus_offset(p, nb)
+      m.top = __Some(r)
+      r.head = rsize | 1
+      set_size_and_pinuse_of_inuse_chunk(m, p, nb)
+      //check_top_chunk(m, m->top)
+      //check_malloced_chunk(m, chunk2mem(p), nb)
+      return chunk2mem(p)
+    }
+  }
+
+  __trap()
 }
