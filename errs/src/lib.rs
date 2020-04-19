@@ -24,6 +24,7 @@ pub enum Error {
     TypeFailureMemberCreation(SourceLocation, String, Type, Type),
     TypeFailure(SourceLocation, Type, Type),
     CastFailure(SourceLocation, Type, Type),
+    CastNotNeeded(SourceLocation, Type),
     NoValueReturned(SourceLocation),
     TypeFailureReturn(SourceLocation, Type, Type),
     NotAnLValue(SourceLocation),
@@ -77,6 +78,7 @@ impl Display for Error {
             Error::TypeFailureMemberCreation(ref loc, ref m, ref wanted, ref got) => write!(f, "ERROR {}: initializer of type {} of member {} doesn't match member type {}", loc, got, m, wanted),
             Error::TypeFailure(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: expecting expression of type {}, found {}", loc, wanted, got),
             Error::CastFailure(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: can't cast to type {}, from {}", loc, wanted, got),
+            Error::CastNotNeeded(ref loc, ref wanted) => write!(f, "WARNING {}: no need to cast to type {}", loc, wanted),
             Error::NoValueReturned(ref loc) => write!(f, "ERROR {}: must return a value", loc),
             Error::TypeFailureReturn(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: Expecting return value of type {}, found {}", loc, wanted, got),
             Error::NotAnLValue(ref loc) => write!(f, "ERROR {}: expression is not a l value", loc),
@@ -116,7 +118,7 @@ impl Display for Error {
 impl Error {
     pub fn is_warning(&self) -> bool {
         match self {
-            Error::TypeGuardReapply(_, _) => true,
+            Error::TypeGuardReapply(_, _) | Error::CastNotNeeded(_, _) => true,
             _ => false
         }
     }

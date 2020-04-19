@@ -246,7 +246,12 @@ fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, cast_type: CastType, parser
             }
             TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
         },
-        TypeCast::NotNeeded => got.as_ref().clone(),
+        TypeCast::NotNeeded => {
+            if cast_type == CastType::Explicit {
+                parser_context.push_err(Error::CastNotNeeded(loc, want.clone()));
+            }
+            got.as_ref().clone()
+        },
     }
 }
 
@@ -539,7 +544,7 @@ impl ParserContext {
     fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: &Type, constant: bool)  -> () {
         let o_head = self.func_var_stack.last_mut();
         match o_head {
-            None => panic!(),
+            None => {},
             Some(head) => {
                 head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: None});
             }
@@ -547,7 +552,7 @@ impl ParserContext {
 
         let o_head = self.block_var_stack.last_mut();
         match o_head {
-            None => panic!(),
+            None => {},
             Some(head) => {
                 head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: None});
             }
