@@ -166,7 +166,7 @@ let shr = i.shiftRight(3)
 ```
 
 ### alias
-To create a tyoe alias, use the `alias` keyword. A type alias is what it sounds like, a different name for the same type, not a different type.
+To create a type alias, use the `alias` keyword. A type alias is what it sounds like, a different name for the same type, not a different type.
 ```
 alias __size_t = Int<0, 4294967295>
 ```
@@ -228,7 +228,7 @@ This works because a function expects a block; a single expression or a squiggly
 
 `if` is an expression, if it has an else branch.
 ```
-let a = if(b) 3 else 4
+let a = if(b) 3; else 4
 ```
 
 Type inference will do some work for you if the branches are a bit different, but will complain if they are radically different.
@@ -392,6 +392,8 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     1. [x] typescript-style const types, where a = 0 means typeof a == 0
     1. [x] move the bin op types from the ast
     1. [ ] clean up the cast code
+    1. [ ] bool literals
+    1. [ ] check __Option equality
 1. Expression based language
     1. [x] blocks return a value
     1. [x] no need for a return statement (but still supported - what is this, scala?)

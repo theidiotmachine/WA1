@@ -101,7 +101,7 @@ macro_rules! expect_semicolon {
 /// Get the next token, returning if it is not ok. Usage: `let next = assert_next!(self);`
 #[macro_export]
 macro_rules! assert_next {
-    ($s:ident, $m:expr) => ({let next = $s.next_item(); if next.is_err() { return Err(Error::UnexpectedEoF($m.to_string())); }; next?} )
+    ($s:ident, $m:expr) => ({let next = $s.next_item(); if next.is_err() { return Err(Error::UnexpectedEoF($s.peek_next_location().clone(), $m.to_string())); }; next?} )
 }
 
 #[macro_export]

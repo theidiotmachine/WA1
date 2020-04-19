@@ -235,7 +235,7 @@ impl<'b> Parser<'b> {
                         return Ok(self.look_ahead.clone());
                     }
                 } else {
-                    return Err(Error::UnexpectedEoF("".to_string()));
+                    return Err(Error::UnexpectedEoF(self.look_ahead.location.clone(), "".to_string()));
                 }
             }
         }
@@ -665,6 +665,7 @@ impl<'b> Parser<'b> {
 
             while !token.matches_punct(Punct::CloseBrace) {
                 if token.is_eof() {
+                    parser_context.push_err(Error::UnexpectedEoF(next.location.clone(), String::from("expecting '}'")));
                     break;
                 }
                 

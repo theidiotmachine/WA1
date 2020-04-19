@@ -40,9 +40,7 @@ lazy_static!{
 
     static ref MATHS_NEG_OP: OpType = OpType::SimpleOpType(vec![
         FuncType{in_types: vec![INT_S_64], out_type: INT_S_64},
-        FuncType{in_types: vec![INT_U_64], out_type: INT_S_64},
         FuncType{in_types: vec![INT_S_32], out_type: INT_S_32},
-        FuncType{in_types: vec![INT_U_32], out_type: INT_S_32},
         FuncType{in_types: vec![Type::Number], out_type: Type::Number},
         FuncType{in_types: vec![Type::UnsafePtr], out_type: Type::UnsafePtr},
     ]);

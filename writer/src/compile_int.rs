@@ -71,6 +71,16 @@ pub (crate) fn compile_int_member_func(
                 wasm_expr.data.push(WasmInstr::I32And);
             }
         },
+
+        "unsignedNegate" => {
+            if upper > U_32_MAX {
+                wasm_expr.data.push(WasmInstr::I64Const(-1));
+                wasm_expr.data.push(WasmInstr::I64Mul);
+            } else {
+                wasm_expr.data.push(WasmInstr::I32Const(-1));
+                wasm_expr.data.push(WasmInstr::I32Mul);
+            }
+        },
         _ => unreachable!(),
     }
 }

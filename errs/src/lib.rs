@@ -10,7 +10,7 @@ use source_location::{SourceLocation, Position};
 #[derive(Debug, Clone)]
 pub enum Error {
     UnexpectedToken(SourceLocation, String),
-    UnexpectedEoF(String),
+    UnexpectedEoF(SourceLocation, String),
     ParseAfterEoF,
     InvalidTypeName(SourceLocation, String),
     InvalidType(Position),
@@ -63,7 +63,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
             Error::UnexpectedToken(ref loc, ref msg) => write!(f, "ERROR {}: unexpected token {}", loc, msg),
-            Error::UnexpectedEoF(ref msg) => write!(f, "Unexpectedly found the end of the file: {}", msg),
+            Error::UnexpectedEoF(ref loc, ref msg) => write!(f, "ERROR {}: unexpectedly found the end of the file: {}", loc, msg),
             Error::ParseAfterEoF => write!(f, "Parser attempted to get the next token after finding the end of the file"),
             Error::InvalidTypeName(ref loc, ref msg) => write!(f, "ERROR {}: Invalid type name {}", loc, msg),
             Error::InvalidType(ref loc) => write!(f, "ERROR {}: Invalid type", loc),
