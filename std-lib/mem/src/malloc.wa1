@@ -612,7 +612,18 @@ fn leftmost_child(t: malloc_tree_chunk) -> __Option<malloc_tree_chunk> {
     t.child_1;
 }
 
-fn treechunksize(p: malloc_tree_chunk) -> __size_t        (p.head & ~(7 as __size_t));
+fn tree_chunksize(p: malloc_tree_chunk) -> __size_t        (p.head & ~(7 as __size_t));
+fn tree_chunk_plus_offset(p: malloc_tree_chunk, s: __size_t) -> malloc_tree_chunk  ((p as __Ptr) + (s as __Ptr)) as malloc_tree_chunk
+fn tree_set_foot(p: malloc_tree_chunk, s: __size_t) -> Void { 
+    // you need a temporary because the '+' operator can't be used as an lhs. 
+    let t = ((p as __Ptr) + (s as __Ptr)) as malloc_chunk
+    t.prev_foot = s
+}
+fn tree_set_size_and_pinuse_of_free_chunk(p: malloc_tree_chunk, s: __size_t) -> Void {
+    p.head = (s|(1 as __size_t));
+    tree_set_foot(p, s);
+}
+fn tree_chunk2mem(p: malloc_tree_chunk) -> __Ptr (p as __Ptr) + (TWO_SIZE_T_SIZES as __Ptr)
 
 /* ----------------------------- Segments -------------------------------- */
 
@@ -1196,11 +1207,16 @@ fn set_inuse_and_pinuse(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
   (((p as __Ptr) + (s as __Ptr)) as malloc_chunk).head |= 1
 }
 
+fn tree_set_inuse_and_pinuse(m: malloc_state, p: malloc_tree_chunk, s: __size_t) -> Void {
+  p.head = s | 1 | 2
+  (((p as __Ptr) + (s as __Ptr)) as malloc_tree_chunk).head |= 1
+}
+
+
 /* Set size, cinuse and pinuse bit of this chunk */
 //#define set_size_and_pinuse_of_inuse_chunk(M, p, s)  ((p)->head = (s|PINUSE_BIT|CINUSE_BIT))
-fn set_size_and_pinuse_of_inuse_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
-  p.head = s | 1 | 2
-}
+fn set_size_and_pinuse_of_inuse_chunk(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void p.head = s | 1 | 2
+fn tree_set_size_and_pinuse_of_inuse_chunk(m: malloc_state, p: malloc_tree_chunk, s: __size_t) -> Void p.head = s | 1 | 2
 
 /* ---------------------------- setting mparams -------------------------- */
 
@@ -1364,7 +1380,7 @@ fn insert_large_chunk(m: malloc_state, x: malloc_tree_chunk, s: __size_t) -> Voi
     let k = s.shiftLeft(leftshift_for_tree_index(i))
     while(true) {
       let t = option.__Option_unwrap(o_t);
-      if (treechunksize(t) != s) {
+      if (tree_chunksize(t) != s) {
         let child_index = (k.shiftRight(31) & (1 as __size_t)).truncateToSigned()
         k = k.shiftLeft(1)
         let child_ptr = if (child_index==0) t.child_0; else t.child_1
@@ -1922,4 +1938,129 @@ fn dispose_chunk(m: malloc_state, p: malloc_chunk, psize: __size_t) -> Void {
   } else {
     __trap()
   }
+}
+
+/* ---------------------------- malloc --------------------------- */
+
+/* allocate a large request from the best fitting chunk in a treebin */
+fn tmalloc_large(m: malloc_state, nb: __size_t) -> __Ptr{
+  let o_v: __Option<malloc_tree_chunk> = __Null
+  let rsize = nb.unsignedNegate() /* Unsigned negation */
+  //tchunkptr t;
+  let idx = compute_tree_index(nb)
+  let o_t = m.treebins[idx]
+  if (option.__Option_isSome(o_t)) {
+    /* Traverse tree for this bin looking for node with size == nb */
+    let sizebits = nb.shiftLeft(leftshift_for_tree_index(idx))
+    let rst: __Option<malloc_tree_chunk> = __Null  /* The deepest untaken right subtree */
+    while(true) {
+      let t = option.__Option_unwrap(o_t)
+      let trem = tree_chunksize(t) - nb
+      if (trem < rsize) {
+        o_v = o_t
+        rsize = trem
+        if (rsize == 0)
+          break
+      }
+      let rt = t.child_1
+      let child_index = (sizebits.shiftRight(SIZE_T_BITSIZE-1)) & 1
+      o_t = if(child_index == 0) t.child_0; else t.child_1
+      if (option.__Option_isSome(rt) && (rt as __Ptr) != (t as __Ptr))
+        rst = rt;
+      if (o_t == __Null) {
+        o_t = rst /* set t to least subtree holding sizes > nb */
+        break
+      }
+      sizebits = sizebits.shiftLeft(1)
+    }
+  }
+  if (o_t == __Null && option.__Option_isNull(o_v)) { /* set t to root of next non-empty treebin */
+    let leftbits = left_bits(idx2bit(idx)) & m.treemap
+    if (leftbits != 0) {
+      let leastbit = least_bit(leftbits);
+      let i = compute_bit2idx(leastbit)
+      o_t = m.treebins[i]
+    }
+  }
+
+  while (option.__Option_isSome(o_t)) { /* find smallest of tree or subtree */
+    let t = option.__Some_unwrap(o_t)
+    let trem = tree_chunksize(t) - nb
+    if (trem < rsize) {
+      rsize = trem;
+      o_v = o_t
+    }
+    o_t = leftmost_child(t)
+  }
+
+  /*  If dv is a better fit, return 0 so malloc will use it */
+  if (option.__Option_isSome(o_v) && rsize < (m.dvsize - nb)) {
+    let v = option.__Some_unwrap(o_v)
+    if (ok_address(m, v as __Ptr)) { /* split */
+      let r = tree_chunk_plus_offset(v, nb)
+      //assert(chunksize(v) == rsize + nb);
+      if (ok_next(v as __Ptr, r as __Ptr)) {
+        unlink_large_chunk(m, v);
+        if (rsize < MIN_CHUNK_SIZE)
+          tree_set_inuse_and_pinuse(m, v, (rsize + nb));
+        else {
+          tree_set_size_and_pinuse_of_inuse_chunk(m, v, nb);
+          tree_set_size_and_pinuse_of_free_chunk(r, rsize);
+          if (is_small(rsize)) {
+            let tp = r as __Ptr as malloc_chunk; 
+            insert_small_chunk(m, tp, rsize)
+          } else { 
+            insert_large_chunk(m, r, rsize); 
+          }
+        }
+        return tree_chunk2mem(v)
+      }
+    }
+    __trap()
+  }
+  return 0 as __Ptr
+}
+
+/* allocate a small request from the best fitting chunk in a treebin */
+fn tmalloc_small(m: malloc_state, nb: __size_t) -> __Ptr {
+  //tchunkptr t, v;
+  //size_t rsize;
+  //bindex_t i;
+  let leastbit = least_bit(m.treemap)
+  let i = compute_bit2idx(leastbit)
+  let o_v = m.treebins[i]
+  let o_t = m.treebins[i]
+
+  let t = option.__Option_unwrap(o_t)
+  let rsize = tree_chunksize(t) - nb
+
+  o_t = leftmost_child(t)
+  while(option.__Option_isSome(o_t)){
+    let t = option.__Some_unwrap(o_t)
+    let trem = tree_chunksize(t) - nb
+    if (trem < rsize) {
+      rsize = trem;
+      o_v = o_t;
+    }
+    o_t = leftmost_child(t)
+  }
+
+  if (ok_address(m, o_v as __Ptr)) {
+    let v = option.__Option_unwrap(o_v)
+    let r = tree_chunk_plus_offset(v, nb)
+    //assert(chunksize(v) == rsize + nb);
+    if (ok_next(v as __Ptr, r as __Ptr)) {
+      unlink_large_chunk(m, v)
+      if (rsize < MIN_CHUNK_SIZE)
+        tree_set_inuse_and_pinuse(m, v, (rsize + nb));
+      else {
+        tree_set_size_and_pinuse_of_inuse_chunk(m, v, nb);
+        tree_set_size_and_pinuse_of_free_chunk(r, rsize);
+        replace_dv(m, r as __Ptr as malloc_chunk, rsize);
+      }
+      return tree_chunk2mem(v)
+    }
+  }
+
+  __trap()
 }

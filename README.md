@@ -61,7 +61,7 @@ There are some examples in the `tests/simple/one.wa1` file which contains our or
 
 # Using it
 
-To build the compiler, first you need Rust. Install cargo. Then, run
+To build the compiler, first you need Rust. Install cargo, and make sure you are up to date with `rustup update`. Then, run
 
 ```
 cargo build
@@ -430,6 +430,7 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     1. [ ] fairly sure prefix unary operators are wrong - may need to start at a precedence
     1. [ ] the lexer doesn't parse negative numbers!
     1. [x] import order is not correct - imports need to be first - need a secondary mapping. Claim fixed, needs to be tested
+    1. [ ] type guards - in unguarded loops
 1. Inlining
     1. [ ] inline numeric constants?
     1. [ ] or full blown inlining, of which this is just a special case?

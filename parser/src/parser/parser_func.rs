@@ -221,7 +221,9 @@ fn generate_generic_func_call(
                 runtime_type_args.push(runtime_type);
             },
             None => {
-                parser_context.push_err(Error::NotYetImplemented(loc.clone(), format!("type {} not supported as generic argument", resolved_type)));
+                if *resolved_type != Type::Undeclared {
+                    parser_context.push_err(Error::NotYetImplemented(loc.clone(), format!("type {} not supported as generic argument", resolved_type)));
+                }
                 runtime_type_args.push(Type::Undeclared);
                 mangled_type_names.push(Type::Undeclared.get_mangled_name());
             }

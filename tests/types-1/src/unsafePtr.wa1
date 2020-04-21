@@ -1,0 +1,17 @@
+alias __size_t = Int<0, 4294967295>
+
+const TWO_SIZE_T_SIZES: __size_t =        8
+fn chunk2mem(p: __size_t) -> __Ptr (p as __Ptr) + (TWO_SIZE_T_SIZES as __Ptr)
+
+fn sys_alloc(nb: __size_t) -> __Ptr {
+    if (nb > 100) {
+        return chunk2mem(nb)
+    }
+    
+    __trap()
+    0 as __Ptr
+}
+
+export fn testUnsafePtr() -> Void {
+    sys_alloc(101)
+}
