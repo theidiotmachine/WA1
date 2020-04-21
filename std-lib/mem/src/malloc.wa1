@@ -491,7 +491,7 @@ fn set_free_with_pinuse(p: malloc_chunk, s: __size_t, n: malloc_chunk) -> Void {
 
 /* Get the internal overhead associated with chunk p */
 //#define overhead_for(p) (is_mmapped(p)? MMAP_CHUNK_OVERHEAD : CHUNK_OVERHEAD)
-//fn overhead_for(p: malloc_chunk) -> __size_t 4;
+//fn overhead_for(p: malloc_chunk) -> __size_t CHUNK_OVERHEAD
 
 /* Return true if malloced space is not necessarily cleared */
 //#define calloc_must_clear(p) (1)
@@ -788,7 +788,8 @@ __struct malloc_segment {
 //#define TREEBIN_SHIFT     (8U)
 //#define MIN_LARGE_SIZE    (SIZE_T_ONE << TREEBIN_SHIFT) => 256
 //#define MAX_SMALL_SIZE    (MIN_LARGE_SIZE - SIZE_T_ONE) => 255
-//#define MAX_SMALL_REQUEST (MAX_SMALL_SIZE - CHUNK_ALIGN_MASK - CHUNK_OVERHEAD) => 256 - 7 - 4 => 245
+//#define MAX_SMALL_REQUEST (MAX_SMALL_SIZE - CHUNK_ALIGN_MASK - CHUNK_OVERHEAD)
+const MAX_SMALL_REQUEST = (255 - 7 - CHUNK_OVERHEAD)
 
 __struct malloc_state {
   smallmap:         u32; 
@@ -1354,6 +1355,7 @@ fn replace_dv(m: malloc_state, p: malloc_chunk, s: __size_t) -> Void {
   const dv = m.dv
   if (option.__Option_isSome(dv)) {
     let dvs = m.dvsize
+    //assert(is_small(dvs))
     insert_small_chunk(m, option.__Some_unwrap(dv), dvs)
   }
   m.dvsize = s
@@ -2063,4 +2065,214 @@ fn tmalloc_small(m: malloc_state, nb: __size_t) -> __Ptr {
   }
 
   __trap()
+}
+
+export fn dlmalloc(bytes: __size_t ) -> __Ptr{
+  /*
+     Basic algorithm:
+     If a small request (< 256 bytes minus per-chunk overhead):
+       1. If one exists, use a remainderless chunk in associated smallbin.
+          (Remainderless means that there are too few excess bytes to
+          represent as a chunk.)
+       2. If it is big enough, use the dv chunk, which is normally the
+          chunk adjacent to the one used for the most recent small request.
+       3. If one exists, split the smallest available chunk in a bin,
+          saving remainder in dv.
+       4. If it is big enough, use the top chunk.
+       5. If available, get memory from system and use it
+     Otherwise, for a large request:
+       1. Find the smallest available binned chunk that fits, and use it
+          if it is better fitting than dv chunk, splitting if necessary.
+       2. If better fitting than any binned chunk, use the dv chunk.
+       3. If it is big enough, use the top chunk.
+       4. If request size >= mmap threshold, try to directly mmap this chunk. *_* not used
+       5. If available, get memory from system and use it
+
+     The ugly goto's here ensure that postaction occurs along all paths. *_* not used
+  */
+
+  let mem: __Ptr = 0 as __Ptr
+  let nb: __size_t = 0
+  if (bytes <= MAX_SMALL_REQUEST) {
+    //bindex_t idx;
+    //binmap_t smallbits;
+    nb = if(bytes < MIN_REQUEST) MIN_CHUNK_SIZE; else pad_request(bytes)
+    let idx = small_index(nb)
+    let smallbits = gm.smallmap.shiftRight(idx)
+
+    if ((smallbits & 0x3) != 0) { /* Remainderless fit to a smallbin. */
+      //mchunkptr b, p;
+      idx += ~smallbits & 1;       /* Uses next bin if idx empty */
+      let b = smallbin_at(gm, idx)
+      let p = b.fd
+      //assert(chunksize(p) == small_index2size(idx));
+      unlink_first_small_chunk(gm, b, p, idx)
+      set_inuse_and_pinuse(gm, p, small_index2size(idx))
+      mem = chunk2mem(p)
+      //check_malloced_chunk(gm, mem, nb)
+      //goto postaction;
+      return mem
+    } else if (nb > gm.dvsize) {
+      if (smallbits != 0) { /* Use chunk in next nonempty smallbin */
+        //mchunkptr b, p, r;
+        //size_t rsize;
+        let leftbits = (smallbits.shiftLeft(idx)) & left_bits(idx2bit(idx))
+        let leastbit = least_bit(leftbits)
+        let i = compute_bit2idx(leastbit)
+        let b = smallbin_at(gm, i)
+        let p = b.fd
+        //assert(chunksize(p) == small_index2size(i));
+        unlink_first_small_chunk(gm, b, p, i)
+        let rsize = small_index2size(i) - nb
+        /* Fit here cannot be remainderless if 4byte sizes */
+        if (SIZE_T_SIZE != 4 && rsize < MIN_CHUNK_SIZE)
+          set_inuse_and_pinuse(gm, p, small_index2size(i))
+        else {
+          set_size_and_pinuse_of_inuse_chunk(gm, p, nb)
+          let r = chunk_plus_offset(p, nb)
+          set_size_and_pinuse_of_free_chunk(r, rsize)
+          replace_dv(gm, r, rsize)
+        }
+        mem = chunk2mem(p)
+        //check_malloced_chunk(gm, mem, nb)
+        return mem
+      } else if (gm.treemap != 0) {
+        mem = tmalloc_small(gm, nb)
+        if(mem != (0 as __Ptr)) {
+          //check_malloced_chunk(gm, mem, nb)
+          return mem
+        }
+      }
+    }
+  } else if (bytes >= MAX_REQUEST)
+    nb = MAX_SIZE_T; /* Too big to allocate. Force failure (in sys alloc) */
+  else {
+    nb = pad_request(bytes)
+    if (gm.treemap != 0) {
+      mem = tmalloc_large(gm, nb)
+      if(mem != (0 as __Ptr)) {
+        //check_malloced_chunk(gm, mem, nb)
+        return mem
+      }
+    }
+  }
+
+  if (nb <= gm.dvsize) {
+    let rsize = gm.dvsize - nb
+    let p = option.__Option_unwrap(gm.dv)
+    if (rsize >= MIN_CHUNK_SIZE) { /* split dv */
+      let r = chunk_plus_offset(p, nb)
+      gm.dv = __Some(r)
+      gm.dvsize = rsize;
+      set_size_and_pinuse_of_free_chunk(r, rsize)
+      set_size_and_pinuse_of_inuse_chunk(gm, p, nb)
+    } else { /* exhaust dv */
+      let dvs = gm.dvsize
+      gm.dvsize = 0
+      gm.dv = __Null
+      set_inuse_and_pinuse(gm, p, dvs)
+    }
+    mem = chunk2mem(p)
+    //check_malloced_chunk(gm, mem, nb)
+    return mem
+  } else if (nb < gm.topsize) { /* Split top */
+    gm.topsize -= nb
+    let rsize = gm.topsize
+    let p = option.__Option_unwrap(gm.top)
+    let r = chunk_plus_offset(p, nb)
+    gm.top = __Some(r)
+    r.head = rsize | 1
+    set_size_and_pinuse_of_inuse_chunk(gm, p, nb)
+    mem = chunk2mem(p)
+    //check_top_chunk(gm, gm.top)
+    //check_malloced_chunk(gm, mem, nb)
+    return mem
+  }
+
+  mem = sys_alloc(gm, nb);
+
+  return mem;
+}
+
+/* ---------------------------- free --------------------------- */
+
+export fn dlfree(mem: __Ptr) -> Void {
+  /*
+     Consolidate freed chunks with preceeding or succeeding bordering
+     free chunks, if they exist, and then place in a bin.  Intermixed
+     with special cases for top, dv, mmapped chunks, and usage errors.
+  */
+
+  if (mem != (0 as __Ptr)) {
+    let p  = mem2chunk(mem)
+    //check_inuse_chunk(fm, p)
+    if (ok_address(gm, p as __Ptr) && ok_inuse(p)) {
+      let psize = chunksize(p)
+      let next = chunk_plus_offset(p, psize)
+      if (!pinuse(p)) {
+        let prevsize = p.prev_foot
+        let prev = chunk_minus_offset(p, prevsize)
+        psize += prevsize
+        p = prev
+        if (ok_address(gm, prev as __Ptr)) { /* consolidate backward */
+          if (p as __Ptr != gm.dv as __Ptr) {
+            unlink_chunk(gm, p, prevsize)
+          }
+          else if ((next.head & 3) == 3) {
+            gm.dvsize = psize
+            set_free_with_pinuse(p, psize, next)
+            return
+          }
+        }
+        else
+          __trap()
+      }
+
+      if (ok_next(p as __Ptr, next as __Ptr) && ok_pinuse(next)) {
+        if (!cinuse(next)) {  /* consolidate forward */
+          if ((next as __Ptr) == (gm.top as __Ptr)) {
+            gm.topsize += psize
+            let tsize = gm.topsize
+            gm.top = __Some(p)
+            p.head = tsize | 1
+            if ((p as __Ptr) == (gm.dv as __Ptr)) {
+              gm.dv = __Null
+              gm.dvsize = 0
+            }
+            //if (should_trim(gm, tsize))
+            //  sys_trim(gm, 0)
+            return
+          } else if ((next as __Ptr) == (gm.dv as __Ptr)) {
+            gm.dvsize += psize
+            let dsize = gm.dvsize
+            gm.dv = __Some(p)
+            set_size_and_pinuse_of_free_chunk(p, dsize)
+            return
+          } else {
+            let nsize = chunksize(next)
+            psize += nsize
+            unlink_chunk(gm, next, nsize)
+            set_size_and_pinuse_of_free_chunk(p, psize)
+            if ((p as __Ptr) == (gm.dv as __Ptr)) {
+              gm.dvsize = psize
+              return
+            }
+          }
+        }
+        else
+          set_free_with_pinuse(p, psize, next)
+
+        if (is_small(psize)) {
+          insert_small_chunk(gm, p, psize)
+          //check_free_chunk(gm, p)
+        } else {
+          let tp = p as __Ptr as malloc_tree_chunk
+          insert_large_chunk(gm, tp, psize)
+          //check_free_chunk(gm, p)
+        }
+        return
+      }
+    }
+    __trap()
+  }
 }
