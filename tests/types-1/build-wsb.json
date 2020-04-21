@@ -9,6 +9,10 @@
             "is_unsafe": false
         },
         {
+            "file_name": "unsafePtr.wa1",
+            "is_unsafe": true
+        },
+        {
             "file_name": "assert.wa1",
             "is_unsafe": true
         }
