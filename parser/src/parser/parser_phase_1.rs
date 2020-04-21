@@ -84,6 +84,7 @@ impl<'a> Parser<'a> {
                 Keyword::UnsafeStruct => {let _ = self.parse_struct_decl(true, parser_context);},
                 Keyword::Const => self.parse_phase_1_global(true, parser_context),
                 Keyword::Let => self.parse_phase_1_global(false, parser_context),
+                Keyword::Alias => { let _ = self.parse_alias(true, parser_context);},
                 _ => {},
             },
             _ => {},
