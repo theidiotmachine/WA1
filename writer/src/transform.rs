@@ -472,11 +472,12 @@ fn compile_array_member_set(
     idx: u32,
     wasm_expr: &mut WasmExpr,
 ) -> () {
+    let align = stupid_log2(inner_value_type_size);
     match inner_value_type {
-        WasmValueType::I32 => wasm_expr.data.push(WasmInstr::I32Store(inner_value_type_size, inner_value_type_size * idx)),
-        WasmValueType::I64 => wasm_expr.data.push(WasmInstr::I64Store(inner_value_type_size, inner_value_type_size * idx)),
-        WasmValueType::F32 => wasm_expr.data.push(WasmInstr::F32Store(inner_value_type_size, inner_value_type_size * idx)),
-        WasmValueType::F64 => wasm_expr.data.push(WasmInstr::F64Store(inner_value_type_size, inner_value_type_size * idx)),
+        WasmValueType::I32 => wasm_expr.data.push(WasmInstr::I32Store(align, inner_value_type_size * idx)),
+        WasmValueType::I64 => wasm_expr.data.push(WasmInstr::I64Store(align, inner_value_type_size * idx)),
+        WasmValueType::F32 => wasm_expr.data.push(WasmInstr::F32Store(align, inner_value_type_size * idx)),
+        WasmValueType::F64 => wasm_expr.data.push(WasmInstr::F64Store(align, inner_value_type_size * idx)),
     }
 }
 
@@ -486,11 +487,12 @@ fn compile_array_member_get(
     idx: u32,
     wasm_expr: &mut WasmExpr,
 ) -> () {
+    let align = stupid_log2(inner_value_type_size);
     match inner_value_type {
-        WasmValueType::I32 => wasm_expr.data.push(WasmInstr::I32Load(inner_value_type_size, inner_value_type_size * idx)),
-        WasmValueType::I64 => wasm_expr.data.push(WasmInstr::I64Load(inner_value_type_size, inner_value_type_size * idx)),
-        WasmValueType::F32 => wasm_expr.data.push(WasmInstr::F32Load(inner_value_type_size, inner_value_type_size * idx)),
-        WasmValueType::F64 => wasm_expr.data.push(WasmInstr::F64Load(inner_value_type_size, inner_value_type_size * idx)),
+        WasmValueType::I32 => wasm_expr.data.push(WasmInstr::I32Load(align, inner_value_type_size * idx)),
+        WasmValueType::I64 => wasm_expr.data.push(WasmInstr::I64Load(align, inner_value_type_size * idx)),
+        WasmValueType::F32 => wasm_expr.data.push(WasmInstr::F32Load(align, inner_value_type_size * idx)),
+        WasmValueType::F64 => wasm_expr.data.push(WasmInstr::F64Load(align, inner_value_type_size * idx)),
     }
 }
 
