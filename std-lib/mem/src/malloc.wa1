@@ -1,17 +1,10 @@
 import {*} from "./option"
 
 //FIXME64BIT
-alias __size_t = Int<0, 4294967295>
+export alias __size_t = Int<0, 4294967295>
 alias u32 = Int<0, 4294967295>
 
 const PAGE_SIZE: __size_t = 65536
-
-//this is the pointer to the first available free address
-//let memTop: __Ptr = (__memorySize() * PAGE_SIZE) as __Ptr
-
-//this is the pointer to the last available free address
-//let memBottom: __Ptr = (__memorySize() * PAGE_SIZE) as __Ptr
-
 
 /*
   This is a version (aka dlmalloc) of malloc/free/realloc written by
@@ -197,31 +190,6 @@ fn align_offset_size_t(A: __size_t) -> __size_t if((A & 7) == 0) 0; else (8 - (A
 //#define CMFAIL               ((char*)(MFAIL)) /* defined for convenience */
 const CMFAIL: __Ptr = MAX_SIZE_T as __Ptr
 
-//#define CALL_MORECORE(S)    MORECORE_DEFAULT(S)
-
-/* MMAP stuff, all stubbed out */
-//#define USE_MMAP_BIT            (SIZE_T_ZERO)
-//#define MMAP(s)                 MFAIL
-//#define MUNMAP(a, s)            (-1)
-//#define DIRECT_MMAP(s)          MFAIL
-//#define CALL_DIRECT_MMAP(s)     DIRECT_MMAP(s)
-//#define CALL_MMAP(s)            MMAP(s)
-//#define CALL_MUNMAP(a, s)       MUNMAP((a), (s))
-//#define CALL_MREMAP(addr, osz, nsz, mv)     MFAIL
-
-/* mstate bit set if continguous morecore disabled or failed */
-//#define USE_NONCONTIGUOUS_BIT (4U)
-
-/* segment bit set in create_mspace_with_base */
-//#define EXTERN_BIT            (8U)
-
-/* LOCK stuff, all stubbed out */
-//#define USE_LOCK_BIT               (0U)
-//#define INITIAL_LOCK(l)            (0)
-//#define DESTROY_LOCK(l)            (0)
-//#define ACQUIRE_MALLOC_GLOBAL_LOCK()
-//#define RELEASE_MALLOC_GLOBAL_LOCK()
-
 /* -----------------------  Chunk representations ------------------------ */
 
 /*
@@ -365,15 +333,6 @@ __struct malloc_chunk {
   fd: malloc_chunk;         // double links -- used only if free. was struct malloc_chunk*
   bk: malloc_chunk;
 }
-
-/*
-typedef struct malloc_chunk  mchunk;
-typedef struct malloc_chunk* mchunkptr;
-typedef struct malloc_chunk* sbinptr;  // The type of bins of chunks
-typedef unsigned int bindex_t;         // using a __size_t because I don't have a u32
-typedef unsigned int binmap_t;         // Described below 
-typedef unsigned int flag_t;           // The type of various bit flag sets
-*/
 
 const MCHUNK_SIZE: __size_t         = __sizeof(malloc_chunk);
 //#define CHUNK_OVERHEAD      (SIZE_T_SIZE) = 4
@@ -970,7 +929,6 @@ const gm: malloc_state = __static malloc_state{
   extp:             (0 as __Ptr),
   exts:             0,
 };
-//#define is_global(M)       ((M) == &_gm_)
 
 fn is_initialized(m: malloc_state) -> Bool m.top != __Null;
 
