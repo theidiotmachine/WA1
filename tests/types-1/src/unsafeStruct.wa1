@@ -1,0 +1,68 @@
+import {*} from "./assert"
+
+alias __size_t = Int<0, 4294967295>
+alias u32 = Int<0, 4294967295>
+
+__struct malloc_chunk {
+  head: __size_t
+}
+
+__struct malloc_tree_chunk {
+  size: __size_t;
+  child_0: __Option<malloc_tree_chunk>; 
+}
+
+__struct malloc_state {
+  treemap:          u32;
+  smallbins:        __Array<malloc_chunk>
+  treebins:         __Array<__Option<malloc_tree_chunk>>
+}
+
+fn smallbin_at(m: malloc_state, i: u32) -> malloc_chunk m.smallbins[i]
+
+const gm: malloc_state = __static malloc_state{
+  treemap:          14,
+  smallbins:        __static __Array<malloc_chunk> [
+    __static malloc_chunk{
+      head: 17,
+    },
+    __static malloc_chunk{
+      head: 21,
+    },
+  ],
+  treebins:         __static __Array<__Option<malloc_tree_chunk>>[
+      __Null, 
+      //__Null
+  ],
+};
+
+export fn __Some_unwrap<T: __struct T>(x: __Some<T>) -> T {
+    x as __Ptr as T
+}
+
+fn __Option_isSome<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
+    true => __Some<T>
+    false => __Null
+} {
+    x != __Null
+}
+
+fn f1(o_t: __Option<malloc_tree_chunk>, s: __size_t) -> Void {
+  while(__Option_isSome(o_t)) {
+    let t = __Some_unwrap(o_t);
+    if (t.size != s) {
+      let child_ptr = t.child_0
+      if (__Option_isSome(child_ptr))
+        o_t = child_ptr
+      else {
+        break
+      }
+    } else {
+      break
+    }
+  }
+}
+
+export fn testStruct() -> Void {
+    assert.assert(smallbin_at(gm, 1).head == 21)
+}

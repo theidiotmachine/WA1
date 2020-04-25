@@ -2,8 +2,6 @@ use ast::prelude::*;
 
 use errs::prelude::*;
 
-use parity_wasm::elements::{Instructions, Instruction};
-
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::{i32, i64, u32};
@@ -970,7 +968,6 @@ pub(crate) fn compile_expr(
         },
 
         Expr::DynamicMember(inner, member_expr) => {
-            compile_expr(&inner, context, local_var_map, true, wasm_module, wasm_expr, errors);
             match &inner.r#type {
                 Type::UnsafeArray(t) => {
 
@@ -1019,7 +1016,9 @@ pub(crate) fn compile_expr(
                     }
 
                     //now leave the return value, which is the pointer to the newly created thing
-                    wasm_expr.data.push(WasmInstr::GetLocal(*scratch_malloc_idx));
+                    if consume_result{
+                        wasm_expr.data.push(WasmInstr::GetLocal(*scratch_malloc_idx));
+                    }
                 },
                 _ => unreachable!(),
             }
@@ -1048,7 +1047,9 @@ pub(crate) fn compile_expr(
                     }
 
                     //now leave the return value, which is the pointer to the newly created thing
-                    wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
+                    if consume_result{
+                        wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
+                    }
                 },
                 _ => unreachable!(),
             }
@@ -1074,7 +1075,9 @@ pub(crate) fn compile_expr(
                     }
 
                     //now leave the return value, which is the pointer to the newly created thing
-                    wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
+                    if consume_result{
+                        wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
+                    }
                 },
                 _ => unreachable!(),
             }
@@ -1107,7 +1110,7 @@ pub(crate) fn compile_expr(
         _ => { errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("{:#?}", typed_expr.expr)))); },
     }
 
-    if !consume_result && typed_expr.r#type != Type::RealVoid && ret_val{
+    if !consume_result && typed_expr.r#type != Type::RealVoid && typed_expr.r#type != Type::Never && ret_val{
         wasm_expr.data.push(WasmInstr::Drop);
     }
 }

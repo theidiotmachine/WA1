@@ -1,6 +1,8 @@
 import {*} from "./int"
+import {*} from "./unsafeStruct"
 
 export fn test() -> Int {
     int.testInt()
+    unsafeStruct.testStruct()
     1
 }

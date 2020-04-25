@@ -13,7 +13,7 @@ enum WasmSymInfoKind{
     ///SYMTAB_GLOBAL
     SymTabGlobal = 2,
     ///SYMTAB_SECTION
-    SymTabSection = 3,
+    //SymTabSection = 3,
     ///SYMTAB_EVENT
     SymTabEvent = 4,
     ///SYMTAB_TABLE
@@ -41,7 +41,7 @@ const WASM_SYM_EXPORTED: u32 = 0x20;
 /// from foreign WebAssembly modules into local symbols with different names.
 const WASM_SYM_EXPLICIT_NAME: u32 = 0x40;
 /// The symbol is intended to be included in the linker output, regardless of whether it is used by the program.
-const WASM_SYM_NO_STRIP: u32 = 0x80;
+//const WASM_SYM_NO_STRIP: u32 = 0x80;
 
 /// Represents a syminfo structure,
 pub struct WasmSymInfo{
@@ -88,9 +88,11 @@ impl WasmSymInfo {
                     serialize_u32(self.data_size, out);
                 }
             },
+            /*
             WasmSymInfoKind::SymTabSection => {
                 serialize_u32(self.section, out);
             },
+            */
             WasmSymInfoKind::SymTabFunction | WasmSymInfoKind::SymTabGlobal | WasmSymInfoKind::SymTabEvent | WasmSymInfoKind::SymTabTable => {
                 serialize_u32(self.index, out);
                 if self.is_import { 
@@ -114,11 +116,11 @@ impl WasmSymInfo {
 }
 
 /// Extra metadata about the data segments.
-const WASM_SEGMENT_INFO: u8 = 5;
+//const WASM_SEGMENT_INFO: u8 = 5;
 /// Specifies a list of constructor functions to be called at startup. These constructors will be called in priority order after memory has been initialized.
 const WASM_INIT_FUNCS: u8 = 6; 
 /// Specifies the COMDAT groups of associated linking objects, which are linked only once and all together.
-const WASM_COMDAT_INFO: u8 = 7; 
+//const WASM_COMDAT_INFO: u8 = 7; 
 /// Specifies extra information about the symbols present in the module.
 const WASM_SYMBOL_TABLE: u8 = 8; 
 

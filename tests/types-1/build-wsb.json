@@ -5,6 +5,10 @@
     },
     "source_files": [
         {
+            "file_name": "unsafeStruct.wa1",
+            "is_unsafe": true
+        },
+        {
             "file_name": "int.wa1",
             "is_unsafe": false
         },

@@ -989,8 +989,6 @@ fn has_segment_link(m: malloc_state, ss: malloc_segment) -> Bool {
 }
 */
 
-//#define should_trim(M,s)  (0)
-
 /* -------------------------------  Hooks -------------------------------- */
 
 /*
