@@ -56,12 +56,6 @@ fn patch_guard_type(
     }
 }
 
-/// assert that something from an inner call was ok. Usage `let x = self.parse_x(); assert_ok!(x);`
-#[macro_export]
-macro_rules! assert_ok {
-    ($e:ident) => (if $e.is_err() { return Err($e.unwrap_err()) }; let $e = $e?;)
-}
-
 /// Bridge into the old Res<> signature functions. Usage `let x = self.parse_x(); expect_ok!(x, parser_context, None);`
 #[macro_export]
 macro_rules! expect_ok {

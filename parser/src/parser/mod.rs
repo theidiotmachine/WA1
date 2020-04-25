@@ -24,7 +24,7 @@ mod parser_typeguard;
 use crate::{ParserContext, ScopedVar, UnsafeParseMode};
 use crate::ParserFuncContext;
 use crate::Res;
-use crate::{assert_punct, assert_ok,assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_ident, expect_string_literal, expect_keyword, StartFuncType, expect_ok, expect_semicolon};
+use crate::{assert_punct, assert_ident,assert_next,assert_semicolon, expect_punct, expect_next, expect_ident, expect_string_literal, expect_keyword, StartFuncType, expect_ok, expect_semicolon};
 use crate::{try_create_cast, cast_typed_expr, guard_downcast_expr, create_cast};
 use crate::parser::parser_op::{get_unary_operator_data, Fix, get_binary_operator_data, Association, get_op_type_for_unop};
 use crate::parser::parser_typeguard::{get_type_guard_inst, apply_type_guard_inst};
@@ -729,28 +729,37 @@ impl<'b> Parser<'b> {
 
             let then_block_type = then_block.r#type.clone();
             loc.end = else_block.loc.end.clone();
-
             if then_block.r#type != else_block.r#type {
-                //first try casting then to else
-                let then_to_else_cast = try_create_cast(&else_block.r#type, &then_block, CastType::Implicit);
-                match then_to_else_cast {
-                    None => {
-                        //nope, not that way. Try the other
-                        let else_to_then_cast = try_create_cast(&then_block.r#type, &else_block, CastType::Implicit);
-                        match else_to_then_cast {
-                            None => {
-                                //warn that we can't figure out the type, make it the top type
-                                TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: Type::Unknown, loc: loc}
-                            },
-                            Some(new_else_block) => {
-                                TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(new_else_block)), is_const: true, r#type: then_block_type, loc: loc}
+                //if either is void, discard the other
+                if then_block_type == Type::RealVoid || else_block.r#type == Type::RealVoid {
+                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: Type::RealVoid, loc: loc}
+                } else if then_block_type == Type::Never {
+                    let else_block_type = else_block.r#type.clone();
+                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: else_block_type, loc: loc}
+                } else if else_block.r#type == Type::Never {
+                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: then_block_type, loc: loc}
+                } else {
+                    //first try casting then to else
+                    let then_to_else_cast = try_create_cast(&else_block.r#type, &then_block, CastType::Implicit);
+                    match then_to_else_cast {
+                        None => {
+                            //nope, not that way. Try the other
+                            let else_to_then_cast = try_create_cast(&then_block.r#type, &else_block, CastType::Implicit);
+                            match else_to_then_cast {
+                                None => {
+                                    //if we can't figure out the type, make it the top type
+                                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: Type::Unknown, loc: loc}
+                                },
+                                Some(new_else_block) => {
+                                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(new_else_block)), is_const: true, r#type: then_block_type, loc: loc}
+                                }
                             }
-                        }
-                    }, 
-                    Some(new_then_block) => {
-                        let new_then_block_type = new_then_block.r#type.clone();
-                        TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(new_then_block), Box::new(else_block)), is_const: true, r#type: new_then_block_type, loc: loc}
-                    }  
+                        }, 
+                        Some(new_then_block) => {
+                            let new_then_block_type = new_then_block.r#type.clone();
+                            TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(new_then_block), Box::new(else_block)), is_const: true, r#type: new_then_block_type, loc: loc}
+                        }  
+                    }
                 }
             } else {            
                 TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: then_block_type, loc: loc}
@@ -965,10 +974,10 @@ impl<'b> Parser<'b> {
         loc_in: &SourceLocation,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<Vec<TypedExpr>> {
+    ) -> Vec<TypedExpr> {
         let mut loc = loc_in.clone();
 
-        assert_punct!(self, Punct::OpenBracket);
+        expect_punct!(self, parser_context, Punct::OpenBracket);
 
         let inner_type: &Type = match for_type{
             Type::UnsafeArray(i) => {
@@ -1020,14 +1029,20 @@ impl<'b> Parser<'b> {
                         Punct::Comma => {
                             self.skip_next_item();
                         },
-                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or ']'"),
+                        _ => {
+                            parser_context.push_err(self.unexpected_token_error_raw(next_item.span, &loc.clone(), "expecting ',' or ']'"));
+                            self.skip_next_item();
+                        },
                     }
                 },
-                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or ']'"),
+                _ => {
+                    parser_context.push_err(self.unexpected_token_error_raw(next_item.span, &loc.clone(), "expecting ',' or ']'"));
+                    self.skip_next_item();
+                },
             }
         }
 
-        Ok(out)
+        out
     }
 
     /// Parse an object literal into a Vec that can be used by other parts of the parser.
@@ -1037,10 +1052,10 @@ impl<'b> Parser<'b> {
         loc_in: &SourceLocation,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<Vec<ObjectLiteralElem>> {
+    ) -> Vec<ObjectLiteralElem> {
         let mut loc = loc_in.clone();
 
-        assert_punct!(self, Punct::OpenBrace);
+        expect_punct!(self, parser_context, Punct::OpenBrace);
 
         //this is what we want
         let member_map: HashMap<String, Type> = match for_type {
@@ -1068,22 +1083,30 @@ impl<'b> Parser<'b> {
         let mut out: Vec<ObjectLiteralElem> = vec![];
 
         loop {
-            let next_item = self.next_item();
-            assert_ok!(next_item);
+            let next_item = self.peek_next_item();
             let token = next_item.token;
 
             match token {
+                Token::EoF => {
+                    parser_context.push_err(Error::UnexpectedEoF(next_item.location.clone(), String::from("expecting '}'")));
+                    break;
+                },
                 Token::Punct(p) => {
                     match p {
                         Punct::CloseBrace => {
                             loc.end = next_item.location.end.clone();
+                            self.skip_next_item();
                             break;
                         },
-                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or '}'"),
+                        _ => {
+                            parser_context.push_err(self.unexpected_token_error_raw(next_item.span, &loc.clone(), "expecting ',' or '}'"));
+                            self.skip_next_item();
+                        },
                     }
                 },
                 Token::Ident(i) => {
-                    assert_punct!(self, Punct::Colon);
+                    self.skip_next_item();
+                    expect_punct!(self, parser_context, Punct::Colon);
                     let v = self.parse_expr(parser_func_context, parser_context);
 
                     if got.contains(&i.to_string()) {
@@ -1114,18 +1137,24 @@ impl<'b> Parser<'b> {
                     match lookahead {
                         Token::Punct(p) => {
                             match p {
-                                Punct::CloseBrace => {
-                                },
+                                Punct::CloseBrace => {},
                                 Punct::Comma => {
                                     self.skip_next_item();
                                 },
-                                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or '}'"),
+                                _ => {
+                                    parser_context.push_err(self.unexpected_token_error_raw(next_item.span, &loc.clone(), "expecting ',' or '}'"));
+                                }
                             }
                         },
-                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or '}'"),
+                        _ => {
+                            parser_context.push_err(self.unexpected_token_error_raw(next_item.span, &loc.clone(), "expecting ',' or '}'"));
+                        }
                     }
+                }, 
+                _ => {
+                    parser_context.push_err(self.unexpected_token_error_raw(next_item.span, &loc.clone(), "expecting ',' or '}'"));
+                    self.skip_next_item();
                 },
-                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ',' or '}'"),
             }
         }
         
@@ -1140,7 +1169,7 @@ impl<'b> Parser<'b> {
             }
         }
 
-        Ok(out)
+        out
     }
 
     /// This parses an object literal and uses it to construct something. As a side effect it
@@ -1152,7 +1181,6 @@ impl<'b> Parser<'b> {
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
         let loc = self.peek_next_location();
-        let err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: loc.clone(), is_const: true};
         
         let scratch_malloc = String::from("__scratch_malloc");
         let scratch_malloc_type = Type::UnsafePtr;
@@ -1166,8 +1194,6 @@ impl<'b> Parser<'b> {
         parser_func_context.local_var_map.insert(scratch_malloc.clone(), idx as u32);
         
         let out = self.parse_object_literal_to_vec(for_type, &loc, parser_func_context, parser_context);
-        expect_ok!(out, parser_context, err_ret);
-
         TypedExpr{expr: Expr::ConstructFromObjectLiteral(for_type.clone(), out), is_const: true, loc: loc, r#type: for_type.clone()}
     }
 
@@ -1285,59 +1311,6 @@ impl<'b> Parser<'b> {
         } else {
             TypedExpr{expr: Expr::TupleLiteral(out_arr), is_const: true, loc: loc, r#type: Type::Tuple(out_arr_types)}
         }
-    }
-
-    fn parse_object_literal(&mut self,
-        parser_func_context: &mut ParserFuncContext,
-        parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
-        let mut loc = self.peek_next_location();
-        assert_punct!(self, Punct::OpenBrace);
-
-        let mut out: Vec<ObjectLiteralElem> = vec![];
-        let mut type_out: HashMap<String, Type> = HashMap::new();
-
-        loop {
-            let next_item = self.next_item();
-            assert_ok!(next_item);
-            let token = next_item.token;
-
-            match token {
-                Token::Punct(p) => {
-                    match p {
-                        Punct::CloseBrace => {
-                            loc.end = next_item.location.end.clone();
-                            break;
-                        },
-                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
-                    }
-                },
-                Token::Ident(i) => {
-                    assert_punct!(self, Punct::Colon);
-                    let v = self.parse_expr(parser_func_context, parser_context);
-                    type_out.insert(i.to_string(), v.r#type.clone());
-                    out.push(ObjectLiteralElem{name: i.to_string(), value: v});
-                    
-                    let lookahead = self.peek_next_token();
-                    match lookahead {
-                        Token::Punct(p) => {
-                            match p {
-                                Punct::CloseBrace => {
-                                },
-                                Punct::Comma => {
-                                    self.skip_next_item();
-                                },
-                                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
-                            }
-                        },
-                        _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
-                    }
-                },
-                _ => return self.unexpected_token_error(next_item.span, &loc.clone(), "expecting ';' or '}'"),
-            }
-        }
-        
-        Ok(TypedExpr{expr: Expr::ObjectLiteral(out), is_const: true, loc: loc, r#type: Type::ObjectLiteral(type_out)})
     }
 
     fn get_postfix_unary_operator_for_token(&self, 
@@ -1671,9 +1644,7 @@ impl<'b> Parser<'b> {
                         e
                     },
                     Keyword::UnsafeStatic => {
-                        let e = self.parse_unsafe_static(parser_func_context, parser_context);
-                        expect_ok!(e, parser_context, err_ret);
-                        e
+                        self.parse_unsafe_static(parser_func_context, parser_context)
                     },
                     Keyword::Void => { 
                         self.skip_next_item();
@@ -1700,11 +1671,6 @@ impl<'b> Parser<'b> {
 
             Token::Punct(p) => match p {
                 Punct::OpenParen => self.parse_paren_expr(parser_func_context, parser_context),
-                Punct::OpenBrace => {
-                    let e = self.parse_object_literal(parser_func_context, parser_context);
-                    expect_ok!(e, parser_context, err_ret);
-                    e
-                },
                 _ => {
                     self.skip_next_item();
                     parser_context.push_err(self.unexpected_token_error_raw(lookahead_item.span, &lookahead_item.location, "unexpected punctuation"));

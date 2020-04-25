@@ -430,7 +430,7 @@ fn build(matches: &ArgMatches) -> i32 {
 fn main() {
     let matches = App::new("wa1")
         .version("0.0.2")
-        .about("Wasabi compiler")
+        .about("WA1 compiler")
         .subcommands(
             vec![
                 SubCommand::with_name("build-simple")

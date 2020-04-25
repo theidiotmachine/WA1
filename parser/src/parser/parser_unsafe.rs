@@ -8,7 +8,7 @@ use ast::prelude::*;
 use types::prelude::*;
 pub use errs::{Error};
 use errs::prelude::*;
-use crate::{assert_punct, assert_ok, expect_semicolon, expect_ident, expect_punct, cast_typed_expr};
+use crate::{assert_punct, expect_semicolon, expect_ident, expect_punct, cast_typed_expr};
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_mem_grow(&mut self,    
@@ -71,7 +71,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_unsafe_static(&mut self,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let loc = self.peek_next_location();
         if parser_context.unsafe_parse_mode == UnsafeParseMode::Safe {
             parser_context.errors.push(Error::UnsafeCodeNotAllowed(loc.clone()));
@@ -84,22 +84,18 @@ impl<'a> Parser<'a> {
         let lookahead_item = self.peek_next_item();
         let lookahead = lookahead_item.token;
         match lookahead {
-            Token::Punct(p) => {
-                match p {
-                    Punct::OpenBrace => {
-                        let out = self.parse_object_literal_to_vec(&type_to_construct, &loc, parser_func_context, parser_context);
-                        assert_ok!(out);
-                        Ok(TypedExpr{expr: Expr::ConstructStaticFromObjectLiteral(type_to_construct.clone(), out), is_const: true, loc: loc, r#type: type_to_construct.clone()})
-                    },
-                    Punct::OpenBracket => {
-                        let out = self.parse_array_literal_to_vec(&type_to_construct, &loc, parser_func_context, parser_context);
-                        assert_ok!(out);
-                        Ok(TypedExpr{expr: Expr::ConstructStaticFromArrayLiteral(type_to_construct.clone(), out), is_const: true, loc: loc, r#type: type_to_construct.clone()})
-                    },
-                    _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "{"),
-                }
+            Token::Punct(Punct::OpenBrace) => {
+                let out = self.parse_object_literal_to_vec(&type_to_construct, &loc, parser_func_context, parser_context);
+                TypedExpr{expr: Expr::ConstructStaticFromObjectLiteral(type_to_construct.clone(), out), is_const: true, loc: loc, r#type: type_to_construct.clone()}
             },
-            _ => self.unexpected_token_error(lookahead_item.span, &lookahead_item.location, "{"),
+            Token::Punct(Punct::OpenBracket) => {
+                let out = self.parse_array_literal_to_vec(&type_to_construct, &loc, parser_func_context, parser_context);
+                TypedExpr{expr: Expr::ConstructStaticFromArrayLiteral(type_to_construct.clone(), out), is_const: true, loc: loc, r#type: type_to_construct.clone()}
+            },
+            _ => {
+                let out = self.parse_object_literal_to_vec(&type_to_construct, &loc, parser_func_context, parser_context);
+                TypedExpr{expr: Expr::ConstructStaticFromObjectLiteral(type_to_construct.clone(), out), is_const: true, loc: loc, r#type: type_to_construct.clone()}
+            }
         }
     }
 
