@@ -1,0 +1,74 @@
+import {*} from "./assert"
+
+__struct malloc_state {
+  smallmap:         Int; 
+  treemap:          Int;
+  dvsize:           Int;
+  topsize:          Int;
+  least_addr:       Int;
+  dv:               Int;
+  top:              Int;
+  trim_check:       Int;
+  magic:            Int;
+  smallbins:        __Array<Int>;
+  treebins:         Int;
+  footprint:        Int;
+  max_footprint:    Int;
+  footprint_limit:  Int; 
+  mflags:           Int;
+  seg:              Int;
+  extp:             Int;
+  exts:             Int;
+}
+
+const gm: malloc_state = __static malloc_state{
+  smallmap:         100000,
+  treemap:          100001,
+  dvsize:           100002,
+  topsize:          100003,
+  least_addr:       100004, 
+  dv:               100005,
+  top:              100006,
+  trim_check:       100007,
+  magic:            100008,
+  smallbins:        __static __Array<Int> [ 
+    100009,
+    100010,
+    100011,
+    100012,
+    100013,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    100023,
+  ],
+  treebins:         200000,
+  footprint:        200001,
+  max_footprint:    200002,
+  footprint_limit:  200003,
+  mflags:           200004,
+  seg:              200005, 
+  extp:             200006,
+  exts:             200007,
+};
+
+export fn textComplex() -> Void {
+    //let sm = gm.smallmap
+    assert.assert(gm.smallmap == 100000)
+    assert.assert(gm.treemap == 100001)
+    assert.assert(gm.dvsize==100002)
+    assert.assert(gm.topsize==100003)
+    assert.assert(gm.magic==100008)
+    assert.assert(gm.smallbins[0] == 100009)
+    assert.assert(gm.treebins==200000)
+    assert.assert(gm.footprint==200001)
+    assert.assert(gm.seg==200005)
+    assert.assert(gm.extp==200006)
+    assert.assert(gm.exts==200007)
+}

@@ -1,9 +1,21 @@
+import {*} from "./assert"
+
 let arr1 = __static __Array<Int> [ 1, 2, 4 ];
 
 export fn setElem(a: Int, idx: Int<0, 3>) -> Void {
-    arr1[idx] = a;
+    arr1[idx] = a
 }
 
 export fn getElem(idx: Int<0, 3>) -> Int {
-    arr1[idx];
+    arr1[idx]
+}
+
+export fn testArray() -> Void {
+    assert.assert(getElem(0) == 1)
+    assert.assert(getElem(1) == 2)
+    assert.assert(getElem(2) == 4)
+    setElem(10, 1)
+    assert.assert(getElem(0) == 1)
+    assert.assert(getElem(1) == 10)
+    assert.assert(getElem(2) == 4)
 }

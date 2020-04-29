@@ -1,34 +1,25 @@
-export function __Option_unwrap<T: __struct T>(x: __Option<T>): T {
-    let p: __ptr = x as __ptr;
-    if (p == 0) {
-        __trap();
+export fn __Option_unwrap<T: __struct T>(x: __Option<T>) -> T {
+    if (x == __Null) {
+        __trap()
     } else {
-        p as T;
+        x as __Ptr as T
     }
 }
 
-/*
-__struct S1{
-
+export fn __Some_unwrap<T: __struct T>(x: __Some<T>) -> T {
+    x as __Ptr as T
 }
 
-export function __Option_unwrap_S1(x: __Option<S1>): S1 {
-    let p: __ptr = x as __ptr;
-    if (p == 0) {
-        __trap();
-    } else {
-        p as S1;
-    }
+export fn __Option_isSome<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
+    true => __Some<T>
+    false => __Null
+} {
+    x != __Null
 }
 
-This is what gets compiled
-
-export function __Option_unwrap___ptr(x: __Option<__ptr>): __ptr {
-    let p: __ptr = x as __ptr;
-    if (p == 0) {
-        __trap();
-    } else {
-        p as __ptr;
-    }
+export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
+    true => __Null
+    false => __Some<T>
+} {
+    x == __Null
 }
-*/
