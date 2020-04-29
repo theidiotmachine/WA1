@@ -1,20 +1,12 @@
 import {*} from "./cache"
-import {*} from "./assert"
 import {*} from "./array"
 import {*} from "./ptr"
+import {*} from "./complex"
 
 export fn test() -> Int {
-    assert.assert(cache.getA() == 10);
-    cache.setA(20);
-    assert.assert(cache.getA() == 20);
+    cache.testCache()
+    array.testArray()
+    complex.textComplex()
 
-    assert.assert(array.getElem(0) == 1);
-    assert.assert(array.getElem(1) == 2);
-    assert.assert(array.getElem(2) == 4);
-    array.setElem(10, 1);
-    assert.assert(array.getElem(0) == 1);
-    assert.assert(array.getElem(1) == 10);
-    assert.assert(array.getElem(2) == 4);
-
-    1;
+    1
 }

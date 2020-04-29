@@ -1,11 +1,15 @@
 {
     "entry_point": {
-        "file_name": "malloc.wa1",
+        "file_name": "test.wa1",
         "is_unsafe": true
     },
     "source_files": [
         {
             "file_name": "option.wa1",
+            "is_unsafe": true
+        },
+        {
+            "file_name": "malloc.wa1",
             "is_unsafe": true
         }
     ],

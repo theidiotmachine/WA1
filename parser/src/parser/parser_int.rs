@@ -74,7 +74,7 @@ impl<'a> Parser<'a> {
     
         let mut arg_types: Vec<Type> = vec![holding.r#type.clone()];
         let (args, _) = self.parse_function_call_args_unchecked(parser_func_context, parser_context);
-        for arg in args {
+        for arg in &args {
             arg_types.push(arg.r#type.clone());    
         }
         let t = get_type_casts_for_function_set(&func_types, &arg_types);
@@ -94,7 +94,7 @@ impl<'a> Parser<'a> {
                 while i < arg_type_casts.len() {
                     let out_type_cast = arg_type_casts.get(i).unwrap().clone();
                     let out_type = get_type_from_type_cast(&out_type_cast, &func_type.in_types.get(i).unwrap());
-                    let o_cast = create_cast(&out_type, holding, &out_type_cast);
+                    let o_cast = create_cast(&out_type, &args[i-1], &out_type_cast);
                     out_args.push(o_cast.unwrap().clone());
                     i += 1;
                 }

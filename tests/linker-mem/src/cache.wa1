@@ -1,13 +1,23 @@
+import {*} from "./assert"
+
 __struct test_struct {
-  a: Int;
+  a: Int
+  b: Number
 }
 
-let cache = __static test_struct{a: 10};
+let cache = __static test_struct{a: 10, b: 20};
 
-export fn setA(a: Int) -> Void {
-    cache.a = a;
+fn setA(a: Int) -> Void {
+    cache.a = a
 }
 
-export fn getA() -> Int {
-    cache.a;
+fn getA() -> Int {
+    cache.a
+}
+
+export fn testCache() -> Void {
+  let a = getA()
+  assert.assert(getA() == 10)
+  setA(20)
+  assert.assert(getA() == 20)
 }

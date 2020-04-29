@@ -4,21 +4,53 @@
  * license and the Apache License (Version 2.0), at your choice.
  */
 pub fn serialize_i32(x: i32, data: &mut Vec<u8>) {
-    let mut buf = [0u8; 1];
+    let mut buf: u8;
     let mut v = x;
     let mut more = true;
     while more {
-        buf[0] = (v & 0b0111_1111) as u8;
+        buf = (v & 0b0111_1111) as u8;
         v >>= 7;
-        if (v == 0 && buf[0] & 0b0100_0000 == 0) || (v == -1 && buf[0] & 0b0100_0000 == 0b0100_0000)  {
+        if (v == 0 && buf & 0b0100_0000 == 0) || (v == -1 && buf & 0b0100_0000 == 0b0100_0000)  {
             more = false
         } else {
-            buf[0] |= 0b1000_0000
+            buf |= 0b1000_0000
         }
 
-        data.push(buf[0]);
+        data.push(buf);
     }
 }
+
+/*
+pub fn serialize_i32_pad(x: i32, data: &mut Vec<u8>) {
+    let mut buf: u8;
+    let mut v = x;
+    let mut more = true;
+    let mut num_bytes = 0;
+    while more {
+        buf = (v & 0b0111_1111) as u8;
+        v >>= 7;
+        if (v == 0 && buf & 0b0100_0000 == 0) || (v == -1 && buf & 0b0100_0000 == 0b0100_0000)  {
+            more = false
+        } else {
+            buf |= 0b1000_0000
+        }
+
+        data.push(buf);
+        num_bytes += 1;
+    }
+
+    let pad_value = if x < 0 { 0x7f } else { 0x00 };
+
+    while num_bytes < 4 {
+        data.push(pad_value | 0x80);
+        num_bytes += 1;
+    }
+
+    if num_bytes < 5 {
+        data.push(pad_value);
+    }
+}
+*/
 
 /// Serialize a canonical LEB128
 pub fn serialize_u32(x: u32, data: &mut Vec<u8>) {
@@ -46,7 +78,7 @@ pub fn serialize_u32_pad(x: u32, data: &mut Vec<u8>) {
         }
         buf = (v & 0b0111_1111) as u8;
         v >>= 7;
-        if num_bytes < 5 {
+        if num_bytes < 4 {
             buf |= 0b1000_0000;
         }
         data.push(buf);

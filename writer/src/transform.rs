@@ -467,15 +467,14 @@ fn compile_struct_member_get(
 fn compile_array_member_set(
     inner_value_type: &WasmValueType,
     inner_value_type_size: u32,
-    idx: u32,
     wasm_expr: &mut WasmExpr,
 ) -> () {
     let align = stupid_log2(inner_value_type_size);
     match inner_value_type {
-        WasmValueType::I32 => wasm_expr.data.push(WasmInstr::I32Store(align, inner_value_type_size * idx)),
-        WasmValueType::I64 => wasm_expr.data.push(WasmInstr::I64Store(align, inner_value_type_size * idx)),
-        WasmValueType::F32 => wasm_expr.data.push(WasmInstr::F32Store(align, inner_value_type_size * idx)),
-        WasmValueType::F64 => wasm_expr.data.push(WasmInstr::F64Store(align, inner_value_type_size * idx)),
+        WasmValueType::I32 => wasm_expr.data.push(WasmInstr::I32Store(align, 0)),
+        WasmValueType::I64 => wasm_expr.data.push(WasmInstr::I64Store(align, 0)),
+        WasmValueType::F32 => wasm_expr.data.push(WasmInstr::F32Store(align, 0)),
+        WasmValueType::F64 => wasm_expr.data.push(WasmInstr::F64Store(align, 0)),
     }
 }
 
@@ -600,7 +599,7 @@ fn compile_l_value_post(
                     let elem_size = get_size_for_value_type(&elem_value_type);
                     
                     //we do a store. Because we already calculated the address we give it an index of zero.
-                    compile_array_member_set(&elem_value_type, elem_size, 0, wasm_expr);
+                    compile_array_member_set(&elem_value_type, elem_size, wasm_expr);
                     if consume_result {
                         compile_expr(lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
                     }
@@ -1068,9 +1067,9 @@ pub(crate) fn compile_expr(
                     let mut idx = 0;
                     for expr in exprs {
                         //sets are, irritatingly, the address, the value, and then the instruction
-                        wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr));
+                        wasm_expr.data.push(WasmInstr::U32ConstStaticMemAddr(addr + (idx * elem_size)));
                         compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
-                        compile_array_member_set(&elem_value_type, elem_size, idx, wasm_expr);
+                        compile_array_member_set(&elem_value_type, elem_size, wasm_expr);
                         idx += 1;
                     }
 

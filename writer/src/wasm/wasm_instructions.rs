@@ -7,6 +7,8 @@
 use crate::wasm::{WasmResultType};
 use crate::wasm::wasm_serialize::{serialize_u32, serialize_i32, serialize_i64, serialize_f32, serialize_f64, serialize_u32_pad};
 use crate::wasm::wasm_object_file::{WasmRelocationEntry, WasmObjectModuleFragment};
+use std::i32;
+use std::convert::TryInto;
 
 /// Instruction.
 #[derive(Clone, Debug, PartialEq)]
@@ -520,7 +522,14 @@ impl WasmInstr {
 			},
 			WasmInstr::U32ConstStaticMemAddr(def) => {
 				reloc_entries.push(WasmRelocationEntry::new_static_mem_const(writer.len() as u32 + MAGIC_RELOC_OFFSET, 
-					reloc.linking_section.symbol_table.data[0], *def
+					reloc.linking_section.symbol_table.data[0], 
+					//yes, this has an unwrap. The linker requires this to be signed, and, perhaps surprisingly, the SLEB definition of some numbers is not the same
+					//as the LEB definition; so if you encode 64 as a LEB and read it as a SLEB you get -64. This means we have to output this as a signed, and so 
+					//we need to do the conversion somewhere.
+					//It's probably OK this panics. It means that someone somewhere has managed to statically allocate more than 2Gib in a single module
+					//in a 32 bit process which I mean come on I think you will have other problems too
+					//I am aware that writing this comment pretty much guarantees it will surface at some point, so hi! 
+					(*def).try_into().unwrap() 
 				));
 				op!(writer, opcodes::I32CONST, {
 					serialize_u32_pad(*def, writer);

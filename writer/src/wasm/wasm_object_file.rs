@@ -1,4 +1,4 @@
-use crate::wasm::wasm_serialize::{serialize_string, serialize_u32, serialize_u32_pad};
+use crate::wasm::wasm_serialize::{serialize_string, serialize_u32, serialize_i32};
 
 /// This is an implementation of https://github.com/WebAssembly/tool-conventions/blob/master/Linking.md
 /// 
@@ -404,7 +404,7 @@ pub struct WasmRelocationEntry{
     /// For R_WASM_MEMORY_ADDR_LEB, R_WASM_MEMORY_ADDR_SLEB, R_WASM_MEMORY_ADDR_I32, 
     /// R_WASM_FUNCTION_OFFSET_I32, and R_WASM_SECTION_OFFSET_I32 relocations the following field is additionally present:
     /// addend to add to the address
-    pub addend: u32,
+    pub addend: i32,
 }
 
 impl WasmRelocationEntry{
@@ -416,18 +416,18 @@ impl WasmRelocationEntry{
         WasmRelocationEntry{relocation_type: WasmRelocationType::RWasmGlobalIndexLEB, offset: offset, index: index, addend: 0}
     }
 
-    pub fn new_static_mem_const(offset: u32, index: u32, addend: u32) -> WasmRelocationEntry {
+    pub fn new_static_mem_const(offset: u32, index: u32, addend: i32) -> WasmRelocationEntry {
         WasmRelocationEntry{relocation_type: WasmRelocationType::RWasmMemoryAddrSLEB, offset: offset, index: index, addend: addend}
     }
 
     pub fn serialize(&self, out: &mut Vec<u8>){
         out.push(self.relocation_type as u8);
         serialize_u32(self.offset, out);
-        serialize_u32_pad(self.index, out);
+        serialize_u32(self.index, out);
         if self.relocation_type == WasmRelocationType::RWasmMemoryAddrLEB || self.relocation_type == WasmRelocationType::RWasmMemoryAddrSLEB 
             || self.relocation_type == WasmRelocationType::RWasmMemoryAddrI32
             || self.relocation_type == WasmRelocationType::RWasmFunctionOffsetI32 || self.relocation_type == WasmRelocationType::RWasmSectionOffsetI32 {
-            serialize_u32(self.addend, out);
+            serialize_i32(self.addend, out);
         }
     }
 }

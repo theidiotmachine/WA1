@@ -1,0 +1,7 @@
+import {*} from "./malloc"
+
+export fn test() -> Int {
+    let p = malloc.dlmalloc(32)
+    malloc.dlfree(p)
+    1
+}

@@ -10,7 +10,13 @@ fn testTruncate() => {
     assert.assert(x.truncateToSigned() == 0x7FFFFFFF)
 }
 
+fn testShift() => {
+    let s = 80;
+    assert.assert(s.shiftRight(3) == 10)
+}
+
 export fn testInt() -> Void {
     testGuard1(23)
     testTruncate()
+    testShift()
 }
