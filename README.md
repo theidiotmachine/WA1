@@ -446,10 +446,10 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
         * non-deterministic (e.g. currenttime, memorysize, reading a global or file)
     1. [ ] evaluate globally and locally pure functions if they have literals passed in. Is this... insane?
 1. A runtime
-    1. [ ] a simple allocator
-    1. [ ] a small object allocator
+    1. [x] a simple allocator
+    1. [x] a small object allocator
     1. [ ] a gc based on the rajan & bacon paper
-        1. [ ] but with gc counter!
+        1. [ ] but with assignment counter
 1. Structs, ptrs
     1. [x] structs - initial code
     1. [ ] union types are discriminated unions like Rust enums - yeah!
@@ -498,7 +498,7 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
 1. Linker
     1. [x] object file format that contains
     1. [x] use wasm-ld
-    1. [ ] `fatal-warnings`
+    1. [x] `fatal-warnings`
 1. tool chain
     1. [ ] npm 
     1. [ ] binaryen optimizer
