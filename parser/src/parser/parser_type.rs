@@ -6,7 +6,7 @@ use ast::prelude::*;
 use types::prelude::*;
 pub use errs::Error;
 use errs::prelude::*;
-use crate::{Commitment, expect_punct, expect_next, expect_ident};
+use crate::{Commitment, expect_punct, expect_next, expect_ident, check_privacy};
 
 impl<'a> Parser<'a> {
     pub (crate) fn parse_type_args(&mut self,
@@ -357,9 +357,18 @@ impl<'a> Parser<'a> {
         };
 
         let mut member_funcs = vec![
-            MemberFunc{type_args: vec![], func_type: FuncType{out_type: inner.clone(), in_types: vec![this_type.clone()]}, mangled_name: String::from("__getInner"), name: String::from("getInner")},
-            MemberFunc{type_args: vec![], func_type: FuncType{out_type: inner.clone(), in_types: vec![this_type.clone()]}, mangled_name: String::from("__getInnerMut"), name: String::from("getInnerMut")},
-            MemberFunc{type_args: vec![], func_type: FuncType{out_type: Type::RealVoid, in_types: vec![inner.clone()]}, mangled_name: String::from("__setInner"), name: String::from("setInner")}
+            MemberFunc{
+                type_args: vec![], func_type: FuncType{out_type: inner.clone(), in_types: vec![this_type.clone()]}, 
+                mangled_name: String::from("__getInner"), name: String::from("getInner"), privacy: Privacy::Private,
+            },
+            MemberFunc{
+                type_args: vec![], func_type: FuncType{out_type: inner.clone(), in_types: vec![this_type.clone()]}, 
+                mangled_name: String::from("__getInnerMut"), name: String::from("getInnerMut"), privacy: Privacy::Private,
+            },
+            MemberFunc{
+                type_args: vec![], func_type: FuncType{out_type: Type::RealVoid, in_types: vec![inner.clone()]}, 
+                mangled_name: String::from("__setInner"), name: String::from("setInner"), privacy: Privacy::Private,
+            }
         ];
         parser_context.type_map.insert(id.clone(), TypeDecl::Type{name: id.clone(), inner: inner.clone(), type_args: type_args.clone(), export, 
             member_funcs: member_funcs.clone(), 
@@ -378,18 +387,38 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            if token.matches_keyword(Keyword::Fn) {
-                let mf = self.parse_member_function_decl(&prefix, &this_type, &type_args, export, phase, parser_context);
-                parser_context.append_member_func(&id, &mf);
-                member_funcs.push(mf);
-            } else if token.matches_keyword(Keyword::Constructor) {
-                if constructor.is_some() {
-                    parser_context.push_err(Error::OnlyOneConstructor(next.location.clone()))
+            match token {
+                Token::Keyword(Keyword::Fn) => {
+                    let mf = self.parse_member_function_decl(&prefix, &this_type, &type_args, Privacy::Public, export, phase, parser_context);
+                    parser_context.append_member_func(&id, &mf);
+                    member_funcs.push(mf);
+                },
+                Token::Keyword(Keyword::Constructor) => {
+                    if constructor.is_some() {
+                        parser_context.push_err(Error::OnlyOneConstructor(next.location.clone()))
+                    }
+                    constructor = Some(self.parse_constructor_decl(&prefix, &type_args, export, phase, parser_context));
+                },
+                Token::Keyword(Keyword::Private) => {
+                    self.skip_next_item();
+                    next = self.peek_next_item();
+                    token = &next.token;
+                    match token {
+                        Token::Keyword(Keyword::Fn) => {
+                            let mf = self.parse_member_function_decl(&prefix, &this_type, &type_args, Privacy::Private, export, phase, parser_context);
+                            parser_context.append_member_func(&id, &mf);
+                            member_funcs.push(mf);
+                        },
+                        _ => {
+                            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
+                            self.skip_next_item();
+                        }
+                    }
                 }
-                constructor = Some(self.parse_constructor_decl(&prefix, &type_args, export, phase, parser_context));
-            } else {
-                parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
-                self.skip_next_item();
+                _ => {
+                    parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
+                    self.skip_next_item();
+                }
             }
 
             next = self.peek_next_item();
@@ -417,10 +446,12 @@ impl<'a> Parser<'a> {
         match user_type{
             Some(TypeDecl::Type{name: _, inner, type_args: _, export: _, member_funcs, constructor: _, under_construction: _}) => {
                 let boo = member_funcs.clone();
-                let o_mf = boo.iter().find(|&x| x.name == *func_name);
-                match o_mf {
-                    Some(mf) => {
-                        let mangled_name = &mf.mangled_name;
+                let o_member_func = boo.iter().find(|&x| x.name == *func_name);
+                match o_member_func {
+                    Some(member_func) => {
+                        check_privacy(member_func.privacy, &this_expr.r#type, &member_func.name, &loc, parser_func_context, parser_context);
+        
+                        let mangled_name = &member_func.mangled_name;
                         match mangled_name.as_str(){
                             "__getInner" => {
                                 self.parse_empty_function_call_args(parser_func_context, parser_context);
@@ -445,7 +476,7 @@ impl<'a> Parser<'a> {
                                 }
                             },
                             _ => {
-                                self.parse_member_function_call(this_expr, &type_args, &mf, parser_func_context, parser_context)
+                                self.parse_member_function_call(this_expr, &type_args, &member_func, parser_func_context, parser_context)
                             }
                         }  
                     },

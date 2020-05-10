@@ -59,6 +59,7 @@ pub enum Error {
     TypeGuardReapply(SourceLocation, Type),
     NoThis(SourceLocation),
     OnlyOneConstructor(SourceLocation),
+    EncapsulationFailure(SourceLocation, Type, String),
 }
 
 impl Display for Error {
@@ -115,6 +116,7 @@ impl Display for Error {
             Error::TypeGuardReapply(ref loc, ref t) => write!(f, "WARNING {}: typeguard {} is already in place", loc, t),
             Error::NoThis(ref loc) => write!(f, "ERROR {}: 'this' not valid in this context", loc),
             Error::OnlyOneConstructor(ref loc) => write!(f, "ERROR {}: only one constructor is supported", loc),
+            Error::EncapsulationFailure(ref loc, ref t, ref m) => write!(f, "ERROR {}: not allowed to access member {} of {}", loc, m, t),
         }
     }
 }

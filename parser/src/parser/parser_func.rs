@@ -1078,20 +1078,21 @@ impl<'a> Parser<'a> {
     ) -> MemberFunc {
         let mut fake_parser_func_context = ParserFuncContext::new(&None);
         let (_, mangled_name, name, type_args, func_type) = self.parse_func_decl_internal(export, phase, prefix, &None, this_type_args, true, &mut fake_parser_func_context, parser_context);
-        MemberFunc{mangled_name: mangled_name, type_args, func_type, name: name}
+        MemberFunc{mangled_name: mangled_name, type_args, func_type, name: name, privacy: Privacy::Public}
     }
 
     pub(crate) fn parse_member_function_decl(&mut self, 
         prefix: &String,
         this_type: &Type,
         this_type_args: &Vec<TypeArg>,
+        privacy: Privacy,
         export: bool,
         phase: ParserPhase,
         parser_context: &mut ParserContext,
     ) -> MemberFunc {
         let mut fake_parser_func_context = ParserFuncContext::new(&None);
         let (_, mangled_name, name, type_args, func_type) = self.parse_func_decl_internal(export, phase, prefix, &Some(this_type.clone()), this_type_args, false, &mut fake_parser_func_context, parser_context);
-        MemberFunc{mangled_name, type_args, func_type, name}
+        MemberFunc{mangled_name, type_args, func_type, name, privacy}
     }
 
     fn parse_generic_func_call_given_resolved_types(&mut self,
@@ -1338,7 +1339,6 @@ impl<'a> Parser<'a> {
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
-
         let mangled_name = &member_func.mangled_name;
         let loc = self.peek_next_location();
 
