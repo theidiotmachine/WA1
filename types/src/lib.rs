@@ -126,7 +126,7 @@ pub enum OpType{
     StaticMemberOpType,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
 pub enum Privacy{
     Public, Private, Protected
 }

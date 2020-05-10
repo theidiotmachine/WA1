@@ -12,6 +12,7 @@ pub struct MemberFunc{
     pub func_type: FuncType,
     pub mangled_name: String,
     pub name: String,
+    pub privacy: Privacy,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

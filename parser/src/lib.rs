@@ -259,6 +259,36 @@ fn generic_unwrap(want: &Type, got: Box<TypedExpr>, parser_context: &mut ParserC
     }
 }
 
+pub (crate) fn check_privacy(
+    privacy: Privacy, 
+    holding: &Type,
+    member: &String,
+    loc: &SourceLocation,
+    parser_func_context: &mut ParserFuncContext,
+    parser_context: &mut ParserContext,
+) -> () {
+    match &parser_func_context.this_type {
+        Some(this_type) => {
+            match privacy{
+                Privacy::Public => {},
+                Privacy::Protected => {
+                    parser_context.push_err(Error::NotYetImplemented(loc.clone(), String::from("protected variables")))
+                },
+                Privacy::Private => {
+                    if holding != this_type {
+                        parser_context.push_err(Error::EncapsulationFailure(loc.clone(), holding.clone(), member.clone()))
+                    }
+                }
+            }
+        },
+        None => {
+            if privacy != Privacy::Public {
+                parser_context.push_err(Error::EncapsulationFailure(loc.clone(), holding.clone(), member.clone()))
+            }
+        }
+    }
+}
+
 /// Type to indicate if this is a speculative parse (i.e. it may fail gracefully) of a required parse (in which case we
 /// must succeed)
 #[derive(Debug, PartialEq)]
