@@ -1,25 +1,68 @@
 use crate::Parser;
-use crate::{ParserContext, UnsafeParseMode};
+use crate::{ParserContext, UnsafeParseMode, ParserPhase, ParserFuncContext};
 
 use ress::prelude::*;
 use ast::prelude::*;
 use types::prelude::*;
 pub use errs::Error;
 use errs::prelude::*;
-use crate::{Commitment, expect_punct, expect_next};
+use crate::{Commitment, expect_punct, expect_next, expect_ident};
 
 impl<'a> Parser<'a> {
+    pub (crate) fn parse_type_args(&mut self,
+        type_args: &Vec<TypeArg>,
+        parser_context: &mut ParserContext,
+    ) -> Vec<Type> {
+        //skip '<'
+        self.skip_next_item();
+        let mut loc = self.peek_next_location();
+        let mut idx = 0;
+        let mut resolved_types = vec![];
+        let num = type_args.len();
+
+        //parse the explicit types
+        while idx < num {
+            let arg_type = self.parse_type(parser_context);
+            if !matches_type_constraint(&arg_type, &(type_args[idx].constraint)) {
+                parser_context.push_err(Error::FailedTypeArgConstraint(loc.clone()));
+            }
+            resolved_types.push(arg_type);
+            let next = self.peek_next_item();
+            let token = &next.token;
+            if token.matches_punct(Punct::Comma) {
+                self.skip_next_item();
+                loc = self.peek_next_location();
+                idx += 1;
+            } else if token.matches_punct(Punct::GreaterThan) {
+                self.skip_next_item();
+                if idx == num - 1 {
+                    idx += 1;
+                } else {
+                    parser_context.push_err(Error::MissingTypeArgs(next.location.clone()));
+                    break;
+                }
+            }
+        }
+
+        while idx < num {
+            resolved_types.push(Type::Undeclared);
+            idx += 1;
+        }
+
+        resolved_types
+    }
+
     pub(crate) fn parse_type_from_ident(&mut self, 
         ident: &String,
         commitment: Commitment,
         parser_context: &mut ParserContext,
     ) -> Option<Type> {
-        let o_type = parser_context.type_map.get(ident);
+        let o_type = parser_context.get_type_decl(ident);
         let next = self.peek_next_item();
         let token = &next.token;
         if token.matches_punct(Punct::LessThan) {
             if commitment == Commitment::Committed {
-                parser_context.errors.push(Error::NotYetImplemented(next.location.clone(), String::from("type args")));
+                parser_context.push_err(Error::NotYetImplemented(next.location.clone(), String::from("type args")));
                 Some(Type::Undeclared)
             } else {
                 None
@@ -44,9 +87,16 @@ impl<'a> Parser<'a> {
                 },
                 Some(user_type) => {
                     match user_type {
-                        TypeDecl::Class{name: _, class_type: _, export: _} => Some(Type::UserClass{name: ident.clone()}),
                         TypeDecl::Struct{name: _, struct_type: _, under_construction: _, export: _} => Some(Type::UnsafeStruct{name: ident.clone()}),
-                        TypeDecl::Alias{name: _, of, export: _} => Some(of.clone())
+                        TypeDecl::Alias{name: _, of, export: _} => Some(of.clone()),
+                        TypeDecl::Type{name: _, inner: _, type_args, export: _, member_funcs: _, constructor: _, under_construction: _} => {
+                            if type_args.len() > 0 {
+                                let types = self.parse_type_args(&type_args, parser_context);
+                                Some(Type::UserType{name: ident.clone(), type_args: types})
+                            } else {
+                                Some(Type::UserType{name: ident.clone(), type_args: vec![]})
+                            }
+                        },
                     }
                 }
             }
@@ -99,6 +149,27 @@ impl<'a> Parser<'a> {
                                 },
                             }
                         },
+                        Token::Punct(Punct::Dash) => {
+                            let next = expect_next!(self, parser_context, err_ret);
+                            let token = next.token;
+                            match token {
+                                Token::Number(n) => {
+                                    match n.kind() {
+                                        NumberKind::Hex | NumberKind::DecI | NumberKind::Bin | NumberKind::Oct => {
+                                            -1 * n.parse_i128().unwrap()
+                                        },
+                                        NumberKind::DecF => {
+                                            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("expecting integer constant")));
+                                            S_32_MIN
+                                        },
+                                    }
+                                },
+                                _ => {
+                                    parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("expecting integer constant")));
+                                    S_32_MIN
+                                }
+                            }
+                        },
                         _ => {
                             parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("expecting integer constant")));
                             S_32_MIN
@@ -117,6 +188,27 @@ impl<'a> Parser<'a> {
                                     parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("expecting integer constant")));
                                     S_32_MAX
                                 },
+                            }
+                        },
+                        Token::Punct(Punct::Dash) => {
+                            let next = expect_next!(self, parser_context, err_ret);
+                            let token = next.token;
+                            match token {
+                                Token::Number(n) => {
+                                    match n.kind() {
+                                        NumberKind::Hex | NumberKind::DecI | NumberKind::Bin | NumberKind::Oct => {
+                                            -1 * n.parse_i128().unwrap()
+                                        },
+                                        NumberKind::DecF => {
+                                            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("expecting integer constant")));
+                                            S_32_MAX
+                                        },
+                                    }
+                                },
+                                _ => {
+                                    parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("expecting integer constant")));
+                                    S_32_MAX
+                                }
                             }
                         },
                         _ => {
@@ -171,6 +263,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    ///Parse a type, e.g. Int
     pub(crate) fn parse_type(&mut self, 
         parser_context: &mut ParserContext,
     ) -> Type {
@@ -205,9 +298,164 @@ impl<'a> Parser<'a> {
             },
 
             _ => {
-                parser_context.push_err(Error::InvalidType(self.current_position));
+                parser_context.push_err(Error::InvalidType(next.location.clone()));
                 Type::Undeclared
             }
         }
+    }
+
+    pub(crate) fn parse_alias(&mut self, 
+        export: bool,
+        parser_context: &mut ParserContext,
+    ) {
+        self.skip_next_item();
+        let next = self.peek_next_item();
+        let id = expect_ident!(next, parser_context, "alias must have name");
+        self.skip_next_item();
+        expect_punct!(self, parser_context, Punct::Equal);
+        let t = self.parse_type(parser_context);
+        parser_context.type_map.insert(id.clone(), TypeDecl::Alias{name: id, of: t, export});
+    }
+
+
+    pub(crate) fn parse_type_decl(&mut self, 
+        export: bool,
+        phase: ParserPhase,
+        parser_context: &mut ParserContext,
+    ) -> () {
+        self.skip_next_item();
+        let next = self.peek_next_item();
+        let id = expect_ident!(next, parser_context, "type must have name");
+        self.skip_next_item();
+        
+        let mut next = self.peek_next_item();
+        let mut token = &next.token;
+
+        let mut generic = false;
+        let type_args = if token.matches_punct(Punct::LessThan) {
+            let type_args = self.parse_type_decl_args(parser_context);
+            let type_args = parser_context.push_type_scope(&type_args);
+            generic = true;
+            next = self.peek_next_item();
+            token = &next.token;
+            type_args
+        } else {
+            vec![]
+        };
+
+        if token.matches_punct(Punct::Equal) {
+            self.skip_next_item();
+        } else {
+            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), format!("Expected '{}", Punct::Equal.to_string())));
+        }
+
+        let inner = self.parse_type(parser_context);
+        
+        let this_type = Type::UserType{
+            name: id.clone(), 
+            type_args: type_args.iter().map(|type_arg| Type::VariableUsage{name: type_arg.name.clone(), constraint: type_arg.constraint.clone()}).collect()
+        };
+
+        let mut member_funcs = vec![
+            MemberFunc{type_args: vec![], func_type: FuncType{out_type: inner.clone(), in_types: vec![this_type.clone()]}, mangled_name: String::from("__getInner"), name: String::from("getInner")},
+            MemberFunc{type_args: vec![], func_type: FuncType{out_type: inner.clone(), in_types: vec![this_type.clone()]}, mangled_name: String::from("__getInnerMut"), name: String::from("getInnerMut")},
+            MemberFunc{type_args: vec![], func_type: FuncType{out_type: Type::RealVoid, in_types: vec![inner.clone()]}, mangled_name: String::from("__setInner"), name: String::from("setInner")}
+        ];
+        parser_context.type_map.insert(id.clone(), TypeDecl::Type{name: id.clone(), inner: inner.clone(), type_args: type_args.clone(), export, 
+            member_funcs: member_funcs.clone(), 
+            constructor: None, under_construction: true});
+
+        expect_punct!(self, parser_context, Punct::OpenBrace);
+
+        let mut next = self.peek_next_item();
+        let mut token = &next.token;
+        
+        let mut constructor: Option<MemberFunc> = None;
+        let prefix = format!("!{}__", id);
+        while !token.matches_punct(Punct::CloseBrace) {
+            if token.is_eof() {
+                parser_context.push_err(Error::UnexpectedEoF(next.location.clone(), String::from("expecting '}'")));
+                break;
+            }
+
+            if token.matches_keyword(Keyword::Fn) {
+                let mf = self.parse_member_function_decl(&prefix, &this_type, &type_args, export, phase, parser_context);
+                parser_context.append_member_func(&id, &mf);
+                member_funcs.push(mf);
+            } else if token.matches_keyword(Keyword::Constructor) {
+                if constructor.is_some() {
+                    parser_context.push_err(Error::OnlyOneConstructor(next.location.clone()))
+                }
+                constructor = Some(self.parse_constructor_decl(&prefix, &type_args, export, phase, parser_context));
+            } else {
+                parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
+                self.skip_next_item();
+            }
+
+            next = self.peek_next_item();
+            token = &next.token;    
+        }
+        self.skip_next_item();
+
+        if generic {
+            parser_context.pop_type_scope();
+        }
+
+        parser_context.type_map.insert(id.clone(), TypeDecl::Type{name: id, inner, type_args, export, member_funcs: member_funcs, constructor: constructor, under_construction: false});
+    }
+
+    pub (crate) fn parse_type_member_function_call(&mut self, 
+        this_expr: &TypedExpr,
+        type_name: &String, 
+        type_args: &Vec<Type>,
+        func_name: &String,
+        loc: &SourceLocation,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> TypedExpr {
+        let user_type = parser_context.get_type_decl(type_name);
+        match user_type{
+            Some(TypeDecl::Type{name: _, inner, type_args: _, export: _, member_funcs, constructor: _, under_construction: _}) => {
+                let boo = member_funcs.clone();
+                let o_mf = boo.iter().find(|&x| x.name == *func_name);
+                match o_mf {
+                    Some(mf) => {
+                        let mangled_name = &mf.mangled_name;
+                        match mangled_name.as_str(){
+                            "__getInner" => {
+                                self.parse_empty_function_call_args(parser_func_context, parser_context);
+                                TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: inner.clone(), is_const: true, loc: loc.clone()}
+                            },
+                            "__getInnerMut" => {
+                                self.parse_empty_function_call_args(parser_func_context, parser_context);
+                                TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: inner.clone(), is_const: false, loc: loc.clone()}
+                            },
+                            "__setInner" => {
+                                let args = self.parse_function_call_args(&None, &vec![inner.clone()], parser_func_context, parser_context);
+                                let o_l_value = this_expr.as_l_value();
+                                match o_l_value {
+                                    None => {
+                                        parser_context.push_err(Error::NotAnLValue(loc.clone()));
+                                        TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, is_const: true, loc: loc.clone()}
+                                    },
+                                    Some(l_value) => {
+                                        TypedExpr{expr: Expr::Assignment(Box::new(this_expr.clone()), l_value, Box::new(args[0].clone())), 
+                                            r#type: Type::RealVoid, is_const: true, loc: loc.clone()}
+                                    }
+                                }
+                            },
+                            _ => {
+                                self.parse_member_function_call(this_expr, &type_args, &mf, parser_func_context, parser_context)
+                            }
+                        }  
+                    },
+                    None => {
+                        parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), this_expr.r#type.clone(), func_name.clone()));
+                        TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: loc.clone(), is_const: true}
+                    }
+                }
+            },
+            _ => unreachable!()
+        }        
     }
 }

@@ -1106,6 +1106,7 @@ pub enum Keyword {
     UnsafeStatic,
     UnsafeTypeGuard,
     Alias,
+    Type,
 }
 
 impl Keyword {
@@ -1180,6 +1181,7 @@ impl Keyword {
             "__Array" => Keyword::UnsafeArray,
             "__static" => Keyword::UnsafeStatic,
             "__typeguard" => Keyword::UnsafeTypeGuard,
+            "type" => Keyword::Type,
             _ => return None,
         })
     }
@@ -1263,6 +1265,7 @@ impl Keyword {
             Keyword::UnsafeStatic => "__static",
             Keyword::UnsafeOption => "__Option",
             Keyword::UnsafeTypeGuard => "__typeguard",
+            Keyword::Type => "type",
         }
     }
 }

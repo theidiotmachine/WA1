@@ -29,6 +29,7 @@ fn main() {
     let wasm = fs::read(input).expect("wasm file");
 
     //fire up wastime
+    //let engine = HostRef::new(Engine::new(Config::new().debug_info(true)));
     let engine = HostRef::new(Engine::default());
     let store = HostRef::new(Store::new(&engine));
     let module = HostRef::new(Module::new(&store, &wasm).expect("wasm module"));

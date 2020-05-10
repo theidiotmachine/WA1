@@ -1,7 +1,7 @@
 use crate::Parser;
 use crate::ParserContext;
 use crate::ParserFuncContext;
-use crate::UnsafeParseMode;
+use crate::{UnsafeParseMode, ParserPhase};
 
 use ast::Exports;
 
@@ -55,16 +55,16 @@ fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
                     types.push(td.clone())
                 }
             },
-            TypeDecl::Class{name: _, class_type: _, export} => {
-                if *export {
-                    types.push(td.clone())
-                }
-            },
             TypeDecl::Alias{name: _, of: _, export} => {
                 if *export {
                     types.push(td.clone())
                 }
             },
+            TypeDecl::Type{name: _, inner: _, type_args: _, export, member_funcs: _, constructor: _, under_construction: _} => {
+                if *export {
+                    types.push(td.clone())
+                }
+            }
         }
     }
 
@@ -72,7 +72,7 @@ fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
 }
 
 impl<'a> Parser<'a> {
-    fn parse_phase_1_export_decl(&mut self,
+    fn parse_export_decl_exports_phase(&mut self,
         parser_context: &mut ParserContext,
     ) -> () {
         self.skip_next_item();
@@ -80,37 +80,38 @@ impl<'a> Parser<'a> {
         let token = &next.token;
         match &token {
             Token::Keyword(ref k) => match k {   
-                Keyword::Fn => self.parse_phase_1_func(parser_context),
+                Keyword::Fn => self.parse_func_exports_phase(parser_context),
                 Keyword::UnsafeStruct => {let _ = self.parse_struct_decl(true, parser_context);},
-                Keyword::Const => self.parse_phase_1_global(true, parser_context),
-                Keyword::Let => self.parse_phase_1_global(false, parser_context),
-                Keyword::Alias => { let _ = self.parse_alias(true, parser_context);},
+                Keyword::Const => self.parse_global_exports_phase(true, parser_context),
+                Keyword::Let => self.parse_global_exports_phase(false, parser_context),
+                Keyword::Alias => { self.parse_alias(true, parser_context);},
+                Keyword::Type => { self.parse_type_decl(true, ParserPhase::ExportsPhase, parser_context);},
                 _ => {},
             },
             _ => {},
         }
     }
     
-    fn parse_phase_1_func(&mut self,
+    fn parse_func_exports_phase(&mut self,
         parser_context: &mut ParserContext,
     ) -> () {
-        let mut fake_parser_func_context = ParserFuncContext::new();
-        self.export_parse_named_function_decl(true, &mut fake_parser_func_context, parser_context);
+        let mut fake_parser_func_context = ParserFuncContext::new(&None);
+        self.parse_named_function_decl_export_phase(true, &mut fake_parser_func_context, parser_context);
     }
 
-    fn parse_phase_1_global(&mut self,
+    fn parse_global_exports_phase(&mut self,
         is_const: bool,
         parser_context: &mut ParserContext,
     ) -> () {
-        let mut fake_parser_func_context = ParserFuncContext::new();
+        let mut fake_parser_func_context = ParserFuncContext::new(&None);
         let _ = self.parse_variable_decl(is_const, true, true, &mut fake_parser_func_context, parser_context);
     }
 
     /// Phase 1 parse. Produces the file outline, to be used by the import code
-    pub fn parse_phase_1(&mut self, 
+    pub fn parse_exports_phase(&mut self, 
         file_name: &String,
     ) -> Exports {
-        let mut parser_context = ParserContext::new(UnsafeParseMode::Phase1, file_name);
+        let mut parser_context = ParserContext::new(UnsafeParseMode::ExportsPhase, file_name);
         loop {
             if self.look_ahead.token.is_eof() {
                 break;
@@ -119,7 +120,7 @@ impl<'a> Parser<'a> {
             let token = &next.token;
             match &token {
                 Token::Keyword(ref k) => match k {
-                    Keyword::Export => self.parse_phase_1_export_decl(&mut parser_context),
+                    Keyword::Export => self.parse_export_decl_exports_phase(&mut parser_context),
                     _ => self.skip_next_item(),
                 },
                 _ => self.skip_next_item(),

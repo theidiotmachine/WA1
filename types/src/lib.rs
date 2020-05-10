@@ -14,8 +14,6 @@ pub mod prelude {
     pub use super::Type;
     pub use super::OpType;
     pub use super::FuncType;
-    pub use super::ClassType;
-    pub use super::ClassMember;
     pub use super::Privacy;
     pub use super::{get_unary_op_type_cast, UnOpTypeCast};
     pub use super::{get_binary_op_type_cast, get_type_from_type_cast};
@@ -133,20 +131,6 @@ pub enum Privacy{
     Public, Private, Protected
 }
 
-/// Data member of a class.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ClassMember{
-    pub name: String,
-    pub r#type: Type,
-    pub privacy: Privacy,
-}
-
-/// User-defined class type. Only contains members at the moment.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ClassType{
-    pub members: Vec<ClassMember>,
-}
-
 /// Data member of a struct.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StructMember{
@@ -209,7 +193,7 @@ pub enum Type {
     /// Option - some
     Some(Box<Type>),
     /// user type
-    UserClass{name: String},
+    UserType{name: String, type_args: Vec<Type>},
     /// user struct type
     UnsafeStruct{name: String},
     /// not yet known - will be filled in by the type system
@@ -230,6 +214,14 @@ pub enum Type {
     UnsafeArray(Box<Type>),
 }
 
+fn get_mangled_names(types: &Vec<Type>)->String{
+    let mut vec: Vec<String> = vec![];
+    for inner in types {
+        vec.push(format!("{}", inner.get_mangled_name()));
+    }
+    vec.join(",")
+}
+
 impl Type{
     pub fn is_undeclared(&self) -> bool {
         match &self {
@@ -244,12 +236,12 @@ impl Type{
             Type::Any | Type::Bool | Type::FakeVoid | Type::FloatLiteral(_) | Type::Int(_, _)
                 | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String | Type::StringLiteral(_) | Type::Undeclared 
                 | Type::Unknown | Type::UnsafeNull | Type::UnsafePtr | Type::UnsafeStruct{name:_} 
-                | Type::UserClass{name:_} => false,
+                    => false,
             Type::Array(t) | Type::Option(t) | Type::Some(t) | Type::TypeLiteral(t) | Type::UnsafeArray(t) | Type::UnsafeOption(t) 
                 | Type::UnsafeSome(t) => t.is_type_variable(),
             Type::Func{func_type: ft} => ft.out_type.is_type_variable() || ft.in_types.iter().any(|t| t.is_type_variable()),
             Type::ObjectLiteral(oles) => oles.iter().any(|ole| ole.1.is_type_variable()),
-            Type::Tuple(ts) => ts.iter().any(|t| t.is_type_variable()),
+            Type::UserType{name:_, type_args: ts} | Type::Tuple(ts) => ts.iter().any(|t| t.is_type_variable()),
             Type::VariableUsage{name: _, constraint: _} => true,
         }
     }
@@ -273,21 +265,14 @@ impl Type{
             Type::Int(lower, upper) => format!("!Int<{}, {}>", lower, upper),
             Type::Bool => String::from("!Bool"),
             Type::Func{func_type} => format!("!func_{}", func_type),
-            Type::Tuple(types) => {
-                let mut vec: Vec<String> = vec![];
-                for inner in types {
-                    vec.push(format!("{}", inner.get_mangled_name()));
-                }
-                format!("!Tuple<{}>", vec.join(",")) 
-            },
-            //Type::Object => write!(f, "object"),
+            Type::Tuple(types) => format!("!Tuple<{}>", get_mangled_names(types)),
             Type::Any => String::from("!Any"),
             Type::Option(inner) => format!("!Option<{}>", inner.get_mangled_name()),
             Type::UnsafeOption(inner) => format!("!__Option<{}>", inner.get_mangled_name()),
             Type::UnsafeSome(inner) => format!("!__Some<{}>", inner.get_mangled_name()),
             Type::UnsafeNull => format!("!__Null"),
             Type::Some(inner) => format!("!Some<{}>", inner.get_mangled_name()),
-            Type::UserClass{name} => format!("!class_{}", name),
+            Type::UserType{name, type_args} => format!("!type_{}<{}>", name, get_mangled_names(type_args)),
             Type::UnsafeStruct{name} => format!("!__struct_{}", name),
             Type::Undeclared => format!("!Undeclared"),
             Type::VariableUsage{name, constraint: _} => format!("!var_{}", name),
@@ -300,6 +285,14 @@ impl Type{
             Type::ModuleLiteral(name) => format!("!ModuleLiteral_{}", name),
         }
     }
+}
+
+fn display_types(types: &Vec<Type>)->String{
+    let mut vec: Vec<String> = vec![];
+    for inner in types {
+        vec.push(format!("{}", inner));
+    }
+    vec.join(",")
 }
 
 impl Display for Type {
@@ -315,21 +308,14 @@ impl Display for Type {
             Type::Int(lower, upper) => write!(f, "Int<{}, {}>", lower, upper),
             Type::Bool => write!(f, "Bool"),
             Type::Func{func_type} => write!(f, "{}", func_type),
-            Type::Tuple(types) => {
-                let mut vec: Vec<String> = vec![];
-                for inner in types {
-                    vec.push(format!("{}", inner));
-                }
-                write!(f, "Tuple<{}>", vec.join(",")) 
-            },
-            //Type::Object => write!(f, "object"),
+            Type::Tuple(types) => write!(f, "Tuple<{}>", display_types(types)),
             Type::Any => write!(f, "Any"),
             Type::Option(inner) => write!(f, "Option<{}>", inner),
             Type::UnsafeOption(inner) => write!(f, "__Option<{}>", inner),
             Type::UnsafeSome(inner) => write!(f, "__Some<{}>", inner),
             Type::UnsafeNull => write!(f, "__Null"),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
-            Type::UserClass{name} => write!(f, "{}", name),
+            Type::UserType{name, type_args} => write!(f, "{}<{}>", name, display_types(type_args)),
             Type::UnsafeStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "Undeclared"),
             Type::VariableUsage{name, constraint: _} => write!(f, "{}", name),

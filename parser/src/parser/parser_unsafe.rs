@@ -1,36 +1,36 @@
 use crate::Parser;
 use crate::{ParserContext, UnsafeParseMode};
 use crate::ParserFuncContext;
-use crate::Res;
 
 use ress::prelude::*;
 use ast::prelude::*;
 use types::prelude::*;
 pub use errs::{Error};
 use errs::prelude::*;
-use crate::{assert_punct, expect_semicolon, expect_ident, expect_punct, cast_typed_expr};
+use crate::{expect_semicolon, expect_ident, expect_punct, cast_typed_expr};
 
 impl<'a> Parser<'a> {
     pub(crate) fn parse_mem_grow(&mut self,    
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let mut loc = self.peek_next_location();
         self.skip_next_item();
 
-        let next = self.next_item()?;
+        let next = self.peek_next_item();
         if !next.token.matches_number_str("0") {
-            return Err(Error::NotYetImplemented(loc.clone(), String::from("first arg to mem size")));
+            parser_context.push_err(Error::NotYetImplemented(loc.clone(), String::from("first arg to mem size")));
         }
-        assert_punct!(self, Punct::Comma);
+        self.skip_next_item();
+        expect_punct!(self, parser_context, Punct::Comma);
         
         let expr = self.parse_expr(parser_func_context, parser_context);
 
         let loc_after = self.peek_next_location();
         loc.end = loc_after.end.clone();
 
-        assert_punct!(self, Punct::CloseParen);
-        Ok(TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemoryGrow(Box::new(expr))), is_const: true, r#type: SIZE_T.clone(), loc: loc})
+        expect_punct!(self, parser_context, Punct::CloseParen);
+        TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemoryGrow(Box::new(expr))), is_const: true, r#type: SIZE_T.clone(), loc: loc}
     }
 
     pub(crate) fn parse_mem_size(&mut self,
@@ -54,17 +54,20 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_sizeof(&mut self,    
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
-    ) -> Res<TypedExpr> {
+    ) -> TypedExpr {
         let loc = self.peek_next_location();
         self.skip_next_item();
         let expr = self.parse_expr(parser_func_context, parser_context);
-        assert_punct!(self, Punct::CloseParen);
+        expect_punct!(self, parser_context, Punct::CloseParen);
 
         match expr.r#type {
             Type::TypeLiteral(t) => {
-                Ok(TypedExpr{expr: Expr::SizeOf((*t).clone()), is_const: true, r#type: SIZE_T.clone(), loc: loc})
+                TypedExpr{expr: Expr::SizeOf((*t).clone()), is_const: true, r#type: SIZE_T.clone(), loc: loc}
             },
-            _ => {Err(Error::NotYetImplemented(loc, String::from("__sizeof only works on __structs")))}
+            _ => {
+                parser_context.push_err(Error::NotYetImplemented(loc, String::from("__sizeof only works on __structs")));
+                TypedExpr{expr: Expr::NoOp, is_const: true, r#type: SIZE_T.clone(), loc: loc}
+            }
         }
     }
 

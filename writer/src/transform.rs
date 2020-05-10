@@ -34,10 +34,12 @@ pub enum OutputType{
     StaticLibrary
 }
 
+///Container passed around containing global state for the module being compiled. Won't generally be mutable.
 pub (crate) struct CompilerContext{
     pub mem_layout_map: HashMap<String, UserMemLayout>,
     pub global_var_map: HashMap<String, u32>,
     pub func_map: HashMap<String, u32>,
+    pub type_map: HashMap<String, TypeDecl>,
 }
 
 fn compile_func_call(
@@ -523,7 +525,7 @@ fn compile_l_value_pre(
         LValueExpr::DynamicMemberAssign(lhs, inner_l_value_type, member_expr) => {
             match &inner_l_value_type {
                 Type::UnsafeArray(t) => {
-                    let elem_value_type = get_wasm_value_type(&t);
+                    let elem_value_type = get_wasm_value_type(&t, &context.type_map);
                     let elem_size = get_size_for_value_type(&elem_value_type);
                     
                     //First calculate the offset. 
@@ -595,7 +597,7 @@ fn compile_l_value_post(
         LValueExpr::DynamicMemberAssign(_, inner_l_value_type, _) => {
             match &inner_l_value_type {
                 Type::UnsafeArray(t) => {
-                    let elem_value_type = get_wasm_value_type(&t);
+                    let elem_value_type = get_wasm_value_type(&t, &context.type_map);
                     let elem_size = get_size_for_value_type(&elem_value_type);
                     
                     //we do a store. Because we already calculated the address we give it an index of zero.
@@ -970,7 +972,7 @@ pub(crate) fn compile_expr(
             match &inner.r#type {
                 Type::UnsafeArray(t) => {
 
-                    let elem_value_type = get_wasm_value_type(&t);
+                    let elem_value_type = get_wasm_value_type(&t, &context.type_map);
                     let elem_size = get_size_for_value_type(&elem_value_type);
                     
                     //First calculate the offset. 
@@ -1057,7 +1059,7 @@ pub(crate) fn compile_expr(
         Expr::ConstructStaticFromArrayLiteral(new_type, exprs) => {
             match new_type {
                 Type::UnsafeArray(inner_type) => {
-                    let elem_value_type = get_wasm_value_type(&inner_type);
+                    let elem_value_type = get_wasm_value_type(&inner_type, &context.type_map);
                     let elem_size = get_size_for_value_type(&elem_value_type);
                     let full_size = elem_size * exprs.len() as u32;
 
@@ -1106,6 +1108,9 @@ pub(crate) fn compile_expr(
             compile_member_func_call(lhs, component, args, context, local_var_map, wasm_module, wasm_expr, errors);
         },
         
+        Expr::FreeUserTypeUnwrap(t) => compile_expr(&t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
+        Expr::FreeUserTypeWrap(t) => compile_expr(&t, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
+        
         _ => { errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("{:#?}", typed_expr.expr)))); },
     }
 
@@ -1121,9 +1126,10 @@ fn register_func(
     module_name: &String,
     start_function: &String,
     func_idx: u32,
+    type_map: &HashMap<String, TypeDecl>,
     m: &mut WasmModule,
 ) {
-    let type_idx = m.type_section.new_func_type(get_wasm_func_type(&func_decl.get_func_type()));
+    let type_idx = m.type_section.new_func_type(get_wasm_func_type(&func_decl.get_func_type(), type_map));
 
     m.func_section.new_func(type_idx);
     //Only register a start function if we are not linking
@@ -1178,7 +1184,7 @@ fn compile_func(
     let mut o_current_locals: Option<WasmLocals> = None;
     for lv in &func.local_vars {
         if !lv.arg {
-            let wasm_type = get_wasm_value_type(&lv.r#type);
+            let wasm_type = get_wasm_value_type(&lv.r#type, &context.type_map);
             match &mut o_current_locals {
                 None => {
                     o_current_locals = Some(WasmLocals::new(&wasm_type));
@@ -1228,7 +1234,7 @@ pub fn compile(
         let bits: Vec<&str> = g.name.as_str().split(".").collect();
         let module = bits[0];
         let field = bits[1];
-        m.import_section.new_global(&module.to_owned(), &field.to_owned(), &get_wasm_value_type(&g.r#type), false);
+        m.import_section.new_global(&module.to_owned(), &field.to_owned(), &get_wasm_value_type(&g.r#type, &ast.type_map), false);
 
         match &mut m.object_file_sections {
             Some(wrf) => {
@@ -1245,7 +1251,7 @@ pub fn compile(
     }
 
     for g in &ast.global_decls {
-        let wt = get_wasm_value_type(&g.r#type);
+        let wt = get_wasm_value_type(&g.r#type, &ast.type_map);
 
         let mut init_expr = vec![];
         match wt {
@@ -1297,7 +1303,7 @@ pub fn compile(
         let bits: Vec<&str> = func.name.as_str().split(".").collect();
         let module = bits[0];
         let field = bits[1];
-        let type_idx = m.type_section.new_func_type(get_wasm_func_type(&func.get_func_type()));
+        let type_idx = m.type_section.new_func_type(get_wasm_func_type(&func.get_func_type(), &ast.type_map));
         if tu_type == TranslationUnitType::Simple {
             m.import_section.new_func(&module.to_owned(), &field.to_owned(), type_idx);
         } else {
@@ -1327,7 +1333,7 @@ pub fn compile(
     }
 
     for func in &ast.func_decls {
-        register_func(&func.decl, tu_type, output_type, module_name, &ast.start, func_idx, &mut m);
+        register_func(&func.decl, tu_type, output_type, module_name, &ast.start, func_idx, &ast.type_map, &mut m);
 
         func_map.insert(func.decl.name.clone(), func_idx);
         func_idx += 1;
@@ -1337,6 +1343,7 @@ pub fn compile(
         mem_layout_map: generate_mem_layout_map(&ast.type_map),
         func_map: func_map.clone(),
         global_var_map: global_var_map.clone(),
+        type_map: ast.type_map.clone(),
     };
 
     for func in &ast.func_decls {
