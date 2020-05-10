@@ -397,7 +397,12 @@ impl<'a> Parser<'a> {
                     if constructor.is_some() {
                         parser_context.push_err(Error::OnlyOneConstructor(next.location.clone()))
                     }
-                    constructor = Some(self.parse_constructor_decl(&prefix, &type_args, export, phase, parser_context));
+                    let constructor_member_func = self.parse_constructor_decl(&prefix, &type_args, export, phase, parser_context);
+                    if constructor_member_func.func_type.out_type != inner {
+                        parser_context.push_err(Error::TypeFailure(next.location.clone(), inner.clone(), constructor_member_func.func_type.out_type.clone()))
+                    }
+                    
+                    constructor = Some(constructor_member_func);
                 },
                 Token::Keyword(Keyword::Private) => {
                     self.skip_next_item();
