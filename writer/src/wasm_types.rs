@@ -1,8 +1,15 @@
+use std::collections::HashMap;
+
+use ast::prelude::*;
+
 use crate::wasm::{WasmValueType, WasmFuncType, WasmResultType};
 
 pub use types::{Type, FuncType, Bittage, get_bittage, PTR_MAX};
 
-pub(crate) fn get_wasm_value_type(r#type: &Type) -> WasmValueType {
+pub(crate) fn get_wasm_value_type(
+    r#type: &Type,
+    type_map: &HashMap<String, TypeDecl>
+) -> WasmValueType {
     match r#type {
         Type::Number => WasmValueType::F64,
         Type::Int(lower, upper) => {
@@ -37,6 +44,15 @@ pub(crate) fn get_wasm_value_type(r#type: &Type) -> WasmValueType {
         },
         Type::UnsafeNull => {
             WasmValueType::I32
+        },
+        Type::UserType{name, type_args: _} => {
+            let t = type_map.get(name).unwrap();
+            match &t {
+                TypeDecl::Type{name: _, inner, type_args: _, export: _, member_funcs: _, constructor: _, under_construction: _} => {
+                    get_wasm_value_type(inner, type_map)
+                },
+                _ => unreachable!()
+            }
         },
         _ => panic!()
     }
@@ -73,14 +89,17 @@ pub(crate) fn get_wasm_return_type(r#type: &Type) -> WasmResultType {
     }
 }
 
-pub (crate) fn get_wasm_func_type(func_type: &FuncType) -> WasmFuncType {
+pub (crate) fn get_wasm_func_type(
+    func_type: &FuncType,
+    type_map: &HashMap<String, TypeDecl>
+) -> WasmFuncType {
     let mut inputs: Vec<WasmValueType> = vec![];
     for i in &func_type.in_types {
-        inputs.push(get_wasm_value_type(i));
+        inputs.push(get_wasm_value_type(i, type_map));
     }
     let mut outputs: Vec<WasmValueType> = vec![];
     if func_type.out_type != Type::RealVoid {
-        outputs.push(get_wasm_value_type(&func_type.out_type));
+        outputs.push(get_wasm_value_type(&func_type.out_type, type_map));
     }
     WasmFuncType{ inputs: inputs, outputs: outputs }
 }

@@ -43,12 +43,15 @@ pub fn get_size_for_value_type(value_type: &WasmValueType) -> u32 {
     }
 }
 
-fn generate_struct_mem_layout(struct_type: &StructType) -> StructMemLayout {
+fn generate_struct_mem_layout(
+    struct_type: &StructType,
+    type_map: &HashMap<String, TypeDecl>
+) -> StructMemLayout {
     let mut offset: u32 = 0;
     let mut alignment = 4;
     let mut out_members: HashMap<String, MemLayoutElem> = HashMap::new();
     for mem in &struct_type.members {
-        let mem_value_type = get_wasm_value_type(&mem.r#type);
+        let mem_value_type = get_wasm_value_type(&mem.r#type, type_map);
         
         let sz = get_size_for_value_type(&mem_value_type);
 
@@ -63,17 +66,18 @@ fn generate_struct_mem_layout(struct_type: &StructType) -> StructMemLayout {
     StructMemLayout{size: offset, members: out_members, alignment: alignment}
 }
 
-pub fn generate_mem_layout_map(type_map: &HashMap<String, TypeDecl>) -> HashMap<String, UserMemLayout>{
+pub fn generate_mem_layout_map(
+    type_map: &HashMap<String, TypeDecl>
+) -> HashMap<String, UserMemLayout>{
     let mut out: HashMap<String, UserMemLayout> = HashMap::new();
     for t in type_map {
         match t.1 {
             TypeDecl::Struct{name: _, struct_type, under_construction: _, export: _} => {
-                out.insert(t.0.clone(), UserMemLayout::Struct(generate_struct_mem_layout(&struct_type)));
+                out.insert(t.0.clone(), UserMemLayout::Struct(generate_struct_mem_layout(&struct_type, type_map)));
             },
-            TypeDecl::Alias{name: _, of: _, export: _} => {
+            TypeDecl::Alias{name: _, of: _, export: _} | TypeDecl::Type{name: _, inner: _, type_args: _, member_funcs: _, export: _, constructor: _, under_construction: _} => {
                 //no mem map
             },
-            _ => panic!()
         }
     }
     out

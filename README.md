@@ -136,7 +136,7 @@ The type of `s` is inferred from the expression you assign it.
 
 You don't need 'em; a return character is equivalent. The things in javascript, like getting weird problems with `return`, are not an issue here. 
 
-## Types
+## Built in types
 
 * Number - a 64 bit float.
 * Int - An integer. You specify bounds as generic arguments, so `Int<-2147483648, 2147483647>` is a 32 bit signed int. You should rarely need to do that, though; by default 
@@ -163,12 +163,6 @@ let clz = i.countLeadingZeros()
 let ctz = i.countTrailingZeros()
 let shl = i.shiftLeft(3)
 let shr = i.shiftRight(3)
-```
-
-### alias
-To create a type alias, use the `alias` keyword. A type alias is what it sounds like, a different name for the same type, not a different type.
-```
-alias __size_t = Int<0, 4294967295>
 ```
 
 ## Functions
@@ -265,6 +259,44 @@ return 4;
 
 You don't need it at the end of a function (and is considered bad practice), but it is useful for flow control in complicated functions. If you 
 combine fat arrow with return, we try and guess based on all the returns in the function.
+
+## User types
+
+You can, obviously, define your own types, built from the system types. This is still very much a work in progress.
+
+### alias
+To create a type alias, use the `alias` keyword. A type alias is what it sounds like, a different name for the same type, not a different type.
+```
+alias __size_t = Int<0, 4294967295>
+```
+
+### type
+The type keyword is the simplest (and currently only) true user type. It wraps an existing type, and then supplements it with extra member functions.
+
+Member functions have access to a `this` local variable, which is of the type defined. To get the inner data, use `this.getInner()`. To set the
+inner data, call `this.setInner(x)`.
+
+```
+type One = Int {
+    constructor(x: Int) => x
+    
+    fn add(r: Int) -> Int this.getInner() + r
+
+    fn set(x: Int) -> Void this.setInner(x)
+}
+```
+
+The `constructor` keyword is the sole way of constructing. This essentially casts an object of the inner type into the outer type. This is subject to change. 
+You use the `new` keyword to construct.
+
+```
+fn testOne() => {
+    let oneOne = new One(3)
+    assert.assert(oneOne.add(4) == 7)
+    oneOne.set(11)
+    assert.assert(oneOne.add(4) == 15)
+}
+```
 
 ## Type guards
 
@@ -394,6 +426,8 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     1. [ ] clean up the cast code
     1. [ ] bool literals
     1. [ ] check __Option equality
+    1. [ ] consts properly rolled into the type system (aka the Konst Waaagh)
+    1. [ ] privacy
 1. Expression based language
     1. [x] blocks return a value
     1. [x] no need for a return statement (but still supported - what is this, scala?)
@@ -462,7 +496,7 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
 1. Types
     1. [ ] tuples - are just collections of locals, so pass by value (needs wasm multi value for some things)
     1. [ ] tuples - need a syntax for tuple 1. Probably `Tuple<int>(3)`
-    1. [ ] type keyword is a first class type, not an alias (might as well, eh? I always disliked that Scala and TS do that)
+    1. [x] type keyword is a first class type, not an alias (might as well, eh? I always disliked that Scala and TS do that)
 1. Closure generation and usage
     1. [ ] closure capture
     1. [ ] call function with closure
@@ -495,6 +529,7 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     1. [x] A file format for that
     1. [x] When import commands are run, load that, pull the imports in
     1. [ ] Functions to be inlined
+    1. [ ] types - I think import doesn't work properly
 1. Linker
     1. [x] object file format that contains
     1. [x] use wasm-ld

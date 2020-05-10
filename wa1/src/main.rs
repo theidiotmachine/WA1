@@ -125,7 +125,7 @@ fn parse_exports(input: &PathBuf) -> Option<Exports> {
     match r_input_contents{
         Ok(input_contents) => {
             let mut parser = Parser::new(input_contents.as_str()).unwrap();
-            Some(parser.parse_phase_1(&(input.to_string_lossy().to_string())))
+            Some(parser.parse_exports_phase(&(input.to_string_lossy().to_string())))
         },
         Err(err) => {
             println!("ERROR: {}", err);

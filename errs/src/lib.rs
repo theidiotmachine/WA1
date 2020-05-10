@@ -5,7 +5,7 @@ pub mod prelude {
     pub use super::source_location::prelude::*;
     pub use super::ErrRecorder;
 }
-use source_location::{SourceLocation, Position};
+use source_location::{SourceLocation};
 
 #[derive(Debug, Clone)]
 pub enum Error {
@@ -13,7 +13,7 @@ pub enum Error {
     UnexpectedEoF(SourceLocation, String),
     ParseAfterEoF,
     InvalidTypeName(SourceLocation, String),
-    InvalidType(Position),
+    InvalidType(SourceLocation),
     Other(String),
     NotYetImplemented(SourceLocation, String),
     VariableNotRecognized(SourceLocation, String),
@@ -33,8 +33,8 @@ pub enum Error {
     NotEnoughArgs(SourceLocation),
     DuplicateTypeName(SourceLocation, String),
     NotInLoop(SourceLocation, String),
-    WhileMayNotReturn,
     NoComponents(SourceLocation, Type),
+    CantConstruct(SourceLocation, Type),
     CantConstructUsingObjectLiteral(SourceLocation, Type),
     CantConstructUsingArrayLiteral(SourceLocation, Type),
     ObjectHasNoMember(SourceLocation, Type, String,),
@@ -57,6 +57,8 @@ pub enum Error {
     ExportedFunctionFatArrow(SourceLocation),
     IntegerOutOfRange(SourceLocation, i128, i128),
     TypeGuardReapply(SourceLocation, Type),
+    NoThis(SourceLocation),
+    OnlyOneConstructor(SourceLocation),
 }
 
 impl Display for Error {
@@ -82,13 +84,13 @@ impl Display for Error {
             Error::NoValueReturned(ref loc) => write!(f, "ERROR {}: must return a value", loc),
             Error::TypeFailureReturn(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: Expecting return value of type {}, found {}", loc, wanted, got),
             Error::NotAnLValue(ref loc) => write!(f, "ERROR {}: expression is not a l value", loc),
-            Error::TypeFailureFuncCall(ref loc) => write!(f, "ERROR: {}: Variable is not a function", loc),
+            Error::TypeFailureFuncCall(ref loc) => write!(f, "ERROR {}: Variable is not a function", loc),
             Error::TooManyArgs(ref loc) => write!(f, "ERROR {}: too many args for function call", loc),
             Error::NotEnoughArgs(ref loc) => write!(f, "ERROR {}: not enough args for function call", loc),
             Error::DuplicateTypeName(ref loc, name) => write!(f, "ERROR {}: Duplicate type name: {}", loc, name),
             Error::NotInLoop(ref loc, what) => write!(f, "ERROR {}: Used loop keyword outside a loop: {}", loc, what),
-            Error::WhileMayNotReturn => write!(f, "while loops may not have a return value"),
             Error::NoComponents(ref loc, ref t) => write!(f, "ERROR {}: object of type {} has no components", loc, t),
+            Error::CantConstruct(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {}", loc, t),
             Error::CantConstructUsingObjectLiteral(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {} from an object literal", loc, t),
             Error::CantConstructUsingArrayLiteral(ref loc, ref t) => write!(f, "ERROR {}: can't construct type {} from an array literal", loc, t),
             Error::ObjectHasNoMember(ref loc, ref t, ref m) => write!(f, "ERROR {}: object of type {} has no member {}", loc, t, m),
@@ -111,6 +113,8 @@ impl Display for Error {
             Error::ExportedFunctionFatArrow(ref loc) => write!(f, "ERROR {}: exported functions must have explicit return type", loc),
             Error::IntegerOutOfRange(ref loc, v, bound) => write!(f, "ERROR {}: integer out of bounds. Value {} does not conform to bound {}", loc, v, bound),
             Error::TypeGuardReapply(ref loc, ref t) => write!(f, "WARNING {}: typeguard {} is already in place", loc, t),
+            Error::NoThis(ref loc) => write!(f, "ERROR {}: 'this' not valid in this context", loc),
+            Error::OnlyOneConstructor(ref loc) => write!(f, "ERROR {}: only one constructor is supported", loc),
         }
     }
 }

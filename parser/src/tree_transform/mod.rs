@@ -23,7 +23,7 @@ pub fn transform_func_decl(
     }
 
     FuncDecl{name: fund_decl.name.clone(), return_type: fund_decl.return_type.clone(), args: fund_decl.args.clone(), export: fund_decl.export, 
-        generic_impl: fund_decl.generic_impl, type_guard: fund_decl.type_guard.clone()}
+        generic_impl: fund_decl.generic_impl, type_guard: fund_decl.type_guard.clone(), member_func: fund_decl.member_func}
 }
 
 pub fn transform_lvalue_expr(
@@ -132,6 +132,8 @@ pub fn transform_expr(
             Expr::DynamicFuncCall(Box::new(transform_typed_expr(te, transform, parser_context)), transform_typed_exprs(v, transform, parser_context)),
         Expr::DynamicMember(te1, te2) =>
             Expr::DynamicMember(Box::new(transform_typed_expr(te1, transform, parser_context)), Box::new(transform_typed_expr(te2, transform, parser_context))),
+        Expr::FreeUserTypeWrap(te) => Expr::FreeUserTypeWrap(Box::new(transform_typed_expr(te, transform, parser_context))),
+        Expr::FreeUserTypeUnwrap(te) => Expr::FreeUserTypeUnwrap(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::FreeDowncast(te) => Expr::FreeDowncast(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::FreeGenericCast(te) => Expr::FreeGenericCast(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::FreeUpcast(te) => Expr::FreeUpcast(Box::new(transform_typed_expr(te, transform, parser_context))),

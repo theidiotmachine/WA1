@@ -25,6 +25,7 @@ pub mod prelude {
 /// A generic function that consumes type arguments and can generate a concrete function
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct GenericFunc{
+    pub num_this_type_args: u32,
     pub type_args: Vec<TypeArg>,
     pub func: Func
 }

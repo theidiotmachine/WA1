@@ -108,6 +108,7 @@ impl<'a> Tokenizer<'a> {
             4 if ident == b"case" => Some(RawToken::Keyword(Keyword::Case)),
             4 if ident == b"from" => Some(RawToken::Keyword(Keyword::From)),
             4 if ident == b"this" => Some(RawToken::Keyword(Keyword::This)),
+            4 if ident == b"type" => Some(RawToken::Keyword(Keyword::Type)),
             4 if ident == b"with" => Some(RawToken::Keyword(Keyword::With)),
             4 if ident == b"enum" => Some(RawToken::Keyword(Keyword::Enum)),
             4 if ident == b"else" => Some(RawToken::Keyword(Keyword::Else)),
@@ -143,7 +144,6 @@ impl<'a> Tokenizer<'a> {
             6 if ident == b"static" => Some(RawToken::Keyword(Keyword::Static)),
             6 if ident == b"public" => Some(RawToken::Keyword(Keyword::Public)),
             7 if ident == b"__Array" => Some(RawToken::Keyword(Keyword::UnsafeArray)),
-            
             7 if ident == b"default" => Some(RawToken::Keyword(Keyword::Default)),
             7 if ident == b"extends" => Some(RawToken::Keyword(Keyword::Extends)),
             7 if ident == b"finally" => Some(RawToken::Keyword(Keyword::Finally)),

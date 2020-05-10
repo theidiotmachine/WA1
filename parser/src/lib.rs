@@ -56,29 +56,6 @@ fn patch_guard_type(
     }
 }
 
-/// Bridge into the old Res<> signature functions. Usage `let x = self.parse_x(); expect_ok!(x, parser_context, None);`
-#[macro_export]
-macro_rules! expect_ok {
-    ($e:ident, $parser_context:ident, $error_return_value:ident) => (
-        if $e.is_err() { 
-            $parser_context.push_err($e.unwrap_err());
-            return $error_return_value;
-        } let $e = $e.unwrap();
-    )
-}
-
-#[macro_export]
-macro_rules! assert_semicolon {
-    ($s:ident) => (
-        if !$s.has_line_term {
-            let next = $s.next_item()?;
-            if !next.token.matches_punct(Punct::SemiColon) {
-                return $s.expected_token_error(&next, &[&";"]);
-            }
-        }
-    )
-}
-
 #[macro_export]
 macro_rules! expect_semicolon {
     ($self:ident, $parser_context:ident) => (
@@ -89,21 +66,6 @@ macro_rules! expect_semicolon {
             } else {
                 $parser_context.push_err(Error::UnexpectedToken(next.location.clone(), format!("Expected ';' or line end")));
             }
-        }
-    )
-}
-/// Get the next token, returning if it is not ok. Usage: `let next = assert_next!(self);`
-#[macro_export]
-macro_rules! assert_next {
-    ($s:ident, $m:expr) => ({let next = $s.next_item(); if next.is_err() { return Err(Error::UnexpectedEoF($s.peek_next_location().clone(), $m.to_string())); }; next?} )
-}
-
-#[macro_export]
-macro_rules! assert_punct {
-    ($s:ident, $p:path) => (
-        let next = $s.next_item()?;
-        if !next.token.matches_punct($p) {
-            return $s.expected_token_error(&next, &[&format!("{:?}", $p)]);
         }
     )
 }
@@ -194,6 +156,12 @@ macro_rules! expect_string_literal {
             }
         }
     )
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+enum ParserPhase{
+    ExportsPhase,
+    MainPhase
 }
 
 fn cast_int_to_number(expr: &TypedExpr) -> TypedExpr {
@@ -351,7 +319,7 @@ impl<> Default for TypeScope<> {
 pub enum UnsafeParseMode{
     Safe,
     Unsafe,
-    Phase1,
+    ExportsPhase,
 }
 
 /// Running state of the parser. Used to collect the AST as we build it.
@@ -646,6 +614,20 @@ impl ParserContext {
             } 
         }
     }
+
+    fn get_type_decl(&self, name: &String)-> Option<TypeDecl> {
+        self.type_map.get(name).cloned()
+    }
+
+    fn append_member_func(&mut self, name: &String, mf: &MemberFunc) -> () {
+        let td = self.type_map.get_mut(name).unwrap();
+        match td {
+            TypeDecl::Type{name: _, inner: _, type_args: _, export: _, member_funcs, constructor: _, under_construction: true} => {
+                member_funcs.push(mf.clone());
+            },
+            _ => unreachable!()
+        }
+    }
 }
 
 impl ErrRecorder for ParserContext {
@@ -663,10 +645,11 @@ struct ParserFuncContext{
     pub implied_func_return_type: Type,
     /// If we have entered a loop block
     pub in_iteration: bool,
+    pub this_type: Option<Type>,
 }
 
 impl ParserFuncContext{
-    pub fn new() -> ParserFuncContext{
+    pub fn new(this_type: &Option<Type>) -> ParserFuncContext{
         ParserFuncContext{
             local_vars: vec![],
             local_var_map: HashMap::new(),
@@ -674,6 +657,7 @@ impl ParserFuncContext{
             given_func_return_type: Type::Undeclared,
             implied_func_return_type: Type::Undeclared,
             in_iteration: false,
+            this_type: this_type.clone(),
         }
     }
 }

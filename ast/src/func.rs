@@ -63,7 +63,8 @@ pub struct FuncDecl {
     pub args: Vec<FuncArg>,
     pub export: bool,
     pub generic_impl: bool,
-    pub type_guard: Option<TypeGuard>
+    pub type_guard: Option<TypeGuard>,
+    pub member_func: bool,
 }
 
 impl FuncDecl{
