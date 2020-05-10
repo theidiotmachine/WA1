@@ -298,6 +298,10 @@ fn testOne() => {
 }
 ```
 
+Member functions may be private (put the `private` keyword before the `fn`). 
+* Private means that you can only call the function in a member function of the same type. This means you can call other instance's private functions.
+* Protected is not yet implemented.
+
 ## Type guards
 
 ### User defined
@@ -427,7 +431,7 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     1. [ ] bool literals
     1. [ ] check __Option equality
     1. [ ] consts properly rolled into the type system (aka the Konst Waaagh)
-    1. [ ] privacy
+    1. [x] privacy
 1. Expression based language
     1. [x] blocks return a value
     1. [x] no need for a return statement (but still supported - what is this, scala?)
