@@ -26,7 +26,7 @@ fn get_true_int_type(expr: &TypedExpr) -> Option<(i128, i128)> {
     match &expr.expr {
         Expr::IntWiden(x) => get_true_int_type(&*x),
         _ => {
-            match expr.r#type {
+            match expr.r#type.r#type {
                 Type::Int(l, u) => Some((l, u)),
                 _ => None
             }
@@ -69,8 +69,8 @@ fn get_type_guard_bounded_int_inst(lhs: &TypedExpr, rhs: &TypedExpr, op: BinaryO
         (o_lhs_name.unwrap(), op, lhs_lower, lhs_upper, rhs_lower, rhs_upper)
     };
 
-    let true_expr = TypedExpr{expr: Expr::BoolLiteral(true), r#type: Type::Bool, is_const: true, loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))};
-    let false_expr = TypedExpr{expr: Expr::BoolLiteral(false), r#type: Type::Bool, is_const: true, loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))};
+    let true_expr = TypedExpr{expr: Expr::BoolLiteral(true), r#type: FullType::new(&Type::Bool, Mutability::Const), loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))};
+    let false_expr = TypedExpr{expr: Expr::BoolLiteral(false), r#type: FullType::new(&Type::Bool, Mutability::Const), loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))};
     let type_guard = match op {
         BinaryOperator::LessThan => TypeGuard{ branches: vec![
             TypeGuardBranch{literal: true_expr, guard_type: Type::Int(var_lower, cmp::min(var_upper, literal_upper - 1))},
@@ -134,15 +134,38 @@ pub (crate) fn apply_type_guard_inst(
     loc: &SourceLocation,
     parser_context: &mut ParserContext
 ) -> bool {
+    let mut pushed_scope = false;
     for (type_guard, variable_name) in type_guard_insts {
         let o_branch = type_guard.branches.iter().find(|b| b.literal.expr == *branch_expr);
         if o_branch.is_some() {
             let branch = o_branch.unwrap();
-            parser_context.push_block_scope();
+            if !pushed_scope {
+                parser_context.push_block_scope();
+                pushed_scope = true
+            }
+            
             parser_context.guard_var(&variable_name, &branch.guard_type, loc);
         }
     } 
     type_guard_insts.len() > 0
 }
 
+pub (crate) fn unapply_type_guard_inst(
+    type_guard_insts: &Vec<(TypeGuard, String)>, 
+    branch_expr: &Expr,
+    parser_context: &mut ParserContext
+) -> () {
+    let mut pop_scope = false;
+    for (type_guard, variable_name) in type_guard_insts {
+        let o_branch = type_guard.branches.iter().find(|b| b.literal.expr == *branch_expr);
+        if o_branch.is_some() {
+            pop_scope = true;
+        }
+
+        parser_context.unguard_var(&variable_name);
+    }
+    if pop_scope {
+        parser_context.pop_block_scope();
+    }
+}
 

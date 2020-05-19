@@ -1,6 +1,6 @@
 import {*} from "./assert"
 
-let arr1 = __static __Array<Int> [ 1, 2, 4 ];
+let arr1 = __static mut __Array<Int> [ 1, 2, 4 ];
 
 export fn setElem(a: Int, idx: Int<0, 3>) -> Void {
     arr1[idx] = a

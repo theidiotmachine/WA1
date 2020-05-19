@@ -139,8 +139,8 @@ pub fn transform_expr(
         Expr::FreeUpcast(te) => Expr::FreeUpcast(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::FuncDecl(foc) => Expr::FuncDecl(foc.clone()),
         Expr::GlobalVariableDecl(gvd) => 
-            Expr::GlobalVariableDecl(Box::new(GlobalVariableDecl{name: gvd.name.clone(), r#type: gvd.r#type.clone(), constant: gvd.constant, export: gvd.export, 
-                init: gvd.init.as_ref().map(|e| transform_typed_expr(&e, transform, parser_context))
+            Expr::GlobalVariableDecl(Box::new(GlobalVariableDecl{name: gvd.name.clone(), r#type: gvd.r#type.clone(), export: gvd.export, 
+                init: gvd.init.as_ref().map(|e| transform_typed_expr(&e, transform, parser_context)), mutability: gvd.mutability
             })),
         Expr::IfThen(te1, te2) =>
             Expr::IfThen(Box::new(transform_typed_expr(te1, transform, parser_context)), Box::new(transform_typed_expr(te2, transform, parser_context))),
@@ -212,6 +212,6 @@ pub fn transform_typed_expr(
     }
     TypedExpr{
         expr: transform_expr(&typed_expr.expr, transform, &typed_expr.loc, parser_context), 
-        is_const: typed_expr.is_const, loc: typed_expr.loc, r#type: typed_expr.r#type.clone()
+        loc: typed_expr.loc, r#type: typed_expr.r#type.clone()
     }
 }

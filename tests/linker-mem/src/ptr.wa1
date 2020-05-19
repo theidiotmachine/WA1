@@ -7,6 +7,6 @@ __struct malloc_chunk {
   fd: malloc_chunk;         // double links -- used only if free. was struct malloc_chunk*
   bk: malloc_chunk;
 }
-const MCHUNK_SIZE: __size_t         = __sizeof(malloc_chunk)
-const NOT_SEVEN: __size_t = ~(7 as __size_t)
-const MIN_CHUNK_SIZE: __size_t = (MCHUNK_SIZE + 7) & ~(7 as __size_t)
+let MCHUNK_SIZE: __size_t         = __sizeof(malloc_chunk)
+let NOT_SEVEN: __size_t = ~(7 as __size_t)
+let MIN_CHUNK_SIZE: __size_t = (MCHUNK_SIZE + 7) & ~(7 as __size_t)

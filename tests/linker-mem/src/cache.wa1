@@ -5,7 +5,7 @@ __struct test_struct {
   b: Number
 }
 
-let cache = __static test_struct{a: 10, b: 20};
+let cache = __static mut test_struct{a: 10, b: 20};
 
 fn setA(a: Int) -> Void {
     cache.a = a

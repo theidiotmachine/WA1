@@ -11,11 +11,11 @@ export fn negMax(x: Number, y: Number) -> Number {
     }
 }
 
-export fn bang(x: Number) -> Number {
+export fn bang(var x: Number) -> Number {
     if(x <= 0)
         return 0
 
-    let out: Number = 1
+    let var out: Number = 1
 
     while(x > 0) {
         out *= x
@@ -58,19 +58,19 @@ fn returnTypeTest() -> Void {
 }
 
 fn intTest() -> Void {
-    const e: Int<0, 4294967295> = 8
+    let e: Int<0, 4294967295> = 8
     assert(e.countTrailingZeros() == 3)
 }
 
 fn asTest() -> Void {
-    const a = 9
-    const b = a as Number
-    const c: Number = b
+    let a = 9
+    let b = a as Number
+    let c: Number = b
     //would fail
-    //const d: int = b
+    //let d: int = b
 }
 
-const g = 5
+let g = 5
 fn globalTest() -> Void {
     assert(g == 5)
 }

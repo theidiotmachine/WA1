@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter, Result};
-use types::Type;
+use types::{Type, FullType};
 pub mod source_location;
 pub mod prelude {
     pub use super::source_location::prelude::*;
@@ -19,11 +19,12 @@ pub enum Error {
     VariableNotRecognized(SourceLocation, String),
     FuncNotRecognized(SourceLocation, String),
     TypeFailureUnaryOperator(SourceLocation),
-    TypeFailureBinaryOperator(SourceLocation, String, Type, Type),
+    TypeFailureBinaryOperator(SourceLocation, String, FullType, FullType),
     TypeFailureVariableCreation(SourceLocation, String, String),
     TypeFailureMemberCreation(SourceLocation, String, Type, Type),
-    TypeFailure(SourceLocation, Type, Type),
-    CastFailure(SourceLocation, Type, Type),
+    TypeFailure(SourceLocation, FullType, FullType),
+    CastFailure(SourceLocation, FullType, FullType),
+    ConstFailure(SourceLocation, FullType, FullType),
     CastNotNeeded(SourceLocation, Type),
     NoValueReturned(SourceLocation),
     TypeFailureReturn(SourceLocation, Type, Type),
@@ -60,6 +61,7 @@ pub enum Error {
     NoThis(SourceLocation),
     OnlyOneConstructor(SourceLocation),
     EncapsulationFailure(SourceLocation, Type, String),
+    UnnecessaryMut(SourceLocation, Type),
 }
 
 impl Display for Error {
@@ -81,6 +83,7 @@ impl Display for Error {
             Error::TypeFailureMemberCreation(ref loc, ref m, ref wanted, ref got) => write!(f, "ERROR {}: initializer of type {} of member {} doesn't match member type {}", loc, got, m, wanted),
             Error::TypeFailure(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: expecting expression of type {}, found {}", loc, wanted, got),
             Error::CastFailure(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: can't cast to type {}, from {}", loc, wanted, got),
+            Error::ConstFailure(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: can't cast to type {}, from {}", loc, wanted, got),
             Error::CastNotNeeded(ref loc, ref wanted) => write!(f, "WARNING {}: no need to cast to type {}", loc, wanted),
             Error::NoValueReturned(ref loc) => write!(f, "ERROR {}: must return a value", loc),
             Error::TypeFailureReturn(ref loc, ref wanted, ref got) => write!(f, "ERROR {}: Expecting return value of type {}, found {}", loc, wanted, got),
@@ -117,6 +120,7 @@ impl Display for Error {
             Error::NoThis(ref loc) => write!(f, "ERROR {}: 'this' not valid in this context", loc),
             Error::OnlyOneConstructor(ref loc) => write!(f, "ERROR {}: only one constructor is supported", loc),
             Error::EncapsulationFailure(ref loc, ref t, ref m) => write!(f, "ERROR {}: not allowed to access member {} of {}", loc, m, t),
+            Error::UnnecessaryMut(ref loc, ref t) => write!(f, "WARNING{}: type {} can't be mut, ignoring. Did you mean to mark the variable var?", loc, t),
         }
     }
 }
@@ -124,7 +128,7 @@ impl Display for Error {
 impl Error {
     pub fn is_warning(&self) -> bool {
         match self {
-            Error::TypeGuardReapply(_, _) | Error::CastNotNeeded(_, _) => true,
+            Error::TypeGuardReapply(_, _) | Error::CastNotNeeded(_, _) | Error::UnnecessaryMut(_, _) => true,
             _ => false
         }
     }

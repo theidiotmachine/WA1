@@ -2,6 +2,7 @@ extern crate parser;
 
 mod transform;
 mod compile_int;
+mod compile_ptr;
 pub use transform::{compile, TranslationUnitType, OutputType};
 
 pub mod prelude {
