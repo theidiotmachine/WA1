@@ -164,41 +164,41 @@ enum ParserPhase{
     MainPhase
 }
 
-fn cast_int_to_number(expr: &TypedExpr) -> TypedExpr {
-    TypedExpr{expr: Expr::IntToNumber(Box::new(expr.clone())), r#type: Type::Number, is_const: true, loc: expr.loc}
+fn cast_int_to_number(expr: &TypedExpr, to_mutability: Mutability) -> TypedExpr {
+    TypedExpr{expr: Expr::IntToNumber(Box::new(expr.clone())), r#type: FullType{r#type: Type::Number, mutability: to_mutability}, loc: expr.loc}
 }
 
-fn int_widen(expr: &TypedExpr, to: &Type) -> TypedExpr {
-    TypedExpr{expr: Expr::IntWiden(Box::new(expr.clone())), r#type: to.clone(), is_const: true, loc: expr.loc}
+fn int_widen(expr: &TypedExpr, to: &FullType) -> TypedExpr {
+    TypedExpr{expr: Expr::IntWiden(Box::new(expr.clone())), r#type: to.clone(), loc: expr.loc}
 }
 
-fn free_upcast(expr: &TypedExpr, to: &Type) -> TypedExpr {
-    TypedExpr{expr: Expr::FreeUpcast(Box::new(expr.clone())), r#type: to.clone(), is_const: expr.is_const, loc: expr.loc}
+fn free_upcast(expr: &TypedExpr, to: &FullType) -> TypedExpr {
+    TypedExpr{expr: Expr::FreeUpcast(Box::new(expr.clone())), r#type: to.clone(), loc: expr.loc}
 }
 
-fn create_cast(want: &Type, got: &TypedExpr, cast: &TypeCast) -> Option<TypedExpr> {
+fn create_cast(want: &FullType, got: &TypedExpr, cast: &TypeCast) -> Option<TypedExpr> {
     match cast {
         TypeCast::FreeUpcast(_) => Some(free_upcast(got, want)),
         TypeCast::IntWiden(_,_) => Some(int_widen(got, want)),
-        TypeCast::IntToNumberWiden => Some(cast_int_to_number(got)),
-        TypeCast::None => None,
+        TypeCast::IntToNumberWiden => Some(cast_int_to_number(got, want.mutability)),
+        TypeCast::None | TypeCast::ConstFail => None,
         TypeCast::NotNeeded => Some(got.clone()),
     }
 }
 
-fn try_create_cast(want: &Type, got: &TypedExpr, cast_type: CastType) -> Option<TypedExpr> {
+fn try_create_cast(want: &FullType, got: &TypedExpr, cast_type: CastType) -> Option<TypedExpr> {
     let type_cast = types::cast::try_cast(&got.r#type, want, cast_type);
     create_cast(want, got, &type_cast)
 }
 
-fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, cast_type: CastType, parser_context: &mut ParserContext) -> TypedExpr {
+fn cast_typed_expr(want: &FullType, got: Box<TypedExpr>, cast_type: CastType, parser_context: &mut ParserContext) -> TypedExpr {
     let type_cast = types::cast::try_cast(&got.r#type, want, cast_type);
     let loc = got.loc.clone();
-    let got_is_const = got.is_const;
+    let got_mutability = got.r#type.mutability;
     match type_cast {
-        TypeCast::FreeUpcast(_) => TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
-        TypeCast::IntWiden(_,_) => TypedExpr{expr: Expr::IntWiden(got), r#type: want.clone(), is_const: true, loc: loc},
-        TypeCast::IntToNumberWiden => TypedExpr{expr: Expr::IntToNumber(got), r#type: Type::Number, is_const: true, loc: loc},
+        TypeCast::FreeUpcast(_) => TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc},
+        TypeCast::IntWiden(_,_) => TypedExpr{expr: Expr::IntWiden(got), r#type: want.clone(), loc: loc},
+        TypeCast::IntToNumberWiden => TypedExpr{expr: Expr::IntToNumber(got), r#type: FullType::new(&Type::Number, got_mutability), loc: loc},
         TypeCast::None => {
             match cast_type {
                 CastType::Implicit => 
@@ -206,54 +206,55 @@ fn cast_typed_expr(want: &Type, got: Box<TypedExpr>, cast_type: CastType, parser
                 CastType::Explicit  => 
                     parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone())),
             }
-            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc}
+        },
+        TypeCast::ConstFail => {
+            parser_context.push_err(Error::ConstFailure(loc, want.clone(), got.r#type.clone()));
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc}
         },
         TypeCast::NotNeeded => {
             if cast_type == CastType::Explicit {
-                parser_context.push_err(Error::CastNotNeeded(loc, want.clone()));
+                parser_context.push_err(Error::CastNotNeeded(loc, want.r#type.clone()));
             }
             got.as_ref().clone()
         },
     }
 }
 
-fn guard_downcast_expr(want: &Type, got: Box<TypedExpr>, parser_context: &mut ParserContext) -> TypedExpr {
+fn guard_downcast_expr(want: &FullType, got: Box<TypedExpr>, parser_context: &mut ParserContext) -> TypedExpr {
     let type_cast = types::cast::try_guard_downcast_expr(&got.r#type, want);
     let loc = got.loc.clone();
-    let got_is_const = got.is_const;
     match type_cast {
-        TypeGuardDowncast::FreeDowncast => TypedExpr{expr: Expr::FreeDowncast(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
+        TypeGuardDowncast::FreeDowncast => TypedExpr{expr: Expr::FreeDowncast(got), r#type: want.clone(), loc: loc},
         TypeGuardDowncast::None => {
             parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone()));
-            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
+            TypedExpr{expr: Expr::FreeDowncast(got), r#type: want.clone(), loc: loc}
         },
         TypeGuardDowncast::NotNeeded => got.as_ref().clone(),
     }
 }
 
-fn generic_wrap(want: &Type, got: Box<TypedExpr>, parser_context: &mut ParserContext) -> TypedExpr {
+fn generic_wrap(want: &FullType, got: Box<TypedExpr>, parser_context: &mut ParserContext) -> TypedExpr {
     let generic_cast = types::cast::try_generic_wrap(&got.r#type, want);
     let loc = got.loc.clone();
-    let got_is_const = got.is_const;
     match generic_cast {
-        GenericCast::FreeCast => TypedExpr{expr: Expr::FreeGenericCast(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
+        GenericCast::FreeCast => TypedExpr{expr: Expr::FreeGenericCast(got), r#type: want.clone(), loc: loc},
         GenericCast::None => {
             parser_context.push_err(Error::InternalError(loc, format!("can't cast from {} to {}", got.r#type, want)));
-            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc}
         },
         GenericCast::NotNeeded => got.as_ref().clone(),
     }
 }
 
-fn generic_unwrap(want: &Type, got: Box<TypedExpr>, parser_context: &mut ParserContext) -> TypedExpr {
+fn generic_unwrap(want: &FullType, got: Box<TypedExpr>, parser_context: &mut ParserContext) -> TypedExpr {
     let generic_cast = types::cast::try_generic_unwrap(&got.r#type, want);
     let loc = got.loc.clone();
-    let got_is_const = got.is_const;
     match generic_cast {
-        GenericCast::FreeCast => TypedExpr{expr: Expr::FreeGenericCast(got), r#type: want.clone(), is_const: got_is_const, loc: loc},
+        GenericCast::FreeCast => TypedExpr{expr: Expr::FreeGenericCast(got), r#type: want.clone(), loc: loc},
         GenericCast::None => {
             parser_context.push_err(Error::InternalError(loc, format!("can't cast from {} to {}", got.r#type, want)));
-            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), is_const: got_is_const, loc: loc}
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc}
         },
         GenericCast::NotNeeded => got.as_ref().clone(),
     }
@@ -275,7 +276,7 @@ pub (crate) fn check_privacy(
                     parser_context.push_err(Error::NotYetImplemented(loc.clone(), String::from("protected variables")))
                 },
                 Privacy::Private => {
-                    if holding != this_type {
+                    if *holding != this_type.r#type {
                         parser_context.push_err(Error::EncapsulationFailure(loc.clone(), holding.clone(), member.clone()))
                     }
                 }
@@ -305,18 +306,31 @@ pub trait Importer{
 enum ScopedVar{
     /// Actual local variable
     Local{
+        mutability: VariableMutability,
         internal_name: String,
-        r#type: Type,
-        constant: bool,
+        r#type: FullType,
         guard_type: Option<Type>,
     },
     /// Closure reference. Looks like a local, actually a member of the function's closure
     ClosureRef{
+        mutability: VariableMutability,
         internal_name: String,
-        r#type: Type,
-        constant: bool,
+        r#type: FullType,
         guard_type: Option<Type>,
     },
+}
+
+impl ScopedVar{
+    pub fn is_var(&self) -> bool {
+        match self {
+            ScopedVar::Local{ mutability, internal_name: _, r#type: _, guard_type: _} => {
+                *mutability == VariableMutability::Variable
+            },
+            ScopedVar::ClosureRef{mutability, internal_name: _, r#type: _, guard_type: _} => {
+                *mutability == VariableMutability::Variable
+            },
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -509,10 +523,10 @@ impl ParserContext {
                 
                 for (key, val) in head.var_names.iter() {
                     let new_val = match val {
-                        ScopedVar::Local{internal_name, r#type, constant, guard_type} => 
-                            ScopedVar::ClosureRef{internal_name: internal_name.clone(), constant: *constant, r#type: r#type.clone(), guard_type: guard_type.clone()},
-                        ScopedVar::ClosureRef{internal_name, r#type, constant, guard_type} => 
-                            ScopedVar::ClosureRef{internal_name: internal_name.clone(), constant: *constant, r#type: r#type.clone(), guard_type: guard_type.clone()},
+                        ScopedVar::Local{internal_name, r#type, guard_type, mutability} => 
+                            ScopedVar::ClosureRef{internal_name: internal_name.clone(), r#type: r#type.clone(), guard_type: guard_type.clone(), mutability: *mutability},
+                        ScopedVar::ClosureRef{internal_name, r#type, guard_type, mutability} => 
+                            ScopedVar::ClosureRef{internal_name: internal_name.clone(), r#type: r#type.clone(), guard_type: guard_type.clone(), mutability: *mutability},
                     };
                     new_var_names.insert(key.clone(), new_val);
                 }
@@ -533,12 +547,12 @@ impl ParserContext {
         self.func_var_stack.pop();
     }
 
-    fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: &Type, constant: bool)  -> () {
+    fn add_var(&mut self, var_name: &String, internal_var_name: &String, r#type: &FullType, mutability: VariableMutability) -> () {
         let o_head = self.func_var_stack.last_mut();
         match o_head {
             None => {},
             Some(head) => {
-                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: None});
+                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), guard_type: None, mutability});
             }
         }
 
@@ -546,7 +560,7 @@ impl ParserContext {
         match o_head {
             None => {},
             Some(head) => {
-                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: None});
+                head.var_names.insert(var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), guard_type: None, mutability});
             }
         }
     }
@@ -558,8 +572,8 @@ impl ParserContext {
             Some(head) => {
                 head.var_names.iter().find(|(_, sv)| { 
                     match sv {
-                        ScopedVar::Local{internal_name: this_internal_name, r#type: _, constant: _, guard_type: _} => this_internal_name == internal_name,
-                        ScopedVar::ClosureRef{internal_name: this_internal_name, r#type: _, constant: _, guard_type: _} => this_internal_name == internal_name,
+                        ScopedVar::Local{internal_name: this_internal_name, r#type: _, guard_type: _, mutability: _} => this_internal_name == internal_name,
+                        ScopedVar::ClosureRef{internal_name: this_internal_name, r#type: _, guard_type: _, mutability: _} => this_internal_name == internal_name,
                     }
                 }).map(|(n, sv)| (n.clone(), sv.clone())).unwrap()
             }
@@ -597,13 +611,17 @@ impl ParserContext {
         let (var_name, shadowed_var) = self.find_named_scoped_var_given_internal_name(internal_var_name);
 
         let new_var = match shadowed_var {
-            ScopedVar::Local{internal_name: _, r#type, constant, guard_type: old_guard_type} => {
-                ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, 
-                    guard_type: Some(patch_guard_type(&old_guard_type, guard_type, loc, self))}
+            ScopedVar::Local{internal_name: _, r#type, guard_type: old_guard_type, mutability} => {
+                ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(),
+                    guard_type: Some(patch_guard_type(&old_guard_type, guard_type, loc, self)),
+                    mutability: mutability
+                }
             },
-            ScopedVar::ClosureRef{internal_name: _, r#type, constant, guard_type: old_guard_type} => {
-                ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, 
-                    guard_type: Some(patch_guard_type(&old_guard_type, guard_type, loc, self))}
+            ScopedVar::ClosureRef{internal_name: _, r#type, guard_type: old_guard_type, mutability} => {
+                ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), 
+                    guard_type: Some(patch_guard_type(&old_guard_type, guard_type, loc, self)),
+                    mutability: mutability
+                }
             }
         };
 
@@ -616,15 +634,15 @@ impl ParserContext {
         let (var_name, shadowed_var) = self.find_named_scoped_var_given_internal_name(internal_var_name);
 
         let o_new_var = match shadowed_var {
-            ScopedVar::Local{internal_name: _, r#type, constant, guard_type: o_guard_type} => {
+            ScopedVar::Local{internal_name: _, r#type, guard_type: o_guard_type, mutability} => {
                 match o_guard_type {
-                    Some(_) => Some(ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: None}),
+                    Some(_) => Some(ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), guard_type: None, mutability: mutability}),
                     None => None
                 }
             },
-            ScopedVar::ClosureRef{internal_name: _, r#type, constant, guard_type: o_guard_type} => {
+            ScopedVar::ClosureRef{internal_name: _, r#type, guard_type: o_guard_type, mutability} => {
                 match o_guard_type {
-                    Some(_) => Some(ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), constant: constant, guard_type: None}),
+                    Some(_) => Some(ScopedVar::ClosureRef{internal_name: internal_var_name.clone(), r#type: r#type.clone(), guard_type: None, mutability: mutability}),
                     None => None
                 }
             }
@@ -658,6 +676,10 @@ impl ParserContext {
             _ => unreachable!()
         }
     }
+
+    fn get_global_var(&self, name: &String) -> Option<&GlobalVariableDecl> {
+        self.global_decls.iter().find(|&x| x.name == *name)
+    }
 }
 
 impl ErrRecorder for ParserContext {
@@ -671,21 +693,21 @@ struct ParserFuncContext{
     pub local_vars: Vec<LocalVar>,
     pub local_var_map: HashMap<String, u32>,
     pub closure: Vec<ClosureRef>,
-    pub given_func_return_type: Type,
-    pub implied_func_return_type: Type,
+    pub given_func_return_type: FullType,
+    pub implied_func_return_type: FullType,
     /// If we have entered a loop block
     pub in_iteration: bool,
-    pub this_type: Option<Type>,
+    pub this_type: Option<FullType>,
 }
 
 impl ParserFuncContext{
-    pub fn new(this_type: &Option<Type>) -> ParserFuncContext{
+    pub fn new(this_type: &Option<FullType>) -> ParserFuncContext{
         ParserFuncContext{
             local_vars: vec![],
             local_var_map: HashMap::new(),
             closure: vec![],
-            given_func_return_type: Type::Undeclared,
-            implied_func_return_type: Type::Undeclared,
+            given_func_return_type: FullType::new(&Type::Undeclared, Mutability::Unknown),
+            implied_func_return_type: FullType::new(&Type::Undeclared, Mutability::Unknown),
             in_iteration: false,
             this_type: this_type.clone(),
         }

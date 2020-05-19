@@ -82,8 +82,8 @@ impl<'a> Parser<'a> {
             Token::Keyword(ref k) => match k {   
                 Keyword::Fn => self.parse_func_exports_phase(parser_context),
                 Keyword::UnsafeStruct => {let _ = self.parse_struct_decl(true, parser_context);},
-                Keyword::Const => self.parse_global_exports_phase(true, parser_context),
-                Keyword::Let => self.parse_global_exports_phase(false, parser_context),
+                //Keyword::Const => self.parse_global_exports_phase(true, parser_context),
+                Keyword::Let => self.parse_global_exports_phase(parser_context),
                 Keyword::Alias => { self.parse_alias(true, parser_context);},
                 Keyword::Type => { self.parse_type_decl(true, ParserPhase::ExportsPhase, parser_context);},
                 _ => {},
@@ -100,11 +100,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_global_exports_phase(&mut self,
-        is_const: bool,
         parser_context: &mut ParserContext,
     ) -> () {
         let mut fake_parser_func_context = ParserFuncContext::new(&None);
-        let _ = self.parse_variable_decl(is_const, true, true, &mut fake_parser_func_context, parser_context);
+        let _ = self.parse_variable_decl(true, true, &mut fake_parser_func_context, parser_context);
     }
 
     /// Phase 1 parse. Produces the file outline, to be used by the import code

@@ -89,12 +89,12 @@ impl<'a> Parser<'a> {
                     match user_type {
                         TypeDecl::Struct{name: _, struct_type: _, under_construction: _, export: _} => Some(Type::UnsafeStruct{name: ident.clone()}),
                         TypeDecl::Alias{name: _, of, export: _} => Some(of.clone()),
-                        TypeDecl::Type{name: _, inner: _, type_args, export: _, member_funcs: _, constructor: _, under_construction: _} => {
+                        TypeDecl::Type{name: _, inner, type_args, export: _, member_funcs: _, constructor: _, under_construction: _} => {
                             if type_args.len() > 0 {
                                 let types = self.parse_type_args(&type_args, parser_context);
-                                Some(Type::UserType{name: ident.clone(), type_args: types})
+                                Some(Type::UserType{name: ident.clone(), type_args: types, inner: Box::new(inner)})
                             } else {
-                                Some(Type::UserType{name: ident.clone(), type_args: vec![]})
+                                Some(Type::UserType{name: ident.clone(), type_args: vec![], inner: Box::new(inner)})
                             }
                         },
                     }
@@ -263,6 +263,26 @@ impl<'a> Parser<'a> {
         }
     }
 
+    ///Parse a type with optional mutability qualifier, e.g. mut Int
+    pub(crate) fn parse_full_type(&mut self, 
+        parser_context: &mut ParserContext,
+    ) -> FullType {
+        let next = self.peek_next_item();
+        let token = &next.token;
+        let mut mutability = Mutability::Const;
+        let mut_loc = next.location.clone();
+        if token.matches_keyword(Keyword::Mut) {
+            mutability = Mutability::Mut;
+            self.skip_next_item();
+        }
+        let t = self.parse_type(parser_context);
+        if t.get_pass_style() == PassStyle::AtomicValue && mutability == Mutability::Mut{
+            parser_context.push_err(Error::UnnecessaryMut(mut_loc, t.clone()));
+            mutability = Mutability::Const;
+        }
+        FullType::new(&t, mutability)
+    }
+
     ///Parse a type, e.g. Int
     pub(crate) fn parse_type(&mut self, 
         parser_context: &mut ParserContext,
@@ -353,23 +373,32 @@ impl<'a> Parser<'a> {
         
         let this_type = Type::UserType{
             name: id.clone(), 
-            type_args: type_args.iter().map(|type_arg| Type::VariableUsage{name: type_arg.name.clone(), constraint: type_arg.constraint.clone()}).collect()
+            type_args: type_args.iter().map(|type_arg| Type::VariableUsage{name: type_arg.name.clone(), constraint: type_arg.constraint.clone()}).collect(),
+            inner: Box::new(inner.clone())
         };
 
         let mut member_funcs = vec![
             MemberFunc{
-                type_args: vec![], func_type: FuncType{out_type: inner.clone(), in_types: vec![this_type.clone()]}, 
+                type_args: vec![], func_type: FuncType{out_type: FullType::new_const(&inner), in_types: vec![FullType::new_const(&this_type)]}, 
                 mangled_name: String::from("__getInner"), name: String::from("getInner"), privacy: Privacy::Private,
             },
+            /*
+            ,
             MemberFunc{
-                type_args: vec![], func_type: FuncType{out_type: inner.clone(), in_types: vec![this_type.clone()]}, 
-                mangled_name: String::from("__getInnerMut"), name: String::from("getInnerMut"), privacy: Privacy::Private,
-            },
-            MemberFunc{
-                type_args: vec![], func_type: FuncType{out_type: Type::RealVoid, in_types: vec![inner.clone()]}, 
+                type_args: vec![], func_type: FuncType{out_type: FullType::new_const(&Type::RealVoid), in_types: vec![FullType::new_mut(&inner)]}, 
                 mangled_name: String::from("__setInner"), name: String::from("setInner"), privacy: Privacy::Private,
             }
+            */
         ];
+        if inner.get_pass_style() == PassStyle::Reference {
+            member_funcs.push(
+                MemberFunc{
+                    type_args: vec![], func_type: FuncType{out_type: FullType::new_mut(&inner), in_types: vec![FullType::new_mut(&this_type)]},
+                    mangled_name: String::from("__getInnerMut"), name: String::from("getInnerMut"), privacy: Privacy::Private,
+                }
+            )
+        }
+
         parser_context.type_map.insert(id.clone(), TypeDecl::Type{name: id.clone(), inner: inner.clone(), type_args: type_args.clone(), export, 
             member_funcs: member_funcs.clone(), 
             constructor: None, under_construction: true});
@@ -389,30 +418,63 @@ impl<'a> Parser<'a> {
 
             match token {
                 Token::Keyword(Keyword::Fn) => {
-                    let mf = self.parse_member_function_decl(&prefix, &this_type, &type_args, Privacy::Public, export, phase, parser_context);
+                    let mf = self.parse_member_function_decl(&prefix, &FullType::new_const(&this_type), &type_args, Privacy::Public, export, phase, parser_context);
                     parser_context.append_member_func(&id, &mf);
                     member_funcs.push(mf);
+                },
+                Token::Keyword(Keyword::Mut) => {
+                    self.skip_next_item();
+                    next = self.peek_next_item();
+                    token = &next.token;
+                    match token {
+                        Token::Keyword(Keyword::Fn) => {
+                            let mf = self.parse_member_function_decl(&prefix, &FullType::new_mut(&this_type), &type_args, Privacy::Public, export, phase, parser_context);
+                            parser_context.append_member_func(&id, &mf);
+                            member_funcs.push(mf);
+                        },
+                        _ => {
+                            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
+                            self.skip_next_item();
+                        }
+                    }
                 },
                 Token::Keyword(Keyword::Constructor) => {
                     if constructor.is_some() {
                         parser_context.push_err(Error::OnlyOneConstructor(next.location.clone()))
                     }
                     let constructor_member_func = self.parse_constructor_decl(&prefix, &type_args, export, phase, parser_context);
-                    if constructor_member_func.func_type.out_type != inner {
-                        parser_context.push_err(Error::TypeFailure(next.location.clone(), inner.clone(), constructor_member_func.func_type.out_type.clone()))
+                    if constructor_member_func.func_type.out_type.r#type != inner {
+                        parser_context.push_err(Error::TypeFailure(next.location.clone(), FullType::new_mut(&inner), constructor_member_func.func_type.out_type.clone()))
                     }
                     
                     constructor = Some(constructor_member_func);
                 },
+
                 Token::Keyword(Keyword::Private) => {
                     self.skip_next_item();
                     next = self.peek_next_item();
                     token = &next.token;
                     match token {
                         Token::Keyword(Keyword::Fn) => {
-                            let mf = self.parse_member_function_decl(&prefix, &this_type, &type_args, Privacy::Private, export, phase, parser_context);
+                            let mf = self.parse_member_function_decl(&prefix, &FullType::new_const(&this_type), &type_args, Privacy::Private, export, phase, parser_context);
                             parser_context.append_member_func(&id, &mf);
                             member_funcs.push(mf);
+                        },
+                        Token::Keyword(Keyword::Mut) => {
+                            self.skip_next_item();
+                            next = self.peek_next_item();
+                            token = &next.token;
+                            match token {
+                                Token::Keyword(Keyword::Fn) => {
+                                    let mf = self.parse_member_function_decl(&prefix, &FullType::new_mut(&this_type), &type_args, Privacy::Private, export, phase, parser_context);
+                                    parser_context.append_member_func(&id, &mf);
+                                    member_funcs.push(mf);
+                                },
+                                _ => {
+                                    parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
+                                    self.skip_next_item();
+                                }
+                            }
                         },
                         _ => {
                             parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
@@ -454,40 +516,42 @@ impl<'a> Parser<'a> {
                 let o_member_func = boo.iter().find(|&x| x.name == *func_name);
                 match o_member_func {
                     Some(member_func) => {
-                        check_privacy(member_func.privacy, &this_expr.r#type, &member_func.name, &loc, parser_func_context, parser_context);
+                        check_privacy(member_func.privacy, &this_expr.r#type.r#type, &member_func.name, &loc, parser_func_context, parser_context);
         
                         let mangled_name = &member_func.mangled_name;
                         match mangled_name.as_str(){
                             "__getInner" => {
                                 self.parse_empty_function_call_args(parser_func_context, parser_context);
-                                TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: inner.clone(), is_const: true, loc: loc.clone()}
+                                TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: FullType::new(&inner, Mutability::Const), loc: loc.clone()}
                             },
                             "__getInnerMut" => {
                                 self.parse_empty_function_call_args(parser_func_context, parser_context);
-                                TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: inner.clone(), is_const: false, loc: loc.clone()}
+                                TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: FullType::new(&inner, Mutability::Mut), loc: loc.clone()}
                             },
+                            /*
                             "__setInner" => {
                                 let args = self.parse_function_call_args(&None, &vec![inner.clone()], parser_func_context, parser_context);
                                 let o_l_value = this_expr.as_l_value();
                                 match o_l_value {
                                     None => {
                                         parser_context.push_err(Error::NotAnLValue(loc.clone()));
-                                        TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, is_const: true, loc: loc.clone()}
+                                        TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc.clone()}
                                     },
                                     Some(l_value) => {
                                         TypedExpr{expr: Expr::Assignment(Box::new(this_expr.clone()), l_value, Box::new(args[0].clone())), 
-                                            r#type: Type::RealVoid, is_const: true, loc: loc.clone()}
+                                            r#type: FullType::new_const(&Type::RealVoid), loc: loc.clone()}
                                     }
                                 }
                             },
+                            */
                             _ => {
                                 self.parse_member_function_call(this_expr, &type_args, &member_func, parser_func_context, parser_context)
                             }
                         }  
                     },
                     None => {
-                        parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), this_expr.r#type.clone(), func_name.clone()));
-                        TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: loc.clone(), is_const: true}
+                        parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), this_expr.r#type.r#type.clone(), func_name.clone()));
+                        TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc.clone()}
                     }
                 }
             },

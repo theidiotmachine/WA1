@@ -13,41 +13,41 @@ use lazy_static;
 
 lazy_static!{
     static ref INT_CLZ_METHODS: Vec<FuncType> = vec![
-        FuncType{out_type: Type::Int(0, 32), in_types: vec![INT_S_32]},
-        FuncType{out_type: Type::Int(0, 64), in_types: vec![INT_S_64]},
-        FuncType{out_type: Type::Int(0, 32), in_types: vec![INT_U_32]},
-        FuncType{out_type: Type::Int(0, 64), in_types: vec![INT_U_64]},
+        FuncType{out_type: FullType::new_const(&Type::Int(0, 32)), in_types: vec![FullType::new_const(&INT_S_32)]},
+        FuncType{out_type: FullType::new_const(&Type::Int(0, 64)), in_types: vec![FullType::new_const(&INT_S_64)]},
+        FuncType{out_type: FullType::new_const(&Type::Int(0, 32)), in_types: vec![FullType::new_const(&INT_U_32)]},
+        FuncType{out_type: FullType::new_const(&Type::Int(0, 64)), in_types: vec![FullType::new_const(&INT_U_64)]},
     ];
 
     static ref INT_CTZ_METHODS: Vec<FuncType> = vec![
-        FuncType{out_type: Type::Int(0, 32), in_types: vec![INT_S_32]},
-        FuncType{out_type: Type::Int(0, 64), in_types: vec![INT_S_64]},
-        FuncType{out_type: Type::Int(0, 32), in_types: vec![INT_U_32]},
-        FuncType{out_type: Type::Int(0, 64), in_types: vec![INT_U_64]},
+        FuncType{out_type: FullType::new_const(&Type::Int(0, 32)), in_types: vec![FullType::new_const(&INT_S_32)]},
+        FuncType{out_type: FullType::new_const(&Type::Int(0, 64)), in_types: vec![FullType::new_const(&INT_S_64)]},
+        FuncType{out_type: FullType::new_const(&Type::Int(0, 32)), in_types: vec![FullType::new_const(&INT_U_32)]},
+        FuncType{out_type: FullType::new_const(&Type::Int(0, 64)), in_types: vec![FullType::new_const(&INT_U_64)]},
     ];
 
     static ref INT_SL_METHODS: Vec<FuncType> = vec![
-        FuncType{out_type: INT_S_32, in_types: vec![INT_S_32, INT_U_32]},
-        FuncType{out_type: INT_S_64, in_types: vec![INT_S_64, INT_U_64]},
-        FuncType{out_type: INT_U_32, in_types: vec![INT_U_32, INT_U_32]},
-        FuncType{out_type: INT_U_64, in_types: vec![INT_U_64, INT_U_64]},
+        FuncType{out_type: FullType::new_const(&INT_S_32), in_types: vec![FullType::new_const(&INT_S_32), FullType::new_const(&INT_U_32)]},
+        FuncType{out_type: FullType::new_const(&INT_S_64), in_types: vec![FullType::new_const(&INT_S_64), FullType::new_const(&INT_U_64)]},
+        FuncType{out_type: FullType::new_const(&INT_U_32), in_types: vec![FullType::new_const(&INT_U_32), FullType::new_const(&INT_U_32)]},
+        FuncType{out_type: FullType::new_const(&INT_U_64), in_types: vec![FullType::new_const(&INT_U_64), FullType::new_const(&INT_U_64)]},
     ];
 
     static ref INT_SR_METHODS: Vec<FuncType> = vec![
-        FuncType{out_type: INT_S_32, in_types: vec![INT_S_32, INT_U_32]},
-        FuncType{out_type: INT_S_64, in_types: vec![INT_S_64, INT_U_64]},
-        FuncType{out_type: INT_U_32, in_types: vec![INT_U_32, INT_U_32]},
-        FuncType{out_type: INT_U_64, in_types: vec![INT_U_64, INT_U_64]},
+        FuncType{out_type: FullType::new_const(&INT_S_32), in_types: vec![FullType::new_const(&INT_S_32), FullType::new_const(&INT_U_32)]},
+        FuncType{out_type: FullType::new_const(&INT_S_64), in_types: vec![FullType::new_const(&INT_S_64), FullType::new_const(&INT_U_64)]},
+        FuncType{out_type: FullType::new_const(&INT_U_32), in_types: vec![FullType::new_const(&INT_U_32), FullType::new_const(&INT_U_32)]},
+        FuncType{out_type: FullType::new_const(&INT_U_64), in_types: vec![FullType::new_const(&INT_U_64), FullType::new_const(&INT_U_64)]},
     ];
 
     static ref INT_TTS_METHODS: Vec<FuncType> = vec![
-        FuncType{out_type: INT_S_32, in_types: vec![INT_U_32]},
-        FuncType{out_type: INT_S_64, in_types: vec![INT_U_64]},
+        FuncType{out_type: FullType::new_const(&INT_S_32), in_types: vec![FullType::new_const(&INT_U_32)]},
+        FuncType{out_type: FullType::new_const(&INT_S_64), in_types: vec![FullType::new_const(&INT_U_64)]},
     ];
 
     static ref INT_UN_METHODS: Vec<FuncType> = vec![
-        FuncType{out_type: INT_U_32, in_types: vec![INT_U_32]},
-        FuncType{out_type: INT_U_64, in_types: vec![INT_U_64]},
+        FuncType{out_type: FullType::new_const(&INT_U_32), in_types: vec![FullType::new_const(&INT_U_32)]},
+        FuncType{out_type: FullType::new_const(&INT_U_64), in_types: vec![FullType::new_const(&INT_U_64)]},
     ];
 }
 
@@ -67,12 +67,12 @@ impl<'a> Parser<'a> {
             "truncateToSigned" => &INT_TTS_METHODS,
             "unsignedNegate" => &INT_UN_METHODS,
             _ => {
-                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), holding.r#type.clone(), id.clone()));
-                return TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), is_const: true, loc: loc.clone()};
+                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), holding.r#type.r#type.clone(), id.clone()));
+                return TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), loc: loc.clone()};
             }
         };
     
-        let mut arg_types: Vec<Type> = vec![holding.r#type.clone()];
+        let mut arg_types: Vec<FullType> = vec![holding.r#type.clone()];
         let (args, _) = self.parse_function_call_args_unchecked(parser_func_context, parser_context);
         for arg in &args {
             arg_types.push(arg.r#type.clone());    
@@ -81,8 +81,8 @@ impl<'a> Parser<'a> {
 
         match t {
             None => {
-                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), holding.r#type.clone(), id.clone()));
-                TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), is_const: true, loc: loc.clone()}
+                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), holding.r#type.r#type.clone(), id.clone()));
+                TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), loc: loc.clone()}
             },
             Some(FuncCallTypeCast{func_type, arg_type_casts}) => {
                 let out_self_type_cast = arg_type_casts.get(0).unwrap().clone();
@@ -99,7 +99,7 @@ impl<'a> Parser<'a> {
                     i += 1;
                 }
 
-                TypedExpr{expr: Expr::MemberFuncCall(Box::new(o_cast.unwrap().clone()), id.clone(), out_args), r#type: func_type.out_type.clone(), is_const: true, loc: loc.clone()}
+                TypedExpr{expr: Expr::MemberFuncCall(Box::new(o_cast.unwrap().clone()), id.clone(), out_args), r#type: func_type.out_type.clone(), loc: loc.clone()}
             }
         }
     }

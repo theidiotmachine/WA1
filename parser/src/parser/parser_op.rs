@@ -12,45 +12,45 @@ use lazy_static;
 
 lazy_static!{
     static ref COMPARISON_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![INT_S_64, INT_S_64], out_type: Type::Bool},
-        FuncType{in_types: vec![INT_S_32, INT_S_32], out_type: Type::Bool},
-        FuncType{in_types: vec![INT_U_64, INT_U_64], out_type: Type::Bool},
-        FuncType{in_types: vec![INT_U_32, INT_U_32], out_type: Type::Bool},
-        FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Bool},
-        FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::Bool},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_64), FullType::new_const(&INT_S_64)], out_type: FullType::new_const(&Type::Bool)},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_32), FullType::new_const(&INT_S_32)], out_type: FullType::new_const(&Type::Bool)},
+        FuncType{in_types: vec![FullType::new_const(&INT_U_64), FullType::new_const(&INT_U_64)], out_type: FullType::new_const(&Type::Bool)},
+        FuncType{in_types: vec![FullType::new_const(&INT_U_32), FullType::new_const(&INT_U_32)], out_type: FullType::new_const(&Type::Bool)},
+        FuncType{in_types: vec![FullType::new_const(&Type::Number), FullType::new_const(&Type::Number)], out_type: FullType::new_const(&Type::Bool)},
+        FuncType{in_types: vec![FullType::new_const(&Type::UnsafePtr), FullType::new_const(&Type::UnsafePtr)], out_type: FullType::new_const(&Type::Bool)},
     ]);
     
     static ref MATHS_BIN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![INT_S_64, INT_S_64], out_type: INT_S_64},
-        FuncType{in_types: vec![INT_S_32, INT_S_32], out_type: INT_S_32},
-        FuncType{in_types: vec![INT_U_64, INT_U_64], out_type: INT_U_64},
-        FuncType{in_types: vec![INT_U_32, INT_U_32], out_type: INT_U_32},
-        FuncType{in_types: vec![Type::Number, Type::Number], out_type: Type::Number},
-        FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::UnsafePtr},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_64), FullType::new_const(&INT_S_64)], out_type: FullType::new_const(&INT_S_64)},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_32), FullType::new_const(&INT_S_32)], out_type: FullType::new_const(&INT_S_32)},
+        FuncType{in_types: vec![FullType::new_const(&INT_U_64), FullType::new_const(&INT_U_64)], out_type: FullType::new_const(&INT_U_64)},
+        FuncType{in_types: vec![FullType::new_const(&INT_U_32), FullType::new_const(&INT_U_32)], out_type: FullType::new_const(&INT_U_32)},
+        FuncType{in_types: vec![FullType::new_const(&Type::Number), FullType::new_const(&Type::Number)], out_type: FullType::new_const(&Type::Number)},
+        FuncType{in_types: vec![FullType::new_const(&Type::UnsafePtr), FullType::new_const(&Type::UnsafePtr)], out_type: FullType::new_const(&Type::UnsafePtr)},
     ]);
     
     static ref MATHS_UN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![INT_S_64], out_type: INT_S_64},
-        FuncType{in_types: vec![INT_U_64], out_type: INT_U_64},
-        FuncType{in_types: vec![INT_S_32], out_type: INT_S_32},
-        FuncType{in_types: vec![INT_U_32], out_type: INT_U_32},
-        FuncType{in_types: vec![Type::Number], out_type: Type::Number},
-        FuncType{in_types: vec![Type::UnsafePtr], out_type: Type::UnsafePtr},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_64)], out_type: FullType::new_const(&INT_S_64)},
+        FuncType{in_types: vec![FullType::new_const(&INT_U_64)], out_type: FullType::new_const(&INT_U_64)},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_32)], out_type: FullType::new_const(&INT_S_32)},
+        FuncType{in_types: vec![FullType::new_const(&INT_U_32)], out_type: FullType::new_const(&INT_U_32)},
+        FuncType{in_types: vec![FullType::new_const(&Type::Number)], out_type: FullType::new_const(&Type::Number)},
+        FuncType{in_types: vec![FullType::new_const(&Type::UnsafePtr)], out_type: FullType::new_const(&Type::UnsafePtr)},
     ]);
 
     static ref MATHS_NEG_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![INT_S_64], out_type: INT_S_64},
-        FuncType{in_types: vec![INT_S_32], out_type: INT_S_32},
-        FuncType{in_types: vec![Type::Number], out_type: Type::Number},
-        FuncType{in_types: vec![Type::UnsafePtr], out_type: Type::UnsafePtr},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_64)], out_type: FullType::new_const(&INT_S_64)},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_32)], out_type: FullType::new_const(&INT_S_32)},
+        FuncType{in_types: vec![FullType::new_const(&Type::Number)], out_type: FullType::new_const(&Type::Number)},
+        FuncType{in_types: vec![FullType::new_const(&Type::UnsafePtr)], out_type: FullType::new_const(&Type::UnsafePtr)},
     ]);
     
     static ref BIT_BIN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![INT_S_64, INT_S_64], out_type: INT_S_64},
-        FuncType{in_types: vec![INT_U_64, INT_U_64], out_type: INT_U_64},
-        FuncType{in_types: vec![INT_S_32, INT_S_32], out_type: INT_S_32},
-        FuncType{in_types: vec![INT_U_32, INT_U_32], out_type: INT_U_32},
-        FuncType{in_types: vec![Type::UnsafePtr, Type::UnsafePtr], out_type: Type::UnsafePtr},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_64), FullType::new_const(&INT_S_64)], out_type: FullType::new_const(&INT_S_64)},
+        FuncType{in_types: vec![FullType::new_const(&INT_U_64), FullType::new_const(&INT_U_64)], out_type: FullType::new_const(&INT_U_64)},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_32), FullType::new_const(&INT_S_32)], out_type: FullType::new_const(&INT_S_32)},
+        FuncType{in_types: vec![FullType::new_const(&INT_U_32), FullType::new_const(&INT_U_32)], out_type: FullType::new_const(&INT_U_32)},
+        FuncType{in_types: vec![FullType::new_const(&Type::UnsafePtr), FullType::new_const(&Type::UnsafePtr)], out_type: FullType::new_const(&Type::UnsafePtr)},
     ]);
     
     static ref EQUALITY_OP: OpType = OpType::EqualityOpType;
@@ -60,18 +60,18 @@ lazy_static!{
     static ref DOT_OP: OpType = OpType::StaticMemberOpType;
     
     static ref BOOL_BIN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![Type::Bool, Type::Bool], out_type: Type::Bool},
+        FuncType{in_types: vec![FullType::new_const(&Type::Bool), FullType::new_const(&Type::Bool)], out_type: FullType::new_const(&Type::Bool)},
     ]);
     
     static ref BOOL_UN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![Type::Bool], out_type: Type::Bool},
+        FuncType{in_types: vec![FullType::new_const(&Type::Bool)], out_type: FullType::new_const(&Type::Bool)},
     ]);
     
     static ref BIT_UN_OP: OpType = OpType::SimpleOpType(vec![
-        FuncType{in_types: vec![INT_S_64], out_type: INT_S_64},
-        FuncType{in_types: vec![INT_U_64], out_type: INT_U_64},
-        FuncType{in_types: vec![INT_S_32], out_type: INT_S_32},
-        FuncType{in_types: vec![INT_U_32], out_type: INT_U_32},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_64)], out_type: FullType::new_const(&INT_S_64)},
+        FuncType{in_types: vec![FullType::new_const(&INT_U_64)], out_type: FullType::new_const(&INT_U_64)},
+        FuncType{in_types: vec![FullType::new_const(&INT_S_32)], out_type: FullType::new_const(&INT_S_32)},
+        FuncType{in_types: vec![FullType::new_const(&INT_U_32)], out_type: FullType::new_const(&INT_U_32)},
     ]);
     
     static ref MATHS_ASSIGN_MODIFY_OP: OpType = OpType::AssignModifyOpType(vec![
@@ -89,8 +89,6 @@ lazy_static!{
         INT_S_64,
         INT_U_64,
     ]);
-    
-    static ref ASSIGN_OP: OpType = OpType::AssignmentOpType;
     
     /// clearly it would be nice to get these types
     static ref NO_IDEA_OP: OpType = OpType::NotImplementedOpType;
@@ -139,7 +137,7 @@ pub fn get_op_type_for_unop(unop: &UnaryOperator) -> &OpType {
 
 fn get_op_type_for_assop(assop: &AssignmentOperator) -> &OpType {
     match assop {
-        AssignmentOperator::Assign => &ASSIGN_OP,
+        AssignmentOperator::Assign => &OpType::AssignmentOpType,
         AssignmentOperator::PlusAssign => &MATHS_ASSIGN_MODIFY_OP,
         AssignmentOperator::MinusAssign => &MATHS_ASSIGN_MODIFY_OP,
         AssignmentOperator::ExponentAssign => &MATHS_ASSIGN_MODIFY_OP,
@@ -250,6 +248,60 @@ pub fn get_unary_operator_data<'a>(token: &Token<&'a str>) -> Option<UnaryOperat
     }
 }
 
+fn as_l_value(
+    typed_expr: &TypedExpr,
+    parser_context: &ParserContext,
+) -> Option<TypedLValueExpr> {
+    match &typed_expr.expr {
+        Expr::GlobalVariableUse(name) => { 
+            let o_g = parser_context.get_global_var(&name);
+            match o_g{
+                Some(g) => {
+                    if g.mutability == VariableMutability::Variable {
+                        Some(TypedLValueExpr{r#type: typed_expr.r#type.r#type.clone(), expr: LValueExpr::GlobalVariableAssign(name.clone()), loc: typed_expr.loc})
+                    } else {
+                        None
+                    }
+
+                },
+                None => None
+            }
+        },
+        Expr::LocalVariableUse(name) => {
+            let (_, sv) = parser_context.find_named_scoped_var_given_internal_name(&name);
+            if sv.is_var() {
+                Some(TypedLValueExpr{r#type: typed_expr.r#type.r#type.clone(), expr: LValueExpr::LocalVariableAssign(name.clone()), loc: typed_expr.loc})
+            } else {
+                None
+            }
+        },
+        Expr::ClosureVariableUse(name) => {
+            if typed_expr.type_is_const() {
+                None
+            } else {
+                Some(TypedLValueExpr{r#type: typed_expr.r#type.r#type.clone(), expr: LValueExpr::ClosureVariableAssign(name.clone()), loc: typed_expr.loc})
+            }
+        },
+        Expr::NamedMember(lhs, name) => {
+            if typed_expr.type_is_const() {
+                None
+            } else {
+                Some(TypedLValueExpr{r#type: typed_expr.r#type.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(lhs.clone(), lhs.r#type.r#type.clone(), name.clone()), loc: typed_expr.loc})
+            }
+        },
+        Expr::DynamicMember(outer, inner) => {
+            if typed_expr.type_is_const() {
+                None
+            } else {
+                Some(TypedLValueExpr{r#type: typed_expr.r#type.r#type.clone(), expr: LValueExpr::DynamicMemberAssign(outer.clone(), outer.r#type.r#type.clone(), inner.clone()), loc: typed_expr.loc})
+            }
+        },
+        Expr::Parens(inner) => as_l_value(&inner, parser_context),
+        Expr::FreeDowncast(inner) => as_l_value(&inner, parser_context),
+        _ => None,
+    }
+}
+
 impl<'b> Parser<'b> {
     fn get_binary_operator_for_token(&self, token: &Token<&'b str>) -> Option<BinaryOperator> {
         match token {
@@ -323,7 +375,7 @@ impl<'b> Parser<'b> {
                 match *op_type {
                     OpType::AsOpType => {
                         //as is just a straight cast; so 
-                        match &rhs.r#type {
+                        match &rhs.r#type.r#type {
                             Type::TypeLiteral(t) => {
                                 cast_typed_expr(&t, Box::new(lhs.clone()), CastType::Explicit, parser_context)
                             },
@@ -359,11 +411,11 @@ impl<'b> Parser<'b> {
                                     }
                                 };
                                 
-                                TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: lhs_out, rhs: rhs_out}, r#type: bin_op_type_cast.out_type, is_const: true, loc: loc}
+                                TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: lhs_out, rhs: rhs_out}, r#type: bin_op_type_cast.out_type, loc: loc}
                             },
                             None => {
                                 parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), lhs.r#type.clone(), rhs.r#type.clone()));
-                                TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone())}, r#type: Type::Unknown, is_const: true, loc: loc}
+                                TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone())}, r#type: FullType::new_const(&Type::Unknown), loc: loc}
                             }
                         }
                     }
@@ -376,7 +428,7 @@ impl<'b> Parser<'b> {
                 match o_ass_op {
                     Some(ass_op) => {
                         //get an l-value. This will do const checking
-                        let o_l_value = lhs.as_l_value();
+                        let o_l_value = as_l_value(&lhs, parser_context);
                         match o_l_value {
                             None => {
                                 parser_context.push_err(Error::NotAnLValue(loc));
@@ -391,27 +443,30 @@ impl<'b> Parser<'b> {
                                     _ => {}
                                 }
 
+                                //The l-value code will have stripped away any type guards, so we use that
+                                let unguarded_lhs_full_type = FullType::new(&l_value.r#type, lhs.r#type.mutability);
+
                                 //now type check the assignment operator. Note that we only need a type check from the rhs
-                                let o_bin_op_type_cast = types::get_binary_op_type_cast(get_op_type_for_assop(&ass_op), &l_value.r#type, &rhs.r#type);
+                                let o_bin_op_type_cast = types::get_binary_op_type_cast(get_op_type_for_assop(&ass_op), &unguarded_lhs_full_type, &rhs.r#type);
                                 match o_bin_op_type_cast {
                                     Some(bin_op_type_cast) => {
                                         let o_cast = create_cast(&bin_op_type_cast.rhs_type, rhs, &bin_op_type_cast.rhs_type_cast);
                                         let rhs_out = match o_cast {
                                             Some(cast) => Box::new(cast),
                                             None => {
-                                                parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), lhs.r#type.clone(), rhs.r#type.clone()));
+                                                parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), unguarded_lhs_full_type, rhs.r#type.clone()));
                                                 Box::new(rhs.clone())
                                             }
                                         };
                                         if ass_op == AssignmentOperator::Assign {
-                                            TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, is_const: false, loc: loc}
+                                            TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, loc: loc}
                                         } else {
-                                            TypedExpr{expr: Expr::ModifyAssignment(ass_op, Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, is_const: false, loc: loc}
+                                            TypedExpr{expr: Expr::ModifyAssignment(ass_op, Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, loc: loc}
                                         } 
                                     },
                                     None => {
-                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), lhs.r#type.clone(), rhs.r#type.clone()));
-                                        TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, Box::new(rhs.clone())), r#type: Type::Unknown, is_const: false, loc: loc}
+                                        parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), unguarded_lhs_full_type.clone(), rhs.r#type.clone()));
+                                        TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, Box::new(rhs.clone())), r#type: FullType::new_const(&Type::Unknown), loc: loc}
                                     }
                                 }
                             }

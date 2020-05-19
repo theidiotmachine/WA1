@@ -20,6 +20,7 @@ use crate::wasm::wasm_instructions::{WasmInstr, opcodes};
 use crate::wasm::wasm_serialize::{serialize_i32, serialize_i64, serialize_f32, serialize_f64};
 
 use crate::compile_int::compile_int_member_func;
+use crate::compile_ptr::compile_unsafeptr_member_func;
 
 #[derive(PartialEq, Copy, Clone)]
 pub enum TranslationUnitType{
@@ -72,7 +73,7 @@ fn compile_binary_operator(
     compile_expr(&lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
     compile_expr(&rhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
 
-    match lhs.r#type {
+    match lhs.r#type.r#type {
         Type::Number => {
             // number * ? => ?
             match return_type {
@@ -660,7 +661,7 @@ fn compile_modify_assign_operator(
 ) {
     let bin_op = bin_op_for_ass_op(ass_op);
     compile_l_value_pre(l_value, context, local_var_map, wasm_module, wasm_expr, errors);
-    compile_binary_operator(&bin_op, lhs, r_value, &lhs.r#type, loc, context, local_var_map, wasm_module, wasm_expr, errors);
+    compile_binary_operator(&bin_op, lhs, r_value, &lhs.r#type.r#type, loc, context, local_var_map, wasm_module, wasm_expr, errors);
     compile_l_value_post(lhs, l_value, context, local_var_map, consume_result, wasm_module, wasm_expr, errors);
 }
 
@@ -696,8 +697,9 @@ fn compile_member_func_call(
     wasm_expr: &mut WasmExpr,
     errors: &mut Vec<Error>
 ) {
-    match lhs.r#type {
+    match lhs.r#type.r#type {
         Type::Int(lower, upper) => compile_int_member_func(lhs, component, args, lower, upper, context, local_var_map, wasm_module, wasm_expr, errors), 
+        Type::UnsafePtr => compile_unsafeptr_member_func(lhs, component, args, context, local_var_map, wasm_module, wasm_expr, errors), 
         _ => unreachable!()
     }
 }
@@ -733,7 +735,7 @@ pub(crate) fn compile_expr(
         },
         
         Expr::IntLiteral(v) => {
-            match typed_expr.r#type {
+            match typed_expr.r#type.r#type {
                 Type::Int(lower, upper) => {
                     let bittage = get_bittage(lower, upper);
                     match bittage {
@@ -750,9 +752,9 @@ pub(crate) fn compile_expr(
             }
         },
         
-        Expr::BinaryOperator{lhs, rhs, op} => compile_binary_operator(&op, &lhs, &rhs, &typed_expr.r#type, &typed_expr.loc, context, local_var_map, wasm_module, wasm_expr, errors),
+        Expr::BinaryOperator{lhs, rhs, op} => compile_binary_operator(&op, &lhs, &rhs, &typed_expr.r#type.r#type, &typed_expr.loc, context, local_var_map, wasm_module, wasm_expr, errors),
 
-        Expr::UnaryOperator{expr, op} => compile_unary_operator(&op, &expr, &typed_expr.r#type, &typed_expr.loc, context, local_var_map, wasm_module, wasm_expr, errors),
+        Expr::UnaryOperator{expr, op} => compile_unary_operator(&op, &expr, &typed_expr.r#type.r#type, &typed_expr.loc, context, local_var_map, wasm_module, wasm_expr, errors),
 
         Expr::Parens(p) => compile_expr(&p, context, local_var_map, consume_result, wasm_module, wasm_expr, errors),
 
@@ -783,7 +785,7 @@ pub(crate) fn compile_expr(
         },
 
         Expr::IntToNumber(p) => {
-            match &p.r#type {
+            match &p.r#type.r#type {
                 Type::Int(lower, upper) => {
                     compile_expr(&p, context, local_var_map, true, wasm_module, wasm_expr, errors);
                     match get_bittage(*lower, *upper) {
@@ -800,9 +802,9 @@ pub(crate) fn compile_expr(
 
         Expr::IntWiden(p) => {
             compile_expr(&p, context, local_var_map, true, wasm_module, wasm_expr, errors);
-            match &typed_expr.r#type {
+            match &typed_expr.r#type.r#type {
                 Type::Int(to_lower, to_upper) => {
-                    match p.r#type {
+                    match p.r#type.r#type {
                         Type::Int(from_lower, from_upper) => {
                             match get_bittage(from_lower, from_upper) {
                                 Bittage::S64 | Bittage::U64 => {},
@@ -870,7 +872,7 @@ pub(crate) fn compile_expr(
             }
             wasm_expr.data.push(WasmInstr::If(
                 if consume_result {
-                    get_wasm_return_type(&typed_expr.r#type)
+                    get_wasm_return_type(&typed_expr.r#type.r#type)
                 } else {
                     WasmResultType::Empty
                 }
@@ -962,14 +964,14 @@ pub(crate) fn compile_expr(
         Expr::NamedMember(lhs, member_name) => {
             compile_expr(&lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
 
-            match &lhs.r#type {
+            match &lhs.r#type.r#type {
                 Type::UnsafeStruct{name: type_name} => compile_struct_member_get(type_name, member_name, context, wasm_expr),
                 _ => errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("expr{:#?}", typed_expr.expr)))),
             }
         },
 
         Expr::DynamicMember(inner, member_expr) => {
-            match &inner.r#type {
+            match &inner.r#type.r#type {
                 Type::UnsafeArray(t) => {
 
                     let elem_value_type = get_wasm_value_type(&t, &context.type_map);
@@ -1114,7 +1116,7 @@ pub(crate) fn compile_expr(
         _ => { errors.push(Error::NotYetImplemented(typed_expr.loc.clone(), String::from(format!("{:#?}", typed_expr.expr)))); },
     }
 
-    if !consume_result && typed_expr.r#type != Type::RealVoid && typed_expr.r#type != Type::Never && ret_val{
+    if !consume_result && typed_expr.r#type.r#type != Type::RealVoid && typed_expr.r#type.r#type != Type::Never && ret_val{
         wasm_expr.data.push(WasmInstr::Drop);
     }
 }
@@ -1184,7 +1186,7 @@ fn compile_func(
     let mut o_current_locals: Option<WasmLocals> = None;
     for lv in &func.local_vars {
         if !lv.arg {
-            let wasm_type = get_wasm_value_type(&lv.r#type, &context.type_map);
+            let wasm_type = get_wasm_value_type(&lv.r#type.r#type, &context.type_map);
             match &mut o_current_locals {
                 None => {
                     o_current_locals = Some(WasmLocals::new(&wasm_type));
@@ -1209,7 +1211,7 @@ fn compile_func(
     let mut expr: WasmExpr = WasmExpr::new();
     match &func.body {
         Some(body) => {
-            let consume_result = func.decl.return_type != Type::RealVoid;
+            let consume_result = func.decl.return_type.r#type != Type::RealVoid;
             compile_expr(body, context, &func.local_var_map, consume_result, m, &mut expr, errors);
         },
         None => panic!()
@@ -1234,7 +1236,7 @@ pub fn compile(
         let bits: Vec<&str> = g.name.as_str().split(".").collect();
         let module = bits[0];
         let field = bits[1];
-        m.import_section.new_global(&module.to_owned(), &field.to_owned(), &get_wasm_value_type(&g.r#type, &ast.type_map), false);
+        m.import_section.new_global(&module.to_owned(), &field.to_owned(), &get_wasm_value_type(&g.r#type.r#type, &ast.type_map), false);
 
         match &mut m.object_file_sections {
             Some(wrf) => {
@@ -1251,7 +1253,7 @@ pub fn compile(
     }
 
     for g in &ast.global_decls {
-        let wt = get_wasm_value_type(&g.r#type, &ast.type_map);
+        let wt = get_wasm_value_type(&g.r#type.r#type, &ast.type_map);
 
         let mut init_expr = vec![];
         match wt {

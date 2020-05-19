@@ -11,7 +11,7 @@ use generics::TypeConstraint;
 use std::collections::HashMap;
 
 pub mod prelude {
-    pub use super::Type;
+    pub use super::{Type, Mutability, FullType, PassStyle};
     pub use super::OpType;
     pub use super::FuncType;
     pub use super::Privacy;
@@ -90,8 +90,8 @@ use std::fmt::Formatter;
 // Type of a function.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FuncType{
-    pub out_type: Type,
-    pub in_types: Vec<Type>,
+    pub out_type: FullType,
+    pub in_types: Vec<FullType>,
 }
 
 impl Display for FuncType {
@@ -193,7 +193,7 @@ pub enum Type {
     /// Option - some
     Some(Box<Type>),
     /// user type
-    UserType{name: String, type_args: Vec<Type>},
+    UserType{name: String, type_args: Vec<Type>, inner: Box<Type>},
     /// user struct type
     UnsafeStruct{name: String},
     /// not yet known - will be filled in by the type system
@@ -207,7 +207,7 @@ pub enum Type {
     ///ptr - internal type. Param is alignment
     UnsafePtr,
     ///type literal. Not something that will ever appear at runtime, but is useful for parts of the AST
-    TypeLiteral(Box<Type>),
+    TypeLiteral(Box<FullType>),
     ///Type of a module. Not something that will ever appear at runtime.
     ModuleLiteral(String),
     /// __array type
@@ -237,11 +237,13 @@ impl Type{
                 | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String | Type::StringLiteral(_) | Type::Undeclared 
                 | Type::Unknown | Type::UnsafeNull | Type::UnsafePtr | Type::UnsafeStruct{name:_} 
                     => false,
-            Type::Array(t) | Type::Option(t) | Type::Some(t) | Type::TypeLiteral(t) | Type::UnsafeArray(t) | Type::UnsafeOption(t) 
+            Type::Array(t) | Type::Option(t) | Type::Some(t) | Type::UnsafeArray(t) | Type::UnsafeOption(t) 
                 | Type::UnsafeSome(t) => t.is_type_variable(),
-            Type::Func{func_type: ft} => ft.out_type.is_type_variable() || ft.in_types.iter().any(|t| t.is_type_variable()),
+            Type::TypeLiteral(t) => t.r#type.is_type_variable(),
+            Type::Func{func_type: ft} => ft.out_type.r#type.is_type_variable() || ft.in_types.iter().any(|t| t.r#type.is_type_variable()),
             Type::ObjectLiteral(oles) => oles.iter().any(|ole| ole.1.is_type_variable()),
-            Type::UserType{name:_, type_args: ts} | Type::Tuple(ts) => ts.iter().any(|t| t.is_type_variable()),
+            Type::UserType{name:_, type_args: ts, inner} => ts.iter().any(|t| t.is_type_variable()) || inner.is_type_variable(),
+            Type::Tuple(ts) => ts.iter().any(|t| t.is_type_variable()),
             Type::VariableUsage{name: _, constraint: _} => true,
         }
     }
@@ -272,7 +274,7 @@ impl Type{
             Type::UnsafeSome(inner) => format!("!__Some<{}>", inner.get_mangled_name()),
             Type::UnsafeNull => format!("!__Null"),
             Type::Some(inner) => format!("!Some<{}>", inner.get_mangled_name()),
-            Type::UserType{name, type_args} => format!("!type_{}<{}>", name, get_mangled_names(type_args)),
+            Type::UserType{name, type_args, inner: _} => format!("!type_{}<{}>", name, get_mangled_names(type_args)),
             Type::UnsafeStruct{name} => format!("!__struct_{}", name),
             Type::Undeclared => format!("!Undeclared"),
             Type::VariableUsage{name, constraint: _} => format!("!var_{}", name),
@@ -280,9 +282,39 @@ impl Type{
             Type::FloatLiteral(n) => format!("!fl_{}", n),
             Type::StringLiteral(n) => format!("!sl_\"{}\"", n),
             Type::ObjectLiteral(_) => format!("!ol_{{}}"),
-            Type::TypeLiteral(inner) => format!("!TypeLiteral_{}", inner.get_mangled_name()),
+            Type::TypeLiteral(inner) => format!("!TypeLiteral_{}", inner.r#type.get_mangled_name()),
             Type::UnsafeArray(inner) => format!("!__Array<{}>", inner.get_mangled_name()),
             Type::ModuleLiteral(name) => format!("!ModuleLiteral_{}", name),
+        }
+    }
+
+    pub fn get_pass_style(&self) -> PassStyle{ 
+        match self {
+            Type::Any | Type::Func{func_type: _} | Type::ObjectLiteral(_) => panic!(),
+            Type::Array(inner) | Type::Option(inner) | Type::Some(inner) | Type::UnsafeOption(inner) | Type::UnsafeSome(inner) => {
+                match inner.get_pass_style() {
+                    PassStyle::Value | PassStyle::AtomicValue => PassStyle::Value,
+                    PassStyle::Reference | PassStyle::ValueHoldingReference => PassStyle::ValueHoldingReference,
+                    PassStyle::Unknown => PassStyle::Unknown,
+                }
+            },
+            Type::Bool | Type::FakeVoid | Type::FloatLiteral(_) | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never 
+                | Type::Number | Type::RealVoid | Type::TypeLiteral(_) | Type::Undeclared 
+                | Type::UnsafeNull => PassStyle::AtomicValue,
+            Type::String | Type::StringLiteral(_) => PassStyle::Value,
+            Type::Tuple(inners) => {
+                inners.iter().fold(PassStyle::Value, |acc, x| {
+                    match x.get_pass_style() {
+                        PassStyle::Value | PassStyle::AtomicValue => acc,
+                        PassStyle::Reference | PassStyle::ValueHoldingReference => PassStyle::ValueHoldingReference,
+                        PassStyle::Unknown => PassStyle::Unknown,
+                    }
+                })
+            },
+            Type::Unknown | Type::VariableUsage{name: _, constraint: _} => PassStyle::Unknown,
+            Type::UnsafeArray(_) | Type::UnsafeStruct{name: _} => PassStyle::Reference,
+            Type::UnsafePtr => PassStyle::Reference, //strictly wrong - the pointer is by value, but a pointer is pointing to something 
+            Type::UserType{name: _, type_args: _, inner} => inner.get_pass_style()
         }
     }
 }
@@ -315,7 +347,7 @@ impl Display for Type {
             Type::UnsafeSome(inner) => write!(f, "__Some<{}>", inner),
             Type::UnsafeNull => write!(f, "__Null"),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
-            Type::UserType{name, type_args} => write!(f, "{}<{}>", name, display_types(type_args)),
+            Type::UserType{name, type_args, inner: _} => write!(f, "{}<{}>", name, display_types(type_args)),
             Type::UnsafeStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "Undeclared"),
             Type::VariableUsage{name, constraint: _} => write!(f, "{}", name),
@@ -330,6 +362,62 @@ impl Display for Type {
     }
 }
 
+///How a type is passed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+pub enum PassStyle{
+    ///Passed by value. May be true pass by value (e.g. tuples) or synthetic pass by value (e.g. arrays)
+    Value,
+    ///Passed by value with no changeable internal components. Ints, bools, numbers.
+    AtomicValue,
+    ///Passed by reference. Obviously we pass a pointer through for these.
+    Reference,
+    ///This is data passed by value that holds data to be passed by reference. An example might be an array holding a ref class.
+    ValueHoldingReference,
+    ///We can't tell what the pass style is. We assume the worst.
+    Unknown,
+}
+
+///Whether a type is const or mut
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+pub enum Mutability {
+    Const,
+    Mut,
+    Unknown
+}
+
+impl Display for Mutability {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Mutability::Const => write!(f, ""),
+            Mutability::Mut => write!(f, "mut"),
+            Mutability::Unknown => write!(f, "?"),
+        }
+    }
+}
+
+///A type with a mutability modifier.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FullType{
+    pub r#type: Type,
+    pub mutability: Mutability,
+}
+
+impl FullType{
+    pub fn get_pass_style(&self) -> PassStyle{ 
+        self.r#type.get_pass_style()
+    }
+
+    pub fn new(t: &Type, m: Mutability) -> FullType { FullType{r#type: t.clone(), mutability: m }}
+    pub fn new_const(t: &Type) -> FullType { FullType{r#type: t.clone(), mutability: Mutability::Const }}
+    pub fn new_mut(t: &Type) -> FullType { FullType{r#type: t.clone(), mutability: Mutability::Mut}}
+}
+
+impl Display for FullType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.mutability, self.r#type)
+    }
+}
+
 pub const INT_S_64: Type = Type::Int(S_64_MIN, S_64_MAX);
 pub const INT_S_32: Type = Type::Int(S_32_MIN, S_32_MAX);
 pub const INT_U_64: Type = Type::Int(0, U_64_MAX);
@@ -337,17 +425,17 @@ pub const INT_U_32: Type = Type::Int(0, U_32_MAX);
 pub const SIZE_T: Type = Type::Int(0, PTR_MAX);
 
 pub struct UnOpTypeCast{
-    pub r#type: Type,
+    pub r#type: FullType,
     pub type_cast: TypeCast,
 }
 
-pub fn get_type_from_type_cast(type_cast: &TypeCast, orig_type: &Type) -> Type {
+pub fn get_type_from_type_cast(type_cast: &TypeCast, orig_type: &FullType) -> FullType {
     match type_cast{
         TypeCast::NotNeeded => orig_type.clone(),
         TypeCast::FreeUpcast(to) => to.clone(),
-        TypeCast::IntWiden(to_lower, to_upper) => Type::Int(*to_lower, *to_upper),
-        TypeCast::IntToNumberWiden => Type::Number,
-        TypeCast::None => {
+        TypeCast::IntWiden(to_lower, to_upper) => FullType::new(&Type::Int(*to_lower, *to_upper), orig_type.mutability),
+        TypeCast::IntToNumberWiden => FullType::new(&Type::Number, orig_type.mutability),
+        TypeCast::None | TypeCast::ConstFail => {
             //if we get a return from get_type_casts_for_function_set it won't have a None
             unreachable!()
         }
@@ -356,7 +444,7 @@ pub fn get_type_from_type_cast(type_cast: &TypeCast, orig_type: &Type) -> Type {
 
 /// Given an operator type, and the type of the operand, find the type of
 /// the resulting intermediate value.
-pub fn get_unary_op_type_cast(op_type: &OpType, operand_type: &Type) -> Option<UnOpTypeCast>{
+pub fn get_unary_op_type_cast(op_type: &OpType, operand_type: &FullType) -> Option<UnOpTypeCast>{
     match op_type {
         // given unary operators can only be simple, maybe I should change this
         OpType::SimpleOpType(func_types) => {
@@ -375,16 +463,16 @@ pub fn get_unary_op_type_cast(op_type: &OpType, operand_type: &Type) -> Option<U
 }
 
 pub struct BinOpTypeCast{
-    pub lhs_type: Type,
+    pub lhs_type: FullType,
     pub lhs_type_cast: TypeCast,
-    pub rhs_type: Type,
+    pub rhs_type: FullType,
     pub rhs_type_cast: TypeCast,
-    pub out_type: Type,
+    pub out_type: FullType,
 }
 
 /// Given a binary operator type, and the types of the operands, find the type
 /// of the resulting intermediate value.
-pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Type) -> Option<BinOpTypeCast> {
+pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &FullType, rhs_type: &FullType) -> Option<BinOpTypeCast> {
     match op_type {
         //simple binary operator like +.
         OpType::SimpleOpType(func_types) => {
@@ -410,8 +498,8 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             let type_cast = try_cast(rhs_type, lhs_type, CastType::Implicit);
             let out_rhs_type = match &type_cast{
                 TypeCast::NotNeeded | TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) => lhs_type.clone(),
-                TypeCast::IntToNumberWiden => Type::Number,
-                TypeCast::None => {
+                TypeCast::IntToNumberWiden => FullType::new(&Type::Number, rhs_type.mutability),
+                TypeCast::None | TypeCast::ConstFail => {
                     return None;
                 }
             };
@@ -421,14 +509,14 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
         // these guys are things like |=. 
         OpType::AssignModifyOpType(types) => {
             //First, find if the lhs is one of the permitted types
-            let yes = types.iter().find(|t| *t == lhs_type).is_some();
+            let yes = types.iter().find(|t| **t == lhs_type.r#type).is_some();
             if yes {
                 //if it is, see if the rhs can be cast to the lhs
                 let type_cast = try_cast(rhs_type, lhs_type, CastType::Implicit);
                 let out_rhs_type = match &type_cast{
                     TypeCast::NotNeeded | TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) => lhs_type.clone(),
-                    TypeCast::IntToNumberWiden => Type::Number,
-                    TypeCast::None => {
+                    TypeCast::IntToNumberWiden => FullType::new(&Type::Number, rhs_type.mutability),
+                    TypeCast::None | TypeCast::ConstFail => {
                         return None;
                     }
                 };
@@ -444,18 +532,18 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &Type, rhs_type: &Typ
             let type_cast = try_cast(lhs_type, &rhs_type, CastType::Implicit);
             match &type_cast{
                 TypeCast::NotNeeded => 
-                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Bool}),
+                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: FullType::new_const(&Type::Bool)}),
                 TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::IntToNumberWiden => 
-                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Bool}),
-                TypeCast::None => {
+                    Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: FullType::new_const(&Type::Bool)}),
+                TypeCast::None | TypeCast::ConstFail => {
                     //now try going the other way
                     let type_cast = try_cast(rhs_type, &lhs_type, CastType::Implicit);
                     match &type_cast{
                         TypeCast::NotNeeded => 
-                            Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: Type::Bool}),
+                            Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: FullType::new_const(&Type::Bool)}),
                         TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::IntToNumberWiden =>
-                            Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: Type::Bool}),
-                        TypeCast::None => None
+                            Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: FullType::new_const(&Type::Bool)}),
+                        TypeCast::None | TypeCast::ConstFail => None
                     }    
                 }
             }

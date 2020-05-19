@@ -27,7 +27,7 @@ use crate::Res;
 use crate::{expect_punct, expect_next, expect_ident, expect_string_literal, expect_keyword, StartFuncType, expect_semicolon, ParserPhase};
 use crate::{try_create_cast, cast_typed_expr, guard_downcast_expr, create_cast};
 use crate::parser::parser_op::{get_unary_operator_data, Fix, get_binary_operator_data, Association, get_op_type_for_unop};
-use crate::parser::parser_typeguard::{get_type_guard_inst, apply_type_guard_inst};
+use crate::parser::parser_typeguard::{get_type_guard_inst, apply_type_guard_inst, unapply_type_guard_inst};
 use crate::Commitment;
 use crate::Importer;
 
@@ -113,13 +113,12 @@ impl<'b> Parser<'b> {
 
         let start_function = Func{ 
             decl: FuncDecl{
-                name: start_func_name.clone(), return_type: Type::RealVoid, args: vec![], 
+                name: start_func_name.clone(), return_type: FullType::new_const(&Type::RealVoid), args: vec![], 
                 export: start_func_type == StartFuncType::WASMCallCtors, generic_impl: false, type_guard: None, member_func: false,
             },
             body: Some(TypedExpr{
                 expr: Expr::Block(init_body),
-                r#type: Type::RealVoid,
-                is_const: true,
+                r#type: FullType::new_const(&Type::RealVoid),
                 loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))
             }),
             local_vars: vec![], closure: vec![], local_var_map: HashMap::new()
@@ -330,31 +329,31 @@ impl<'b> Parser<'b> {
     
     /// register params in the local scope
     fn register_params(&mut self, 
-        this_type: &Option<Type>,
+        this_type: &Option<FullType>,
         arg_list: &Vec<FuncArg>, 
         parser_func_context: &mut ParserFuncContext, 
         parser_context: &mut ParserContext,
     ) {
         if this_type.is_some() {
             let this_type = this_type.clone().unwrap();
-            parser_context.add_var(&String::from("this"), &String::from("this"), &this_type, false);
+            parser_context.add_var(&String::from("this"), &String::from("this"), &this_type, VariableMutability::Constant);
             let idx = parser_func_context.local_vars.len();
             parser_func_context.local_var_map.insert(String::from("this"), idx as u32);
             parser_func_context.local_vars.push(
-                LocalVar{internal_name: String::from("this"), r#type: this_type, closure_source: false, arg: true}
+                LocalVar{internal_name: String::from("this"), r#type: this_type, closure_source: false, arg: true, mutability: VariableMutability::Constant}
             );
         }
         
 
         for arg in arg_list {
             let internal_name = parser_context.get_unique_name(&arg.name);
-            parser_context.add_var(&arg.name, &internal_name, &arg.r#type, false);
+            parser_context.add_var(&arg.name, &internal_name, &arg.r#type, arg.mutability);
             //todo: constant params
             //todo: default params
             let idx = parser_func_context.local_vars.len();
             parser_func_context.local_var_map.insert(internal_name.clone(), idx as u32);
             parser_func_context.local_vars.push(
-                LocalVar{internal_name: internal_name, r#type: arg.r#type.clone(), closure_source: false, arg: true}
+                LocalVar{internal_name: internal_name, r#type: arg.r#type.clone(), closure_source: false, arg: true, mutability: arg.mutability}
             );
         }
     }
@@ -414,12 +413,12 @@ impl<'b> Parser<'b> {
             let namespace = imports.module_name;
             for g in &exports.global_decls {
                 let import_name = format!("{}.{}", namespace, g.name);
-                let decl = GlobalVariableImport{name: import_name.clone(), r#type: g.r#type.clone(), constant: g.constant, export: false};
+                let decl = GlobalVariableImport{name: import_name.clone(), r#type: g.r#type.clone(), export: false};
                 parser_context.global_imports.push(decl.clone());
             }
 
             for g in &exports.global_imports {
-                let decl = GlobalVariableImport{name: g.name.clone(), r#type: g.r#type.clone(), constant: g.constant, export: false};
+                let decl = GlobalVariableImport{name: g.name.clone(), r#type: g.r#type.clone(), export: false};
                 parser_context.global_imports.push(decl.clone());
             }
 
@@ -481,12 +480,14 @@ impl<'b> Parser<'b> {
                         _ => {}
                     };
                 },
+                /*
                 Keyword::Const => {
                     let const_decl = self.parse_variable_decl(true, true, true, fake_parser_func_context, parser_context);
                     init_body.push(const_decl);
                 },
+                */
                 Keyword::Let => {
-                    let var_decl = self.parse_variable_decl(false, true, true, fake_parser_func_context, parser_context);
+                    let var_decl = self.parse_variable_decl(true, true, fake_parser_func_context, parser_context);
                     init_body.push(var_decl);
                 },
                 Keyword::UnsafeStruct => self.parse_struct_decl(true, parser_context),
@@ -498,16 +499,22 @@ impl<'b> Parser<'b> {
     }
 
     fn parse_variable_decl(&mut self, 
-        constant: bool, 
         global: bool,
         export: bool,
         parser_func_context: &mut ParserFuncContext,
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
+        let mut mutability = VariableMutability::Constant;
         let mut loc = self.peek_next_location();
         self.skip_next_item();
 
-        let next = self.peek_next_item();
+        let mut next = self.peek_next_item();
+        if next.token.matches_keyword(Keyword::Var) {
+            mutability = VariableMutability::Variable;
+            self.skip_next_item();
+            next = self.peek_next_item();
+        }
+
         let id = expect_ident!(next, parser_context, "Expecting variable name to be an identifier");
         self.skip_next_item();
         
@@ -521,14 +528,14 @@ impl<'b> Parser<'b> {
         let mut var_type = match token {
             Token::Punct(Punct::Colon) => {
                 self.skip_next_item();
-                self.parse_type(parser_context)
+                self.parse_full_type(parser_context)
             },
             Token::Punct(Punct::Equal) => {
-                Type::Undeclared
+                FullType::new(&Type::Undeclared, Mutability::Unknown)
             },
             _ => {
                 parser_context.push_err(self.unexpected_token_error_raw(next.span, &next.location, "variable must have a type or a value"));
-                Type::Undeclared
+                FullType::new(&Type::Undeclared, Mutability::Unknown)
             }
         };
 
@@ -537,11 +544,11 @@ impl<'b> Parser<'b> {
         
         loc.end = init.loc.end.clone();
 
-        if var_type.is_undeclared() {
-            if constant {
+        if var_type.r#type.is_undeclared() {
+            if mutability == VariableMutability::Constant {
                 var_type = init.r#type.clone();
             } else {
-                var_type = upcast_from_literal(&init.r#type);
+                var_type = FullType::new(&upcast_from_literal(&init.r#type.r#type), init.r#type.mutability);
             }
         } else if var_type != init.r#type {
             let o_cast_expr = try_create_cast(&var_type, &init, CastType::Implicit);
@@ -557,19 +564,19 @@ impl<'b> Parser<'b> {
         let name = id.to_string();
         if !global {
             let internal_name = parser_context.get_unique_name(&name);
-            parser_context.add_var(&name, &internal_name, &var_type, constant);
+            parser_context.add_var(&name, &internal_name, &var_type, mutability);
             let idx = parser_func_context.local_vars.len();
             parser_func_context.local_vars.push(
                 LocalVar{internal_name: internal_name.clone(), r#type: 
-                    var_type.clone(), closure_source: false, arg: false}
+                    var_type.clone(), closure_source: false, arg: false, mutability: mutability}
             );
             parser_func_context.local_var_map.insert(internal_name.clone(), idx as u32);
-            TypedExpr{expr: Expr::VariableInit{internal_name: internal_name.clone(), init: Box::new(Some(init))}, is_const: constant, r#type: Type::RealVoid, loc: loc}
+            TypedExpr{expr: Expr::VariableInit{internal_name: internal_name.clone(), init: Box::new(Some(init))}, r#type: FullType::new_const(&Type::RealVoid), loc: loc}
         } else {
-            let decl = GlobalVariableDecl{name: name.clone(), r#type: var_type, constant, init: Some(init), export};
+            let decl = GlobalVariableDecl{name: name.clone(), r#type: var_type, init: Some(init), export, mutability: mutability};
             parser_context.global_decls.push(decl.clone());
             
-            TypedExpr{expr: Expr::GlobalVariableDecl(Box::new(decl)), is_const: constant, r#type: Type::RealVoid, loc: loc}
+            TypedExpr{expr: Expr::GlobalVariableDecl(Box::new(decl)), r#type: FullType::new_const(&Type::RealVoid), loc: loc}
         }
     }
 
@@ -596,12 +603,14 @@ impl<'b> Parser<'b> {
                         _ => {}
                     };
                 },
+                /*
                 Keyword::Const => {
                     let const_decl = self.parse_variable_decl(true, true, false, fake_parser_func_context, parser_context);
                     init_body.push(const_decl);
                 },
+                */
                 Keyword::Let => {
-                    let var_decl = self.parse_variable_decl(false, true, false, fake_parser_func_context, parser_context);
+                    let var_decl = self.parse_variable_decl(true, false, fake_parser_func_context, parser_context);
                     init_body.push(var_decl);
                 },
                 Keyword::UnsafeStruct => self.parse_struct_decl(false, parser_context),
@@ -676,8 +685,8 @@ impl<'b> Parser<'b> {
             out.push(stmt);
         } 
 
-        let out_type = out.last().map_or(Type::RealVoid, |x| x.r#type.clone());
-        TypedExpr{expr: Expr::Block(out), is_const: true, r#type: out_type, loc: loc}
+        let out_type = out.last().map_or(FullType::new_const(&Type::RealVoid), |x| x.r#type.clone());
+        TypedExpr{expr: Expr::Block(out), r#type: out_type, loc: loc}
     }
 
     fn parse_if(&mut self,
@@ -690,8 +699,8 @@ impl<'b> Parser<'b> {
         //get condition, check it
         expect_punct!(self, parser_context, Punct::OpenParen);
         let condition = self.parse_expr(parser_func_context, parser_context);
-        if condition.r#type != Type::Bool {
-            parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Bool,  condition.r#type.clone()));
+        if condition.r#type.r#type != Type::Bool {
+            parser_context.push_err(Error::TypeFailure(condition.loc.clone(), FullType::new_const(&Type::Bool), condition.r#type.clone()));
         }
         expect_punct!(self, parser_context, Punct::CloseParen);
 
@@ -702,7 +711,7 @@ impl<'b> Parser<'b> {
         let pop_then_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(true), &condition.loc, parser_context);
         let then_block = self.parse_block(true, parser_func_context, parser_context);
         if pop_then_stack {
-            parser_context.pop_block_scope();
+            unapply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(true), parser_context)
         }
 
         let next = self.peek_next_item();
@@ -714,20 +723,20 @@ impl<'b> Parser<'b> {
             let pop_else_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(false), &condition.loc, parser_context);
             let else_block = self.parse_block(true, parser_func_context, parser_context);
             if pop_else_stack {
-                parser_context.pop_block_scope();
+                unapply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(false), parser_context)
             }
 
             let then_block_type = then_block.r#type.clone();
             loc.end = else_block.loc.end.clone();
             if then_block.r#type != else_block.r#type {
                 //if either is void, discard the other
-                if then_block_type == Type::RealVoid || else_block.r#type == Type::RealVoid {
-                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: Type::RealVoid, loc: loc}
-                } else if then_block_type == Type::Never {
+                if then_block_type.r#type == Type::RealVoid || else_block.r#type.r#type == Type::RealVoid {
+                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), r#type: FullType::new_const(&Type::RealVoid), loc: loc}
+                } else if then_block_type.r#type == Type::Never {
                     let else_block_type = else_block.r#type.clone();
-                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: else_block_type, loc: loc}
-                } else if else_block.r#type == Type::Never {
-                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: then_block_type, loc: loc}
+                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), r#type: else_block_type, loc: loc}
+                } else if else_block.r#type.r#type == Type::Never {
+                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), r#type: then_block_type, loc: loc}
                 } else {
                     //first try casting then to else
                     let then_to_else_cast = try_create_cast(&else_block.r#type, &then_block, CastType::Implicit);
@@ -738,25 +747,25 @@ impl<'b> Parser<'b> {
                             match else_to_then_cast {
                                 None => {
                                     //if we can't figure out the type, make it the top type
-                                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: Type::Unknown, loc: loc}
+                                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), r#type: FullType::new_const(&Type::Unknown), loc: loc}
                                 },
                                 Some(new_else_block) => {
-                                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(new_else_block)), is_const: true, r#type: then_block_type, loc: loc}
+                                    TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(new_else_block)), r#type: then_block_type, loc: loc}
                                 }
                             }
                         }, 
                         Some(new_then_block) => {
                             let new_then_block_type = new_then_block.r#type.clone();
-                            TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(new_then_block), Box::new(else_block)), is_const: true, r#type: new_then_block_type, loc: loc}
+                            TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(new_then_block), Box::new(else_block)), r#type: new_then_block_type, loc: loc}
                         }  
                     }
                 }
             } else {            
-                TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), is_const: true, r#type: then_block_type, loc: loc}
+                TypedExpr{expr: Expr::IfThenElse(Box::new(condition), Box::new(then_block), Box::new(else_block)), r#type: then_block_type, loc: loc}
             }
         } else {
             loc.end = then_block.loc.end.clone();
-            TypedExpr{expr: Expr::IfThen(Box::new(condition), Box::new(then_block)), is_const: true, r#type: Type::RealVoid, loc: loc}
+            TypedExpr{expr: Expr::IfThen(Box::new(condition), Box::new(then_block)), r#type: FullType::new_const(&Type::RealVoid), loc: loc}
         }
     }
 
@@ -769,8 +778,8 @@ impl<'b> Parser<'b> {
 
         expect_punct!(self, parser_context, Punct::OpenParen);
         let condition = self.parse_expr(parser_func_context, parser_context);
-        if condition.r#type != Type::Bool {
-            parser_context.push_err(Error::TypeFailure(condition.loc.clone(), Type::Bool, condition.r#type.clone()));
+        if condition.r#type.r#type != Type::Bool {
+            parser_context.push_err(Error::TypeFailure(condition.loc.clone(), FullType::new_const(&Type::Bool), condition.r#type.clone()));
         }
         expect_punct!(self, parser_context, Punct::CloseParen);
 
@@ -782,12 +791,12 @@ impl<'b> Parser<'b> {
         let pop_stack = apply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(true), &condition.loc, parser_context);
         let block = self.parse_block(true, parser_func_context, parser_context);
         if pop_stack {
-            parser_context.pop_block_scope();
+            unapply_type_guard_inst(&o_type_guard_inst, &Expr::BoolLiteral(true), parser_context);
         }
         parser_func_context.in_iteration = old_in_iteration;
         loc.end = block.loc.end.clone();
 
-        TypedExpr{expr: Expr::While(Box::new(condition), Box::new(block)), is_const: true, r#type: Type::RealVoid, loc: loc}
+        TypedExpr{expr: Expr::While(Box::new(condition), Box::new(block)), r#type: FullType::new_const(&Type::RealVoid), loc: loc}
     }
 
     /// A statement is something you can't assign to (like break or a variable declaration) or a true expr.
@@ -799,11 +808,13 @@ impl<'b> Parser<'b> {
         let token = &next.token;
         match &token {
             Token::Keyword(ref k) => match k {
+                /*
                 Keyword::Const => {
                     self.parse_variable_decl(true, false, false, parser_func_context, parser_context)
                 },
+                */
                 Keyword::Let => {
-                    self.parse_variable_decl(false, false, false, parser_func_context, parser_context)
+                    self.parse_variable_decl(false, false, parser_func_context, parser_context)
                 },
                 Keyword::Return => {
                     let loc = next.location.clone();
@@ -814,30 +825,30 @@ impl<'b> Parser<'b> {
 
                     if token.matches_punct(Punct::SemiColon) || self.has_line_term || token.is_eof() {
                         // check the return type of this expression versus the function return type.
-                        let check_return_type = if parser_func_context.given_func_return_type == Type::Undeclared {
-                            if parser_func_context.implied_func_return_type == Type::Undeclared {
-                                parser_func_context.implied_func_return_type = Type::RealVoid;
+                        let check_return_type = if parser_func_context.given_func_return_type.r#type == Type::Undeclared {
+                            if parser_func_context.implied_func_return_type.r#type == Type::Undeclared {
+                                parser_func_context.implied_func_return_type = FullType::new_const(&Type::RealVoid);
                             }
                             parser_func_context.implied_func_return_type.clone()
                         } else {
                             parser_func_context.given_func_return_type.clone()
                         };
 
-                        if check_return_type != Type::RealVoid {
-                            parser_context.errors.push(Error::TypeFailureReturn(loc.clone(), check_return_type.clone(), Type::RealVoid));
+                        if check_return_type.r#type != Type::RealVoid {
+                            parser_context.errors.push(Error::TypeFailureReturn(loc.clone(), check_return_type.r#type.clone(), Type::RealVoid));
                         }
                         if !self.has_line_term {
                             self.skip_next_item();
                         }
                         
-                        TypedExpr{expr: Expr::Return(Box::new(None)), is_const: true, r#type: Type::Never, loc: loc}
+                        TypedExpr{expr: Expr::Return(Box::new(None)), r#type: FullType::new_const(&Type::Never), loc: loc}
                     } else {
                         let expr = self.parse_expr(parser_func_context, parser_context);
                         expect_semicolon!(self, parser_context);
                         // return type checking
                         let expr_type = expr.r#type.clone();
-                        let check_return_type = if parser_func_context.given_func_return_type == Type::Undeclared {
-                            if parser_func_context.implied_func_return_type == Type::Undeclared {
+                        let check_return_type = if parser_func_context.given_func_return_type.r#type == Type::Undeclared {
+                            if parser_func_context.implied_func_return_type.r#type == Type::Undeclared {
                                 parser_func_context.implied_func_return_type = expr_type.clone();
                             }
                             parser_func_context.implied_func_return_type.clone()
@@ -847,7 +858,7 @@ impl<'b> Parser<'b> {
 
                         TypedExpr{expr: Expr::Return(Box::new(Some(
                             cast_typed_expr(&check_return_type, Box::new(expr), CastType::Implicit, parser_context)
-                        ))), is_const: true, r#type: Type::Never, loc: loc}
+                        ))), r#type: FullType::new_const(&Type::Never), loc: loc}
                     }
                 },
 
@@ -856,7 +867,7 @@ impl<'b> Parser<'b> {
                     if !parser_func_context.in_iteration {
                         parser_context.push_err(Error::NotInLoop(next.location.clone(), String::from("break")));
                     } 
-                    TypedExpr{expr: Expr::Break, is_const: true, r#type: Type::Never, loc: next.location.clone()}
+                    TypedExpr{expr: Expr::Break, r#type: FullType::new_const(&Type::Never), loc: next.location.clone()}
                 },
 
                 Keyword::Continue => {
@@ -864,7 +875,7 @@ impl<'b> Parser<'b> {
                     if !parser_func_context.in_iteration {
                         parser_context.push_err(Error::NotInLoop(next.location.clone(), String::from("continue")));   
                     }
-                    TypedExpr{expr: Expr::Continue, is_const: true, r#type: Type::Never, loc: next.location.clone()}
+                    TypedExpr{expr: Expr::Continue, r#type: FullType::new_const(&Type::Never), loc: next.location.clone()}
                 },
 
                 Keyword::While => self.parse_while(parser_func_context, parser_context),
@@ -928,11 +939,11 @@ impl<'b> Parser<'b> {
             }
 
             let v = self.parse_expr(parser_func_context, parser_context);
-            let o_cast_expr = try_create_cast(inner_type, &v, CastType::Implicit);
+            let o_cast_expr = try_create_cast(&FullType::new_const(&inner_type), &v, CastType::Implicit);
             match o_cast_expr {
                 Some(cast_expr) => { out.push(cast_expr) },
                 None => { 
-                    parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, idx.to_string().clone(), inner_type.clone(), v.r#type.clone()));
+                    parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, idx.to_string().clone(), inner_type.clone(), v.r#type.r#type.clone()));
                 }
             }
             idx += 1;
@@ -1038,10 +1049,10 @@ impl<'b> Parser<'b> {
                             parser_context.errors.push(Error::ObjectHasNoMember(next_item.location, for_type.clone(), i.to_string().clone()));
                         },
                         Some(member_map_elem) => {
-                            let o_cast = try_create_cast(member_map_elem, &v, CastType::Implicit);
+                            let o_cast = try_create_cast(&FullType::new_const(member_map_elem), &v, CastType::Implicit);
                             match o_cast {
                                 None => {
-                                    parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, i.to_string().clone(), member_map_elem.clone(), v.r#type.clone()));
+                                    parser_context.errors.push(Error::TypeFailureMemberCreation(next_item.location, i.to_string().clone(), member_map_elem.clone(), v.r#type.r#type.clone()));
                                 },
                                 Some(cast) => {
                                     out.push(ObjectLiteralElem{name: i.to_string(), value: cast});
@@ -1123,8 +1134,7 @@ impl<'b> Parser<'b> {
         let loc = self.peek_next_location();
         self.skip_next_item();
         let (te, t) = self.parse_constructor_call(parser_func_context, parser_context);
-        let is_const = te.is_const;
-        TypedExpr{expr: Expr::FreeUserTypeWrap(Box::new(te)), r#type: t, loc: loc, is_const: is_const}
+        TypedExpr{expr: Expr::FreeUserTypeWrap(Box::new(te)), r#type: t, loc: loc}
     }
 
     fn parse_struct_component(&mut self,
@@ -1137,19 +1147,17 @@ impl<'b> Parser<'b> {
         let o_mem = struct_type.members.iter().find(|x| x.name == *component);
         match o_mem {
             None => {
-                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), lhs.r#type.clone(), component.clone()));
+                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), lhs.r#type.r#type.clone(), component.clone()));
                 TypedExpr{
                     expr: Expr::NamedMember(Box::new(lhs.clone()), component.clone()),
-                    r#type: Type::Undeclared,
-                    is_const: false,
+                    r#type: FullType::new(&Type::Undeclared, lhs.r#type.mutability),
                     loc: loc.clone()
                 }
             },
             Some(mem) => {
                 TypedExpr{
                     expr: Expr::NamedMember(Box::new(lhs.clone()), component.clone()),
-                    r#type: mem.r#type.clone(),
-                    is_const: false,
+                    r#type: FullType::new(&mem.r#type, lhs.r#type.mutability),
                     loc: loc.clone()
                 }
             }
@@ -1165,12 +1173,12 @@ impl<'b> Parser<'b> {
         //expect_punct!(self, parser_context, Punct::OpenBracket);
         self.skip_next_item();
         let lhs_type = &lhs.r#type;
-        match lhs_type {
+        match &lhs_type.r#type {
             Type::UnsafeArray(inner_type) => {
-                self.parse_unsafe_array_dynamic_component(lhs, inner_type, parser_func_context, parser_context)
+                self.parse_unsafe_array_dynamic_component(lhs, &inner_type, parser_func_context, parser_context)
             },
             _ => {
-                parser_context.push_err(Error::NoComponents(lhs.loc.clone(), lhs_type.clone()));
+                parser_context.push_err(Error::NoComponents(lhs.loc.clone(), lhs_type.r#type.clone()));
                 lhs.clone()
             }
         }
@@ -1201,7 +1209,7 @@ impl<'b> Parser<'b> {
 
             let expr = self.parse_expr(parser_func_context, parser_context);
             loc.extend_right(&expr.loc);
-            out_arr_types.push(expr.r#type.clone());
+            out_arr_types.push(expr.r#type.r#type.clone());
             out_arr.push(expr);
             
             let lookahead_item = self.peek_next_item();
@@ -1218,7 +1226,7 @@ impl<'b> Parser<'b> {
         if out_arr.len() == 1 {
             out_arr[0].clone()
         } else {
-            TypedExpr{expr: Expr::TupleLiteral(out_arr), is_const: true, loc: loc, r#type: Type::Tuple(out_arr_types)}
+            TypedExpr{expr: Expr::TupleLiteral(out_arr), loc: loc, r#type: FullType::new_const(&Type::Tuple(out_arr_types))}
         }
     }
 
@@ -1260,11 +1268,11 @@ impl<'b> Parser<'b> {
         match n.kind() {
             NumberKind::Hex | NumberKind::DecI | NumberKind::Bin | NumberKind::Oct => {
                 let number = n.parse_i128().unwrap();
-                TypedExpr{expr: Expr::IntLiteral(number), r#type: Type::Int(number, number), is_const: true, loc: loc.clone()}
+                TypedExpr{expr: Expr::IntLiteral(number), r#type: FullType::new_const(&Type::Int(number, number)), loc: loc.clone()}
             },
             NumberKind::DecF => {
                 let number = n.parse_f64();
-                TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: Type::Number, is_const: true, loc: loc.clone()}
+                TypedExpr{expr: Expr::FloatLiteral(number.unwrap()), r#type: FullType::new_const(&Type::Number), loc: loc.clone()}
             },
         }
     }
@@ -1275,7 +1283,7 @@ impl<'b> Parser<'b> {
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
         let loc = self.peek_next_location();
-        let err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: loc.clone(), is_const: true};
+        let err_ret = TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc.clone()};
         let next = expect_next!(self, parser_context, err_ret);
 
         let id = expect_ident!(next, parser_context, "Expecting identifier declaration");
@@ -1284,41 +1292,41 @@ impl<'b> Parser<'b> {
                 let o_sv = parser_context.get_scoped_var(&id.to_string());
                 match o_sv {
                     Some(sv) => match sv {
-                        ScopedVar::ClosureRef{internal_name, r#type, constant, guard_type: o_guard_type} => {
+                        ScopedVar::ClosureRef{internal_name, r#type, guard_type: o_guard_type, mutability: _} => {
                             let is_new = !parser_func_context.closure.iter().any(|x| x.internal_name.eq(internal_name));
                             if is_new {
-                                parser_func_context.closure.push(ClosureRef{internal_name: internal_name.clone(), r#type: r#type.clone(), constant: *constant})
+                                parser_func_context.closure.push(ClosureRef{internal_name: internal_name.clone(), r#type: r#type.clone()})
                             }
                             
                             if o_guard_type.is_none() {
-                                TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()}
+                                TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), loc: next.location.clone()}
                             } else {
                                 let guard_type = o_guard_type.as_ref().unwrap().clone();
-                                let inner = Box::new(TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()});
-                                guard_downcast_expr(&guard_type, inner, parser_context)
+                                let inner = Box::new(TypedExpr{expr: Expr::ClosureVariableUse(internal_name.clone()), r#type: r#type.clone(), loc: next.location.clone()});
+                                guard_downcast_expr(&FullType::new(&guard_type, r#type.mutability), inner, parser_context)
                             }
                         },
-                        ScopedVar::Local{internal_name, r#type, constant, guard_type: o_guard_type} => {
+                        ScopedVar::Local{internal_name, r#type, guard_type: o_guard_type, mutability: _} => {
                             if o_guard_type.is_none() {
-                                TypedExpr{expr: Expr::LocalVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()}
+                                TypedExpr{expr: Expr::LocalVariableUse(internal_name.clone()), r#type: r#type.clone(), loc: next.location.clone()}
                             } else {
                                 let guard_type = o_guard_type.as_ref().unwrap().clone();
-                                let inner = Box::new(TypedExpr{expr: Expr::LocalVariableUse(internal_name.clone()), r#type: r#type.clone(), is_const: *constant, loc: next.location.clone()});
-                                guard_downcast_expr(&guard_type, inner, parser_context)
+                                let inner = Box::new(TypedExpr{expr: Expr::LocalVariableUse(internal_name.clone()), r#type: r#type.clone(), loc: next.location.clone()});
+                                guard_downcast_expr(&FullType::new(&guard_type, r#type.mutability), inner, parser_context)
                             }
                         },                            
                     },
                     None => {
-                        let o_g = parser_context.global_decls.iter().find(|&x| x.name == id.to_string());
+                        let o_g = parser_context.get_global_var(&id);
                         match o_g {
                             Some(g_var) => 
-                                TypedExpr{expr: Expr::GlobalVariableUse(id.to_string()), r#type: g_var.r#type.clone(), is_const: g_var.constant, loc: next.location.clone()},
+                                TypedExpr{expr: Expr::GlobalVariableUse(id.to_string()), r#type: g_var.r#type.clone(), loc: next.location.clone()},
                             None => {
                                 //might be a type literal
                                 let o_type = self.parse_type_from_ident(&id, Commitment::Speculative, parser_context);
                                 match o_type {
                                     Some(t) => 
-                                        TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: next.location.clone()},
+                                        TypedExpr{expr: Expr::TypeLiteral(FullType::new_const(&t)), r#type: FullType::new_const(&Type::TypeLiteral(Box::new(FullType::new_const(&t)))), loc: next.location.clone()},
                                     _ => {
                                         // might be a function call
                                         let o_f_c = self.try_parse_func_call(&None, &id, &next.location, parser_func_context, parser_context);
@@ -1332,7 +1340,7 @@ impl<'b> Parser<'b> {
                                                     None => {
                                                         //module check
                                                         if parser_context.import_namespace_map.contains_key(&id) {
-                                                            TypedExpr{expr: Expr::NoOp, r#type: Type::ModuleLiteral(id.clone()), is_const: true, loc: next.location.clone()}
+                                                            TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::ModuleLiteral(id.clone())), loc: next.location.clone()}
                                                         } else {
                                                             parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone()));
                                                             err_ret
@@ -1349,14 +1357,13 @@ impl<'b> Parser<'b> {
                 }
             },
             Some(holding) => {
-                match &holding.r#type {
+                match &holding.r#type.r#type {
                     Type::ModuleLiteral(m) => {
                         let full_name = format!("{}.{}", m, id);
                         let o_g = parser_context.global_imports.iter().find(|&x| x.name == full_name);
                         match o_g {
                             Some(g_var) => 
-                                TypedExpr{expr: Expr::GlobalVariableUse(full_name), r#type: g_var.r#type.clone(), is_const: g_var.constant, 
-                                    loc: next.location.clone()},
+                                TypedExpr{expr: Expr::GlobalVariableUse(full_name), r#type: g_var.r#type.clone(), loc: next.location.clone()},
                             None => {
                                 let o_f_c = self.try_parse_func_call(&Some(m.clone()), &id, &next.location, parser_func_context, parser_context);
                                 match o_f_c {
@@ -1371,6 +1378,7 @@ impl<'b> Parser<'b> {
                         }
                     },
                     Type::Int(_, _) => self.parse_int_component(&holding, &id, &next.location, parser_func_context, parser_context),
+                    Type::UnsafePtr => self.parse_unsafe_ptr_component(&holding, &id, &next.location, parser_func_context, parser_context),
                     Type::UnsafeStruct{name} => {
                         let tm_entry = parser_context.type_map.get(name).unwrap().clone();
                         match tm_entry {
@@ -1379,10 +1387,10 @@ impl<'b> Parser<'b> {
                         }
                     },
                     Type::UnsafeOption(_) => self.parse_unsafe_option_component(&holding, &id, &next.location, parser_func_context, parser_context),
-                    Type::UserType{name, type_args} => 
+                    Type::UserType{name, type_args, inner: _} => 
                         self.parse_type_member_function_call(&holding, &name, &type_args, &id, &loc, parser_func_context, parser_context),
                     _ => {
-                        parser_context.push_err(Error::NoComponents(next.location.clone(), holding.r#type.clone()));
+                        parser_context.push_err(Error::NoComponents(next.location.clone(), holding.r#type.r#type.clone()));
                         //give up
                         return err_ret;
                     }
@@ -1413,18 +1421,18 @@ impl<'b> Parser<'b> {
             //now, other things it could be
             match lookahead {
                 Token::Punct(Punct::OpenParen) => {
-                    match &expr.r#type {
+                    match &expr.r#type.r#type {
                         Type::Func{func_type} => {
                             let args = self.parse_function_call_args(&None, &func_type.in_types, parser_func_context, parser_context);
                             let loc = SourceLocation::new(lookahead_item.location.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(next.location.end.clone()));
-                            expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: func_type.out_type.clone(), is_const: true, loc: loc};
+                            expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: func_type.out_type.clone(), loc: loc};
                             continue;
                         },
                         _ => {
                             let args = self.parse_function_call_args(&None, &vec![], parser_func_context, parser_context);
                             let loc = SourceLocation::new(lookahead_item.location.start.clone(), next.location.end.clone());
                             parser_context.push_err(Error::TypeFailureFuncCall(loc.clone()));
-                            expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: expr.r#type.clone(), is_const: true, loc: loc};
+                            expr = TypedExpr{expr: Expr::DynamicFuncCall(Box::new(expr.clone()), args), r#type: expr.r#type.clone(), loc: loc};
                             continue;
                         }
                     }
@@ -1487,13 +1495,13 @@ impl<'b> Parser<'b> {
                         Box::new(inner.clone())
                     }
                 };
-                return TypedExpr{expr: Expr::UnaryOperator{op: op, expr: out}, r#type: unop_type_cast.r#type, is_const: true, loc: loc.clone()}
+                return TypedExpr{expr: Expr::UnaryOperator{op: op, expr: out}, r#type: unop_type_cast.r#type, loc: loc.clone()}
             },
                 
             None => {
                 parser_context.push_err(Error::TypeFailureUnaryOperator(loc.clone()));
                 let inner_type = inner.r#type.clone();
-                return TypedExpr{expr: Expr::UnaryOperator{op: op, expr: Box::new(inner.clone())}, r#type: inner_type, is_const: true, loc: loc.clone()}
+                return TypedExpr{expr: Expr::UnaryOperator{op: op, expr: Box::new(inner.clone())}, r#type: inner_type, loc: loc.clone()}
             },
         }
     }
@@ -1505,7 +1513,7 @@ impl<'b> Parser<'b> {
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
         let lookahead_item = self.peek_next_item();
-        let mut err_ret = TypedExpr{expr: Expr::NoOp, r#type: Type::Undeclared, loc: lookahead_item.location.clone(), is_const: true};
+        let mut err_ret = TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: lookahead_item.location.clone()};
         
         let lookahead = lookahead_item.token;
         let o_uod = get_unary_operator_data(&lookahead);
@@ -1530,7 +1538,7 @@ impl<'b> Parser<'b> {
             
             Token::Bool(b) => {
                 self.skip_next_item();
-                return TypedExpr{expr:Expr::BoolLiteral(b.is_true()), r#type: Type::Bool, is_const: true, loc: lookahead_item.location.clone()};
+                return TypedExpr{expr:Expr::BoolLiteral(b.is_true()), r#type: FullType::new_const(&Type::Bool), loc: lookahead_item.location.clone()};
             },
 
             Token::Null => {
@@ -1545,7 +1553,7 @@ impl<'b> Parser<'b> {
 
             Token::String(sl) => {
                 self.skip_next_item();
-                return TypedExpr{expr:Expr::StringLiteral(sl.no_quote().to_string()), r#type: Type::String, is_const: true, loc: lookahead_item.location.clone()};
+                return TypedExpr{expr:Expr::StringLiteral(sl.no_quote().to_string()), r#type: FullType::new_const(&Type::String), loc: lookahead_item.location.clone()};
             },
 
             Token::Keyword(k) => {
@@ -1558,7 +1566,7 @@ impl<'b> Parser<'b> {
                     },
                     Keyword::Void => { 
                         self.skip_next_item();
-                        return TypedExpr{expr:Expr::Void, r#type: Type::FakeVoid, is_const: true, loc: lookahead_item.location.clone()}; 
+                        return TypedExpr{expr:Expr::Void, r#type: FullType::new(&Type::FakeVoid, Mutability::Const), loc: lookahead_item.location.clone()}; 
                     },
                     Keyword::If => self.parse_if(parser_func_context, parser_context),
                     Keyword::Fn => {
@@ -1573,17 +1581,20 @@ impl<'b> Parser<'b> {
                         self.skip_next_item();
                         if parser_func_context.this_type.is_some() {
                             let this_type = parser_func_context.this_type.clone().unwrap();
-                            TypedExpr{expr: Expr::LocalVariableUse(String::from("this")), r#type: this_type, is_const: false, loc: lookahead_item.location.clone()}
+                            TypedExpr{expr: Expr::LocalVariableUse(String::from("this")), r#type: this_type, loc: lookahead_item.location.clone()}
                         } else {
                             parser_context.push_err(Error::NoThis(lookahead_item.location.clone()));
-                            TypedExpr{expr: Expr::LocalVariableUse(String::from("this")), r#type: Type::Undeclared, is_const: true, loc: lookahead_item.location.clone()}
+                            TypedExpr{expr: Expr::LocalVariableUse(String::from("this")), r#type: FullType::new_const(&Type::Undeclared), loc: lookahead_item.location.clone()}
                         }
-                        
+                    },
+                    Keyword::Mut => {
+                        let full_type = self.parse_full_type(parser_context);
+                        TypedExpr{expr: Expr::TypeLiteral(full_type.clone()), r#type: FullType::new_const(&Type::TypeLiteral(Box::new(full_type.clone()))), loc: lookahead_item.location.clone()}
                     },
                     _ => {
                         self.skip_next_item();
                         let t = self.parse_type_from_keyword(&k, &lookahead_item.location, parser_context);
-                        TypedExpr{expr: Expr::TypeLiteral(t.clone()), r#type: Type::TypeLiteral(Box::new(t.clone())), is_const: true, loc: lookahead_item.location.clone()}
+                        TypedExpr{expr: Expr::TypeLiteral(FullType::new_const(&t)), r#type: FullType::new_const(&Type::TypeLiteral(Box::new(FullType::new_const(&t)))), loc: lookahead_item.location.clone()}
                     },
                 }
             },

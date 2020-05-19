@@ -5,9 +5,7 @@ type One = Int {
     
     fn add(r: Int) -> Int this.getInner() + r
 
-    private fn somePrivacy(y: Int) -> Void {
-        this.setInner(y)
-    }
+    private fn somePrivacy(y: Int) -> Void {}
 
     fn set(x: Int) -> Void this.somePrivacy(x)
 }

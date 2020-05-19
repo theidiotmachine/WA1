@@ -42,11 +42,11 @@ export fn negMax(x: Number, y: Number) -> Number {
 But it doesn't need to be.
 
 ```
-export fn bang(x: Number) -> Number {
+export fn bang(var x: Number) -> Number {
     if(x <= 0)
         return 0
 
-    let out: Number = 1.0
+    let var out: Number = 1.0
 
     while(x > 0) {
         out *= x
@@ -125,12 +125,19 @@ and manually call in your browser in the debugger by typing the function name (c
 
 ## Variables
 
-Local and global variables are declared like this.
+Local and global consts are declared like this.
 
 ```
 let s = expr
 ```
 The type of `s` is inferred from the expression you assign it.
+
+Variables use the `var` keyword, meaning that you can change what the variable contains.
+
+```
+let var t = 5
+t += 1
+```
 
 ### A word on semi-colons
 
@@ -273,18 +280,18 @@ alias __size_t = Int<0, 4294967295>
 ### type
 The type keyword is the simplest (and currently only) true user type. It wraps an existing type, and then supplements it with extra member functions.
 
-Member functions have access to a `this` local variable, which is of the type defined. To get the inner data, use `this.getInner()`. To set the
-inner data, call `this.setInner(x)`.
+Member functions have access to a `this` local variable, which is of the type defined. To copy the inner data, use `this.getInner()`. To copy the inner 
+data such that you can mutate this copy, use `this.getInnerMut()`.
 
 ```
 type One = Int {
     constructor(x: Int) => x
     
     fn add(r: Int) -> Int this.getInner() + r
-
-    fn set(x: Int) -> Void this.setInner(x)
 }
 ```
+
+It's important to understand that `getInner` and friends copy. WA1 is pass-by-value by default. This means in the above example, you will get an int in the `add` function, but it's a local variable which is a copy of the `this` value. There is no `setInner` function.
 
 The `constructor` keyword is the sole way of constructing. This essentially casts an object of the inner type into the outer type. This is subject to change. 
 You use the `new` keyword to construct.
@@ -393,18 +400,18 @@ not much more than structured WASM. In order to use it you need to somehow pass 
 
 A leading `__` is pronounced 'unsafe', by the way.
 
-* `__Ptr` type. Pointer to raw memory.
+* `__Ptr` type. Pointer to raw memory. `mut __Ptr` is a pointer where you can change what it points to. `__Ptr` is a readonly thing.
 * intrinsics - wrap low level wasm calls
     * `__memorySize()` - `memory.size` instruction
     * `__memoryGrow(0, numPages)` - `memory.grow` instruction
     * `__trap()` - `unreachable` instruction
 * `__Option` - is a essentially a nullable pointer. You can have it be a `__Null` or `__Some<T>`. It will end up being the core of the 
     real option. It's kind of horrible because it's pretending to be a union but it really is a nullable pointer.
-* `__struct` type - works but you need either the super secret `malloc` function for them to be useful 
-    (which doesn't exist, so good luck with that), cast from a `__Ptr` (this is unsafe. The clue
-    is in the name...), or use `__static` (which does actually work and is a C-style static allocation). 
-    You do `__struct Hello { a: Int; }` to declare, `new Hello {a: 3}` to dynamically allocate (which uses malloc), 
-    or `__static Hello {a: 3}`. A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
+* `__struct` type - to get one you have two horrible choices. You can cast from a `__Ptr` (this is unsafe. The clue
+    is in the name...), or use `__static` (which is a C-style static allocation). 
+    To define one, type `__struct Hello { a: Int; }`. The static creation is, `__static mut Hello {a: 3}`. Omit the `mut` for it and the things it 
+    holds to be immutable.
+    A `__struct` is and will always be a raw pointer to memory, used for writing the allocator and other low level things. 
 * `__typeguard` This keyword lets you define type guards. Here is an example.
 ```
 export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
@@ -430,7 +437,7 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     1. [ ] clean up the cast code
     1. [ ] bool literals
     1. [ ] check __Option equality
-    1. [ ] consts properly rolled into the type system (aka the Konst Waaagh)
+    1. [x] consts properly rolled into the type system (aka the Konst Waaagh)
     1. [x] privacy
 1. Expression based language
     1. [x] blocks return a value

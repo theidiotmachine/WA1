@@ -1,7 +1,7 @@
 import {*} from "./assert"
 
-alias __size_t = Int<0, 4294967295>
-alias u32 = Int<0, 4294967295>
+alias __size_t = Int<0, 2147483647>
+alias u32 = Int<0, 2147483647>
 
 __struct malloc_chunk {
   head: __size_t
@@ -20,7 +20,7 @@ __struct malloc_state {
 
 fn smallbin_at(m: malloc_state, i: u32) -> malloc_chunk m.smallbins[i]
 
-const gm: malloc_state = __static malloc_state{
+let gm: malloc_state = __static malloc_state{
   treemap:          14,
   smallbins:        __static __Array<malloc_chunk> [
     __static malloc_chunk{
@@ -47,7 +47,7 @@ fn __Option_isSome<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
     x != __Null
 }
 
-fn f1(o_t: __Option<malloc_tree_chunk>, s: __size_t) -> Void {
+fn f1(var o_t: __Option<malloc_tree_chunk>, s: __size_t) -> Void {
   while(__Option_isSome(o_t)) {
     let t = __Some_unwrap(o_t);
     if (t.size != s) {

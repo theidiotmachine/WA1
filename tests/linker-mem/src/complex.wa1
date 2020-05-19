@@ -21,7 +21,7 @@ __struct malloc_state {
   exts:             Int;
 }
 
-const gm: malloc_state = __static malloc_state{
+let gm: malloc_state = __static malloc_state{
   smallmap:         100000,
   treemap:          100001,
   dvsize:           100002,

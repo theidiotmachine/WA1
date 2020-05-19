@@ -970,84 +970,17 @@ pub enum CommentKind {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum BuiltInType {
-    
-}
-
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-/// A JS Keyword
-///
-/// # Standard
-/// await
-/// break
-/// case
-/// catch
-/// class
-/// const
-/// continue
-/// debugger
-/// default
-/// delete (10)
-/// do
-/// else
-/// export
-/// extends
-/// finally
-/// for
-/// function
-/// if
-/// import
-/// in (20)
-/// instanceof
-/// new
-/// return
-/// super
-/// switch
-/// this
-/// throw
-/// try
-/// typeof
-/// var (30)
-/// void
-/// while
-/// with
-/// yield
-/// # Future Reserved
-/// enum
-/// # Strict Mode Future Reserved
-/// implements
-/// package
-/// protected
-/// interface
-/// private (40)
-/// public
-/// # Typescript
-/// as
-/// async
-/// extends
-/// constructor
-/// any
-/// Array
-/// bigint
-/// boolean
-/// never
-/// number
-/// object
-/// string
-/// Tuple
-/// undefined
+/// A Keyword
 pub enum Keyword {
     Await,
     Break,
     Case,
     Catch,
     Class,
-    Const,
     Continue,
     Debugger,
     Default,
-    Delete, //10
+    Delete,
     Do,
     Else,
     Enum,
@@ -1107,6 +1040,7 @@ pub enum Keyword {
     UnsafeTypeGuard,
     Alias,
     Type,
+    Mut,
 }
 
 impl Keyword {
@@ -1119,7 +1053,7 @@ impl Keyword {
             "case" => Keyword::Case,
             "catch" => Keyword::Catch,
             "class" => Keyword::Class,
-            "const" => Keyword::Const,
+            //"const" => Keyword::Const,
             "continue" => Keyword::Continue,
             "debugger" => Keyword::Debugger,
             "default" => Keyword::Default,
@@ -1134,6 +1068,7 @@ impl Keyword {
             "Int" => Keyword::Int,
             "instanceof" => Keyword::InstanceOf,
             "in" => Keyword::In,
+            "mut" => Keyword::Mut,
             "new" => Keyword::New,
             "return" => Keyword::Return,
             "switch" => Keyword::Switch,
@@ -1203,7 +1138,7 @@ impl Keyword {
             Keyword::Case => "case",
             Keyword::Catch => "catch",
             Keyword::Class => "class",
-            Keyword::Const => "const",
+            //Keyword::Const => "const",
             Keyword::Continue => "continue",
             Keyword::Debugger => "debugger",
             Keyword::Default => "default",
@@ -1224,6 +1159,7 @@ impl Keyword {
             Keyword::InstanceOf => "instanceof",
             Keyword::Interface => "interface",
             Keyword::Let => "let",
+            Keyword::Mut => "mut",
             Keyword::New => "new",
             Keyword::Package => "package",
             Keyword::Private => "private",

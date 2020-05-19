@@ -1,5 +1,5 @@
 use crate::generics::TypeConstraint;
-use crate::Type;
+use crate::{Type, FullType, PassStyle, Mutability};
 use crate::FuncType;
 use crate::{Bittage, get_bittage, PTR_MAX, U_32_MAX, S_32_MAX, S_32_MIN, S_64_MAX, S_64_MIN, U_64_MAX, INT_U_64, INT_U_32, INT_S_64, INT_S_32};
 use std::cmp;
@@ -22,11 +22,13 @@ pub mod prelude {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeCast{
     /// This is an upcast that costs nothing at runtime.
-    FreeUpcast(Type),
+    FreeUpcast(FullType),
     /// One of the int casts that we support. This is a cast from a narrower int to a wider int. This may or may not be a thing at runtime.
     IntWiden(i128, i128),
     /// One of the int casts that we support. This is a cast from i32 to f64 and will definitely have runtime cost.
     IntToNumberWiden,
+    /// Fail because of a const cast
+    ConstFail,
     /// Not possible to cast these types
     None,
     /// Used by some places to indicate that the types are exact matches and don't need 
@@ -42,33 +44,52 @@ pub enum CastType{
     Explicit,
 }
 
+///const check - you can't pass a mut reference to a const reference
+pub fn const_fail(from_pass_style: PassStyle, to_pass_style: PassStyle, from_mutability: Mutability, to_mutability: Mutability) -> bool {
+    (to_pass_style == PassStyle::Reference || to_pass_style == PassStyle::ValueHoldingReference) && to_mutability == Mutability::Mut && from_mutability == Mutability::Const && from_pass_style != PassStyle::AtomicValue
+}
+
 /// Try casting a type to another type.
-pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
+pub fn try_cast(from: &FullType, to: &FullType, cast_type: CastType) -> TypeCast {
     if *from == *to {
         return TypeCast::NotNeeded;
     }
 
-    if *from == Type::Unknown {
+    let to_pass_style = to.get_pass_style();
+    let from_pass_style = from.get_pass_style();
+
+    if const_fail(from_pass_style, to_pass_style, from.mutability, to.mutability) {
+        return TypeCast::ConstFail;
+    }
+
+    let from_type = &from.r#type;
+    let to_type = &to.r#type;
+
+    if from_type == to_type {
+        return TypeCast::NotNeeded;
+    }
+
+    if *from_type == Type::Unknown {
         // we can never widen from unknown
         return TypeCast::None;
     }
 
-    if *from == Type::Never {
+    if *from_type == Type::Never {
         // we can always cast from never, it's the bottom type
         return TypeCast::FreeUpcast(to.clone());
     }
 
-    match to {
+    match to_type {
         //we can always widen to unknown, it's the top type
-        Type::Unknown => TypeCast::FreeUpcast(Type::Unknown),
+        Type::Unknown => TypeCast::FreeUpcast(FullType::new(&Type::Unknown, from.mutability)),
         Type::Int(lower_to, upper_to) => {
-            match from {
+            match from_type {
                 Type::Int(lower_from, upper_from) => {
                     if lower_from >= lower_to && upper_from <= upper_to { TypeCast::IntWiden(*lower_to, *upper_to) } else { TypeCast::None }
                 },
                 Type::UnsafePtr => {
                     if cast_type == CastType::Explicit && *lower_to == 0 && *upper_to == PTR_MAX {
-                        TypeCast::FreeUpcast(Type::UnsafePtr)
+                        TypeCast::FreeUpcast(FullType::new(&Type::UnsafePtr, from.mutability))
                     } else {
                         TypeCast::None
                     }
@@ -77,22 +98,22 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
             }
         },
         Type::Number => {
-            match from {
+            match from_type {
                 Type::Int(lower_from, lower_to) => if *lower_from >= -9007199254740991 && *lower_to <= 9007199254740991 { TypeCast::IntToNumberWiden } else { TypeCast::None},
-                Type::FloatLiteral(_) => TypeCast::FreeUpcast(Type::Number),
+                Type::FloatLiteral(_) => TypeCast::FreeUpcast(FullType::new(&Type::Number, from.mutability)),
                 _ => TypeCast::None,
             }
         },
         Type::String => {
-            match from {
-                Type::StringLiteral(_) => TypeCast::FreeUpcast(Type::String),
+            match from_type {
+                Type::StringLiteral(_) => TypeCast::FreeUpcast(FullType::new(&Type::String, from.mutability)),
                 _ => TypeCast::None,
             }
         },
         //we kind of don't care about ptrs. If you are messing with them you better know what you are doing, so we let
         // you cast them from all sorts of things
         Type::UnsafePtr => {
-            match from {
+            match from_type {
                 Type::Int(lower_from, upper_from) => if cast_type == CastType::Implicit || *lower_from < 0 || *upper_from > PTR_MAX { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
                 Type::UnsafeStruct{name: _} => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
                 Type::UnsafeOption(_) => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
@@ -103,23 +124,24 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
         },
 
         Type::UnsafeSome(inner_to) => {
-            match from {
-                Type::UnsafeSome(inner_from) => try_cast(inner_from, inner_to, cast_type),
+            match from_type {
+                Type::UnsafeSome(inner_from) => 
+                    try_cast(&FullType::new(inner_from, from.mutability), &FullType::new(inner_to, to.mutability), cast_type),
                 _ => TypeCast::None,
             }
         },
 
         Type::UnsafeOption(inner_to) => {
-            match from {
-                Type::UnsafeOption(inner_from) => try_cast(inner_from, inner_to, cast_type),
+            match from_type {
+                Type::UnsafeOption(inner_from) => try_cast(&FullType::new(inner_from, from.mutability), &FullType::new(inner_to, to.mutability), cast_type),
                 Type::UnsafeNull => TypeCast::FreeUpcast(to.clone()),
-                Type::UnsafeSome(inner_from) => try_cast(inner_from, inner_to, cast_type),
+                Type::UnsafeSome(inner_from) => try_cast(&FullType::new(inner_from, from.mutability), &FullType::new(inner_to, to.mutability), cast_type),
                 _ => TypeCast::None,
             }
         },
 
         Type::UnsafeStruct{name: _} => {
-            match from {
+            match from_type {
                 Type::UnsafePtr => if cast_type == CastType::Implicit { TypeCast::None } else { TypeCast::FreeUpcast(to.clone()) },
                 _ => TypeCast::None,
             }
@@ -129,7 +151,7 @@ pub fn try_cast(from: &Type, to: &Type, cast_type: CastType) -> TypeCast {
             match constraint{
                 TypeConstraint::None => TypeCast::NotNeeded,
                 TypeConstraint::IsAStruct => {
-                    try_cast(from, &Type::UnsafeStruct{name: String::from("")}, cast_type)
+                    try_cast(from, &FullType::new(&Type::UnsafeStruct{name: String::from("")}, to.mutability), cast_type)
                 }
             }
         }
@@ -150,14 +172,28 @@ pub enum GenericCast{
     NotNeeded,
 }
 
-pub fn try_generic_wrap(from: &Type, to: &Type) -> GenericCast{
+pub fn try_generic_wrap(from: &FullType, to: &FullType) -> GenericCast{
     if *from == *to {
         return GenericCast::NotNeeded;
     }
 
-    match to {
+    let from_pass_style = to.get_pass_style();
+    let to_pass_style = to.get_pass_style();
+
+    if const_fail(from_pass_style, to_pass_style, from.mutability, to.mutability) {
+        return GenericCast::None;
+    }
+
+    let from_type = &from.r#type;
+    let to_type = &to.r#type;
+
+    if from_type == to_type {
+        return GenericCast::NotNeeded;
+    }
+
+    match to_type {
         Type::Int(lower_to, upper_to) => {
-            match from {
+            match from_type {
                 //FIXME64BIT
                 Type::UnsafePtr | Type::UnsafeNull | Type::UnsafeOption(_) | Type::UnsafeSome(_) | Type::UnsafeStruct{name: _} => 
                     if *lower_to < 0 || *upper_to > PTR_MAX { GenericCast::None } else {GenericCast::FreeCast},
@@ -182,14 +218,14 @@ pub fn try_generic_wrap(from: &Type, to: &Type) -> GenericCast{
             }
         },
         Type::UnsafeOption(t) => {
-            match from {
-                Type::UnsafeOption(f) | Type::UnsafeSome(f) => try_generic_wrap(&f, &t),
+            match from_type {
+                Type::UnsafeOption(f) | Type::UnsafeSome(f) => try_generic_wrap(&FullType::new(&f, from.mutability), &FullType::new(&t, to.mutability)),
                 _ => GenericCast::None
             }
         },
         Type::UnsafeSome(t) => {
-            match from {
-                Type::UnsafeSome(f) => try_generic_wrap(&f, &t),
+            match from_type {
+                Type::UnsafeSome(f) => try_generic_wrap(&FullType::new(&f, from.mutability), &FullType::new(&t, to.mutability)),
                 _ => GenericCast::None
             }
         },
@@ -197,14 +233,28 @@ pub fn try_generic_wrap(from: &Type, to: &Type) -> GenericCast{
     }
 }
 
-pub fn try_generic_unwrap(from: &Type, to: &Type) -> GenericCast{
+pub fn try_generic_unwrap(from: &FullType, to: &FullType) -> GenericCast{
     if *from == *to {
         return GenericCast::NotNeeded;
     }
 
-    match to {
+    let from_pass_style = to.get_pass_style();
+    let to_pass_style = to.get_pass_style();
+
+    if const_fail(from_pass_style, to_pass_style, from.mutability, to.mutability) {
+        return GenericCast::None;
+    }
+
+    let from_type = &from.r#type;
+    let to_type = &to.r#type;
+
+    if from_type == to_type {
+        return GenericCast::NotNeeded;
+    }
+
+    match to_type {
         Type::UnsafePtr | Type::UnsafeNull | Type::UnsafeStruct{name: _} => {
-            match from {
+            match from_type {
                 Type::Int(lower_from, upper_from) => {
                     if *lower_from < 0 || *upper_from > PTR_MAX { GenericCast::None } else {GenericCast::FreeCast}
                 },
@@ -212,7 +262,7 @@ pub fn try_generic_unwrap(from: &Type, to: &Type) -> GenericCast{
             }
         },
         Type::Int(lower_to, upper_to) => {
-            match from {
+            match from_type {
                 Type::Int(lower_from, upper_from) => {
                     let bittage_from = get_bittage(*lower_from, *upper_from);
                     let bitage_to = get_bittage(*lower_to, *upper_to);
@@ -232,15 +282,15 @@ pub fn try_generic_unwrap(from: &Type, to: &Type) -> GenericCast{
             }
         },
         Type::Bool => {
-            match from {
+            match from_type {
                 Type::Int(lower_from, upper_from) =>
                     if *lower_from == 0 && *upper_from == U_32_MAX { GenericCast::FreeCast } else { GenericCast::None },
                 _ => GenericCast::None
             }
         },
         Type::UnsafeOption(t) => {
-            match from {
-                Type::UnsafeOption(f) => try_generic_unwrap(&f, &t),
+            match from_type {
+                Type::UnsafeOption(f) => try_generic_unwrap(&FullType::new(&f, from.mutability), &FullType::new(&t, to.mutability)),
                 Type::Int(lower_from, upper_from) => {
                     if *lower_from < 0 || *upper_from > PTR_MAX { GenericCast::None } else {GenericCast::FreeCast}
                 },
@@ -248,8 +298,8 @@ pub fn try_generic_unwrap(from: &Type, to: &Type) -> GenericCast{
             }
         },
         Type::UnsafeSome(t) => {
-            match from {
-                Type::UnsafeSome(f) => try_generic_unwrap(&f, &t),
+            match from_type {
+                Type::UnsafeSome(f) => try_generic_unwrap(&FullType::new(&f, from.mutability), &FullType::new(&t, to.mutability)),
                 Type::Int(lower_from, upper_from) => {
                     if *lower_from < 0 || *upper_from > PTR_MAX { GenericCast::None } else {GenericCast::FreeCast}
                 },
@@ -258,7 +308,6 @@ pub fn try_generic_unwrap(from: &Type, to: &Type) -> GenericCast{
         },
         _ => GenericCast::None
     }
-
 }
 
 /// Enum describing the types of implicit casts available
@@ -273,16 +322,30 @@ pub enum TypeGuardDowncast{
     NotNeeded,
 }
 
-pub fn try_guard_downcast_expr(from: &Type, to: &Type) -> TypeGuardDowncast {
+pub fn try_guard_downcast_expr(from: &FullType, to: &FullType) -> TypeGuardDowncast {
     if *from == *to {
         return TypeGuardDowncast::NotNeeded;
     }
 
-    match to {
+    let from_pass_style = to.get_pass_style();
+    let to_pass_style = to.get_pass_style();
+
+    if const_fail(from_pass_style, to_pass_style, from.mutability, to.mutability) {
+        return TypeGuardDowncast::None;
+    }
+
+    let from_type = &from.r#type;
+    let to_type = &to.r#type;
+
+    if from_type == to_type {
+        return TypeGuardDowncast::NotNeeded;
+    }
+
+    match to_type {
         Type::UnsafeSome(inner_to) => {
-            match from {
+            match from_type {
                 Type::UnsafeOption(inner_from) => { 
-                    let inner_cast = try_guard_downcast_expr(inner_from, inner_to);
+                    let inner_cast = try_guard_downcast_expr(&FullType::new(&inner_from, from.mutability), &FullType::new(&inner_to, to.mutability));
                     //this is a bit eww
                     if inner_cast == TypeGuardDowncast::NotNeeded {
                         TypeGuardDowncast::FreeDowncast
@@ -294,8 +357,17 @@ pub fn try_guard_downcast_expr(from: &Type, to: &Type) -> TypeGuardDowncast {
             }
         },
 
+        Type::UnsafeNull => {
+            match from_type {
+                Type::UnsafeOption(_) => {
+                    TypeGuardDowncast::FreeDowncast
+                },
+                _ => TypeGuardDowncast::None,
+            }
+        },
+
         Type::Int(_, _) => {
-            match from {
+            match from_type {
                 Type::Int(_,_) => TypeGuardDowncast::FreeDowncast,
                 _ => TypeGuardDowncast::None,
             }
@@ -314,7 +386,7 @@ pub struct FuncCallTypeCast{
 
 /// For a set of possible function types, find one that we can use given the proposed arg types. We'll try to find 
 /// one that doesn't require any casting; if we can't we will return one that can be casted to.
-pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, proposed_arg_types: &Vec<Type>) -> Option<FuncCallTypeCast> {
+pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, proposed_arg_types: &Vec<FullType>) -> Option<FuncCallTypeCast> {
     let mut out: Option<FuncCallTypeCast> = None;
     let proposed_arg_types_len = proposed_arg_types.len();
     let mut level_out = -1;
@@ -341,7 +413,7 @@ pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, prop
                 },
                 TypeCast::IntWiden(lower, upper) => {
                     level = cmp::min(level, 2);
-                    let this_int_widen_cost = match proposed_arg_type{
+                    let this_int_widen_cost = match proposed_arg_type.r#type{
                         Type::Int(lower_from, upper_from) => {
                             //the multiply is to make signed more likely than unsigned
                             2 * (upper - upper_from) + (lower_from - lower)
@@ -356,7 +428,7 @@ pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, prop
                     level = cmp::min(level, 1);
                     this_arg_type_casts.push(type_cast);
                 },
-                TypeCast::None => {
+                TypeCast::None | TypeCast::ConstFail => {
                     level = 0;
                     break;
                 }
@@ -390,7 +462,7 @@ pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, prop
 
 /// Used when we widen a variable. The problem here is if you have 
 /// ```
-/// let a = 3
+/// let mut a = 3
 /// ```
 /// Then a will end up being of type Int<3,3> which is not much use to anyone. So we widen to the closest type available.
 pub fn upcast_from_literal(t: &Type) -> Type {

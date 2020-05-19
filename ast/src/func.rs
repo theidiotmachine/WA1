@@ -1,9 +1,10 @@
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
-use types::Type;
+use types::{Type, FullType};
 use crate::expr::ClosureRef;
 use crate::expr::TypedExpr;
+use crate::expr::VariableMutability;
 use types::FuncType;
 
 pub mod prelude {
@@ -19,14 +20,16 @@ pub mod prelude {
 /// Simple func arg, one with a name and a type, e.g. x: number
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct FuncArg {
+    pub mutability: VariableMutability,
     pub name: String,
-    pub r#type: Type,
+    pub r#type: FullType,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct LocalVar{
+    pub mutability: VariableMutability,
     pub internal_name: String,
-    pub r#type: Type,
+    pub r#type: FullType,
     pub closure_source: bool,
     pub arg: bool,
 }
@@ -59,7 +62,7 @@ pub struct TypeGuard {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct FuncDecl {
     pub name: String,
-    pub return_type: Type,
+    pub return_type: FullType,
     pub args: Vec<FuncArg>,
     pub export: bool,
     pub generic_impl: bool,
@@ -68,8 +71,8 @@ pub struct FuncDecl {
 }
 
 impl FuncDecl{
-    pub fn get_arg_types(&self) -> Vec<Type> {
-        let mut out: Vec<Type> = vec![];
+    pub fn get_arg_types(&self) -> Vec<FullType> {
+        let mut out: Vec<FullType> = vec![];
         for arg in &self.args {
             out.push(arg.r#type.clone());
         }

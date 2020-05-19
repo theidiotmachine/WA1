@@ -17,6 +17,7 @@ pub mod prelude {
     pub use super::GlobalVariableImport;
     pub use super::ClosureRef;
     pub use super::ObjectLiteralElem;
+    pub use super::VariableMutability;
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
@@ -74,30 +75,34 @@ pub enum AssignmentOperator{
     BitOrAssign
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+pub enum VariableMutability{
+    Constant,
+    Variable,
+}
+
 /// Variable decl
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GlobalVariableDecl {
     pub name: String,
-    pub r#type: Type,
-    pub constant: bool,
+    pub r#type: FullType,
     pub init: Option<TypedExpr>,
     pub export: bool,
+    pub mutability: VariableMutability,
 }
 
 /// Variable decl
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GlobalVariableImport {
     pub name: String,
-    pub r#type: Type,
-    pub constant: bool,
+    pub r#type: FullType,
     pub export: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClosureRef {
     pub internal_name: String,
-    pub r#type: Type,
-    pub constant: bool,
+    pub r#type: FullType,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -198,7 +203,7 @@ pub enum Expr {
     /// constructor - static
     ConstructStaticFromArrayLiteral(Type, Vec<TypedExpr>),
     ///type literal
-    TypeLiteral(Type),
+    TypeLiteral(FullType),
     ///__sizeof
     SizeOf(Type),
     ///No op expression
@@ -223,54 +228,14 @@ impl Expr{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TypedExpr{
     pub expr: Expr,
-    pub r#type: Type,
-    pub is_const: bool,
+    pub r#type: FullType,
     pub loc: SourceLocation,
 }
 
 impl TypedExpr{
-    pub fn as_l_value(&self) -> Option<TypedLValueExpr> {
-        match &self.expr {
-            Expr::GlobalVariableUse(name) => { 
-                if self.is_const {
-                    None
-                } else {
-                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::GlobalVariableAssign(name.clone()), loc: self.loc})
-                }
-            },
-            Expr::LocalVariableUse(name) => {
-                if self.is_const {
-                    None
-                } else {
-                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::LocalVariableAssign(name.clone()), loc: self.loc})
-                }
-            },
-            Expr::ClosureVariableUse(name) => {
-                if self.is_const {
-                    None
-                } else {
-                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::ClosureVariableAssign(name.clone()), loc: self.loc})
-                }
-            },
-            Expr::NamedMember(lhs, name) => {
-                if self.is_const {
-                    None
-                } else {
-                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(lhs.clone(), lhs.r#type.clone(), name.clone()), loc: self.loc})
-                }
-            },
-            Expr::DynamicMember(outer, inner) => {
-                if self.is_const {
-                    None
-                } else {
-                    Some(TypedLValueExpr{r#type: self.r#type.clone(), expr: LValueExpr::DynamicMemberAssign(outer.clone(), outer.r#type.clone(), inner.clone()), loc: self.loc})
-                }
-            },
-            Expr::Parens(inner) => inner.as_l_value(),
-            Expr::FreeDowncast(inner) => inner.as_l_value(),
-            _ => None,
-        }
-    }
+    pub fn type_is_const(&self) -> bool {
+        self.r#type.mutability == Mutability::Const
+    }    
 }
 
 /// An l value expression

@@ -6,8 +6,20 @@ export fn __Option_unwrap<T: __struct T>(x: __Option<T>) -> T {
     }
 }
 
+export fn __Option_unwrapMut<T: __struct T>(x: mut __Option<T>) -> mut T {
+    if (x == __Null) {
+        __trap()
+    } else {
+        x as mut __Ptr as mut T
+    }
+}
+
 export fn __Some_unwrap<T: __struct T>(x: __Some<T>) -> T {
     x as __Ptr as T
+}
+
+export fn __Some_unwrapMut<T: __struct T>(x: mut __Some<T>) -> mut T {
+    x as mut __Ptr as mut T
 }
 
 export fn __Option_isSome<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
