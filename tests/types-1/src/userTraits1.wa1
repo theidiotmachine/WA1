@@ -1,0 +1,5 @@
+trait TraitOne{
+    fn a() -> Void
+    fn b(x: Int) -> Int
+    mut fn c() -> Int
+}

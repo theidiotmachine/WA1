@@ -149,7 +149,7 @@ impl<'b> Parser<'b> {
         
         (AST{start: start_func_name, global_decls: parser_context.global_decls, global_imports: parser_context.global_imports,
             func_decls: parser_context.func_decls, func_imports: parser_context.func_imports, generic_func_decls: parser_context.generic_func_decls,
-            type_map: parser_context.type_map
+            type_map: parser_context.type_map, trait_map: parser_context.trait_map
         }, parser_context.errors)
     }
 
@@ -603,12 +603,6 @@ impl<'b> Parser<'b> {
                         _ => {}
                     };
                 },
-                /*
-                Keyword::Const => {
-                    let const_decl = self.parse_variable_decl(true, true, false, fake_parser_func_context, parser_context);
-                    init_body.push(const_decl);
-                },
-                */
                 Keyword::Let => {
                     let var_decl = self.parse_variable_decl(true, false, fake_parser_func_context, parser_context);
                     init_body.push(var_decl);
@@ -616,6 +610,7 @@ impl<'b> Parser<'b> {
                 Keyword::UnsafeStruct => self.parse_struct_decl(false, parser_context),
                 Keyword::Alias => self.parse_alias(false, parser_context),
                 Keyword::Type => self.parse_type_decl(false, ParserPhase::MainPhase, parser_context),
+                Keyword::Trait => self.parse_trait_decl(false, parser_context),
                 _ => { parser_context.errors.push(self.unexpected_token_error_raw(next.span, &next.location, "expecting valid statement")); self.skip_next_item(); }
             },
             _ => {

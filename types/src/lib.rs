@@ -212,6 +212,8 @@ pub enum Type {
     ModuleLiteral(String),
     /// __array type
     UnsafeArray(Box<Type>),
+    ///The 'this' type when declaring a trait
+    TraitVariableUsage{name: String}
 }
 
 fn get_mangled_names(types: &Vec<Type>)->String{
@@ -244,7 +246,7 @@ impl Type{
             Type::ObjectLiteral(oles) => oles.iter().any(|ole| ole.1.is_type_variable()),
             Type::UserType{name:_, type_args: ts, inner} => ts.iter().any(|t| t.is_type_variable()) || inner.is_type_variable(),
             Type::Tuple(ts) => ts.iter().any(|t| t.is_type_variable()),
-            Type::VariableUsage{name: _, constraint: _} => true,
+            Type::TraitVariableUsage{name: _} | Type::VariableUsage{name: _, constraint: _} => true,
         }
     }
 
@@ -278,6 +280,7 @@ impl Type{
             Type::UnsafeStruct{name} => format!("!__struct_{}", name),
             Type::Undeclared => format!("!Undeclared"),
             Type::VariableUsage{name, constraint: _} => format!("!var_{}", name),
+            Type::TraitVariableUsage{name} => format!("!trait_{}", name),
             Type::UnsafePtr => format!("!__Ptr"),
             Type::FloatLiteral(n) => format!("!fl_{}", n),
             Type::StringLiteral(n) => format!("!sl_\"{}\"", n),
@@ -311,7 +314,7 @@ impl Type{
                     }
                 })
             },
-            Type::Unknown | Type::VariableUsage{name: _, constraint: _} => PassStyle::Unknown,
+            Type::TraitVariableUsage{name: _} | Type::Unknown | Type::VariableUsage{name: _, constraint: _} => PassStyle::Unknown,
             Type::UnsafeArray(_) | Type::UnsafeStruct{name: _} => PassStyle::Reference,
             Type::UnsafePtr => PassStyle::Reference, //strictly wrong - the pointer is by value, but a pointer is pointing to something 
             Type::UserType{name: _, type_args: _, inner} => inner.get_pass_style()
@@ -351,6 +354,7 @@ impl Display for Type {
             Type::UnsafeStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "Undeclared"),
             Type::VariableUsage{name, constraint: _} => write!(f, "{}", name),
+            Type::TraitVariableUsage{name} => write!(f, "{}", name),
             Type::UnsafePtr => write!(f, "__Ptr"),
             Type::FloatLiteral(n) => write!(f, "{}", n),
             Type::StringLiteral(n) => write!(f, "\"{}\"", n),

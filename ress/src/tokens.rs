@@ -1007,6 +1007,7 @@ pub enum Keyword {
     Switch,
     This,
     Throw,
+    Trait,
     Try,
     TypeOf,
     Var,
@@ -1117,6 +1118,7 @@ impl Keyword {
             "__static" => Keyword::UnsafeStatic,
             "__typeguard" => Keyword::UnsafeTypeGuard,
             "type" => Keyword::Type,
+            "trait"  => Keyword::Trait,
             _ => return None,
         })
     }
@@ -1171,6 +1173,7 @@ impl Keyword {
             Keyword::Switch => "switch",
             Keyword::This => "this",
             Keyword::Throw => "throw",
+            Keyword::Trait => "trait",
             Keyword::Try => "try",
             Keyword::TypeOf => "typeof",
             Keyword::Var => "var",

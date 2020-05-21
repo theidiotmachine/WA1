@@ -86,6 +86,7 @@ impl<'a> Parser<'a> {
                 Keyword::Let => self.parse_global_exports_phase(parser_context),
                 Keyword::Alias => { self.parse_alias(true, parser_context);},
                 Keyword::Type => { self.parse_type_decl(true, ParserPhase::ExportsPhase, parser_context);},
+                Keyword::Trait => { self.parse_trait_decl(true, parser_context);},
                 _ => {},
             },
             _ => {},

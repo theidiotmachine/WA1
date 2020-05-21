@@ -337,7 +337,7 @@ impl<'a> Parser<'a> {
         parser_context.type_map.insert(id.clone(), TypeDecl::Alias{name: id, of: t, export});
     }
 
-
+    ///Parse a `type`, which is WA1 for an encapsulated alias plus member functions.
     pub(crate) fn parse_type_decl(&mut self, 
         export: bool,
         phase: ParserPhase,
@@ -382,13 +382,6 @@ impl<'a> Parser<'a> {
                 type_args: vec![], func_type: FuncType{out_type: FullType::new_const(&inner), in_types: vec![FullType::new_const(&this_type)]}, 
                 mangled_name: String::from("__getInner"), name: String::from("getInner"), privacy: Privacy::Private,
             },
-            /*
-            ,
-            MemberFunc{
-                type_args: vec![], func_type: FuncType{out_type: FullType::new_const(&Type::RealVoid), in_types: vec![FullType::new_mut(&inner)]}, 
-                mangled_name: String::from("__setInner"), name: String::from("setInner"), privacy: Privacy::Private,
-            }
-            */
         ];
         if inner.get_pass_style() == PassStyle::Reference {
             member_funcs.push(
@@ -528,22 +521,6 @@ impl<'a> Parser<'a> {
                                 self.parse_empty_function_call_args(parser_func_context, parser_context);
                                 TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: FullType::new(&inner, Mutability::Mut), loc: loc.clone()}
                             },
-                            /*
-                            "__setInner" => {
-                                let args = self.parse_function_call_args(&None, &vec![inner.clone()], parser_func_context, parser_context);
-                                let o_l_value = this_expr.as_l_value();
-                                match o_l_value {
-                                    None => {
-                                        parser_context.push_err(Error::NotAnLValue(loc.clone()));
-                                        TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc.clone()}
-                                    },
-                                    Some(l_value) => {
-                                        TypedExpr{expr: Expr::Assignment(Box::new(this_expr.clone()), l_value, Box::new(args[0].clone())), 
-                                            r#type: FullType::new_const(&Type::RealVoid), loc: loc.clone()}
-                                    }
-                                }
-                            },
-                            */
                             _ => {
                                 self.parse_member_function_call(this_expr, &type_args, &member_func, parser_func_context, parser_context)
                             }
@@ -557,5 +534,62 @@ impl<'a> Parser<'a> {
             },
             _ => unreachable!()
         }        
+    }
+
+    pub (crate) fn parse_trait_decl(&mut self, 
+        export: bool,
+        parser_context: &mut ParserContext,
+    ) -> () {
+        self.skip_next_item();
+        let next = self.peek_next_item();
+        let id = expect_ident!(next, parser_context, "trait must have name");
+        self.skip_next_item();
+     
+        let mut member_funcs = vec![];
+
+        expect_punct!(self, parser_context, Punct::OpenBrace);
+        
+        let mut next = self.peek_next_item();
+        let mut token = &next.token;
+        let this_type = Type::TraitVariableUsage{name: id.clone()};
+        while !token.matches_punct(Punct::CloseBrace) {
+            if token.is_eof() {
+                parser_context.push_err(Error::UnexpectedEoF(next.location.clone(), String::from("expecting '}'")));
+                break;
+            }
+
+            match token {
+                Token::Keyword(Keyword::Fn) => {
+                    let mf = self.parse_trait_func_decl_header(&FullType::new_const(&this_type), parser_context);
+                    member_funcs.push(mf);
+                },
+                Token::Keyword(Keyword::Mut) => {
+                    self.skip_next_item();
+                    next = self.peek_next_item();
+                    token = &next.token;
+                    match token {
+                        Token::Keyword(Keyword::Fn) => {
+                            let mf = self.parse_trait_func_decl_header(&FullType::new_mut(&this_type), parser_context);
+                            member_funcs.push(mf);
+                        },
+                        _ => {
+                            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
+                            self.skip_next_item();
+                        }
+                    }
+                },
+                _ => {
+                    parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
+                    self.skip_next_item();
+                }
+            }
+
+            next = self.peek_next_item();
+            token = &next.token;
+        }
+
+        self.skip_next_item();
+
+        parser_context.trait_map.insert(id.clone(), TraitDecl{name: id, export, member_funcs});
     }
 }

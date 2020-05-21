@@ -5,6 +5,10 @@
     },
     "source_files": [
         {
+            "file_name": "userTraits1.wa1",
+            "is_unsafe": true
+        },
+        {
             "file_name": "userTypes.wa1",
             "is_unsafe": true
         },
