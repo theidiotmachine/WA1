@@ -317,6 +317,76 @@ impl Type{
             Type::UserType{name: _, type_args: _, inner} => inner.get_pass_style()
         }
     }
+
+    pub fn get_type_name(&self) -> String{
+        match self {
+            Type::Any => String::from("Any"),
+            Type::Array(_) => String::from("Array"),
+            Type::Bool => String::from("Bool"),
+            Type::FakeVoid => String::from("FakeVoid"),
+            Type::FloatLiteral(_) => String::from("FloatLiteral"),
+            Type::Func{func_type} => {
+                let in_names: Vec<String> = func_type.in_types.iter().map(|x| x.r#type.get_type_name()).collect();
+                let out_name = func_type.out_type.r#type.get_type_name();
+                format!("Fn ({}) -> {}", in_names.join(", "), out_name)
+            },
+            Type::Int(_, _) => String::from("Int"),
+            Type::Never => String::from("Never"),
+            Type::Number => String::from("Number"),
+            Type::ModuleLiteral(_) => String::from("ModuleLiteral"),
+            Type::ObjectLiteral(_) => String::from("ObjectLiteral"),
+            Type::Option(_) => String::from("Option"),
+            Type::RealVoid => String::from("Void"),
+            Type::Some(_) => String::from("Some"),
+            Type::String => String::from("String"),
+            Type::StringLiteral(_) => String::from("StringLiteral"),
+            Type::Tuple(_) => String::from("Tuple"),
+            Type::TypeLiteral(_) => String::from("TypeLiteral"),
+            Type::Undeclared => String::from("Undeclared"),
+            Type::Unknown => String::from("Unknown"),
+            Type::UnsafeArray(_) => String::from("__Array"),
+            Type::UnsafeNull => String::from("__Null"),
+            Type::UnsafeOption(_) => String::from("__Option"),
+            Type::UnsafePtr => String::from("__Ptr"),
+            Type::UnsafeSome(_) => String::from("__Some"),
+            Type::UnsafeStruct{name} => name.clone(),
+            Type::UserType{name, type_args: _, inner: _} => name.clone(),
+            Type::VariableUsage{name, constraint: _} => name.clone(),
+        }
+    }
+
+    pub fn get_type_args(&self) -> Vec<Type> {
+        match self {
+            Type::Any => vec![],
+            Type::Array(inner) => vec![(**inner).clone()],
+            Type::Bool => vec![],
+            Type::FakeVoid => vec![],
+            Type::FloatLiteral(_) => vec![],
+            Type::Func{func_type: _} => vec![],
+            Type::Int(_, _) => vec![],
+            Type::ModuleLiteral(_) => vec![],
+            Type::Never => vec![],
+            Type::Number => vec![], 
+            Type::ObjectLiteral(_) => vec![], 
+            Type::Option(inner) => vec![(**inner).clone()], 
+            Type::RealVoid => vec![], 
+            Type::Some(inner) => vec![(**inner).clone()], 
+            Type::String => vec![],
+            Type::StringLiteral(_) => vec![],
+            Type::Tuple(inner) => inner.clone(),
+            Type::TypeLiteral(_) => vec![],
+            Type::Undeclared => vec![], 
+            Type::Unknown => vec![], 
+            Type::UnsafeArray(inner) => vec![(**inner).clone()], 
+            Type::UnsafeNull => vec![], 
+            Type::UnsafeOption(inner) => vec![(**inner).clone()], 
+            Type::UnsafePtr => vec![], 
+            Type::UnsafeSome(inner) => vec![(**inner).clone()], 
+            Type::UnsafeStruct{name: _} => vec![], 
+            Type::UserType{name: _, type_args, inner: _} => type_args.clone(),
+            Type::VariableUsage{name: _, constraint: _} => vec![],
+        }
+    }
 }
 
 fn display_types(types: &Vec<Type>)->String{

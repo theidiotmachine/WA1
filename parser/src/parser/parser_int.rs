@@ -51,6 +51,10 @@ lazy_static!{
     ];
 }
 
+pub fn get_int_member_funcs(_lower: i128, _upper: i128) -> Vec<MemberFunc> {
+    vec![] //FIXME
+}
+
 impl<'a> Parser<'a> {
     pub (crate) fn parse_int_component(&mut self,
         holding: &TypedExpr,

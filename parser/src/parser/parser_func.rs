@@ -926,6 +926,42 @@ impl<'a> Parser<'a> {
         Some(TypeGuard{branches: branches})
     }
 
+    ///Very simple function for parsing trait member function headers. Does not deal with type args, constructors, anon functions or a bazillion other things.
+    pub (crate) fn parse_trait_func_decl_header(&mut self,
+        this_type: &FullType,
+        parser_context: &mut ParserContext,
+    ) -> TraitMemberFunc {
+        expect_keyword!(self, parser_context, Keyword::Fn);
+
+        let next = self.peek_next_item();
+        let name = expect_ident!(next, parser_context, "trait fn must have name");
+        self.skip_next_item();
+
+        //now get the args
+        let arg_list = self.parse_function_decl_args(&Some(this_type.clone()), parser_context);
+
+        //and the return type
+        let next = self.peek_next_item();
+        let token = &next.token;
+        let return_type = if token.matches_punct(Punct::ThinArrow) {
+            self.skip_next_item();
+            self.parse_full_type(parser_context)
+        } else {
+            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), String::from("Expecting '->'")));
+            self.skip_next_item();
+            FullType::new(&Type::Undeclared, Mutability::Unknown)
+        };
+
+        let mut in_types = vec![];
+        for arg in arg_list {
+            in_types.push(arg.r#type)
+        }
+
+        TraitMemberFunc{
+            name: name.to_string(), func_type: FuncType{out_type: return_type.clone(), in_types: in_types}
+        }
+    }
+
     ///The core of the function parsing code.
     fn parse_func_decl_internal(&mut self,
         export: bool,
@@ -1031,7 +1067,7 @@ impl<'a> Parser<'a> {
         let mut func_decl = FuncDecl{
             name: mangled_name.to_string(), return_type: return_type.clone(), args: arg_list, export, generic_impl: generic, type_guard: type_guard, member_func: this_type.is_some(),
         };
-
+        
         //now parse the body if we need to
         let func = if generic || phase == ParserPhase::MainPhase{
             self.parse_func_body_internal(&mut func_decl, this_type, parser_context)

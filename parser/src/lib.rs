@@ -377,6 +377,8 @@ struct ParserContext {
     pub generic_func_impls: HashSet<String>,
     pub errors: Vec<Error>,
     pub type_map: HashMap<String, TypeDecl>,
+    pub trait_map: HashMap<String, TraitDecl>,
+    pub trait_impl_map: HashMap<(String, String), TraitImpl>,
     pub import_namespace_map: HashMap<String, String>,
     pub unsafe_parse_mode: UnsafeParseMode,
     pub file_name: String,
@@ -404,6 +406,8 @@ impl ParserContext {
             generic_func_impls: HashSet::new(),
             errors: vec![],
             type_map: HashMap::new(),
+            trait_map: HashMap::new(),
+            trait_impl_map: HashMap::new(),
             import_namespace_map: HashMap::new(),
             unsafe_parse_mode: unsafe_parse_mode,
             file_name: file_name.clone(),
@@ -667,10 +671,10 @@ impl ParserContext {
         self.type_map.get(name).cloned()
     }
 
-    fn append_member_func(&mut self, name: &String, mf: &MemberFunc) -> () {
-        let td = self.type_map.get_mut(name).unwrap();
+    fn append_type_decl_member_func(&mut self, type_name: &String, mf: &MemberFunc) -> () {
+        let td = self.type_map.get_mut(type_name).unwrap();
         match td {
-            TypeDecl::Type{name: _, inner: _, type_args: _, export: _, member_funcs, constructor: _, under_construction: true} => {
+            TypeDecl::Type{name: _, inner: _, type_args: _, export: _, member_funcs, constructor: _, under_construction: _} => {
                 member_funcs.push(mf.clone());
             },
             _ => unreachable!()

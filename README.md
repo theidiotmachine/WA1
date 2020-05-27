@@ -434,11 +434,12 @@ export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
         1. [x] means subsuming the number code, which is probably a good thing
     1. [x] typescript-style const types, where a = 0 means typeof a == 0
     1. [x] move the bin op types from the ast
-    1. [ ] clean up the cast code
+    1. [x] clean up the cast code
     1. [ ] bool literals
     1. [ ] check __Option equality
     1. [x] consts properly rolled into the type system (aka the Konst Waaagh)
     1. [x] privacy
+    1. [ ] be honest about int and ptr member functions (currently they are bodged)
 1. Expression based language
     1. [x] blocks return a value
     1. [x] no need for a return statement (but still supported - what is this, scala?)
