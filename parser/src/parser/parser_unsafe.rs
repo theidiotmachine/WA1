@@ -26,6 +26,13 @@ lazy_static!{
     ];
 }
 
+
+
+pub fn get_unsafe_ptr_member_funcs() -> Vec<MemberFunc> {
+    vec![] //FIXME
+}
+
+
 impl<'a> Parser<'a> {
     pub(crate) fn parse_mem_grow(&mut self,    
         parser_func_context: &mut ParserFuncContext,

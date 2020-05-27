@@ -7,7 +7,7 @@ pub mod ast_types;
 
 use expr::{GlobalVariableDecl, GlobalVariableImport};
 use func::{Func, FuncDecl};
-use ast_types::{TypeDecl, TraitDecl};
+use ast_types::{TypeDecl, TraitDecl, TraitImpl};
 use std::collections::HashMap;
 use types::prelude::TypeArg;
 
@@ -50,6 +50,7 @@ pub struct AST {
     pub type_map: HashMap<String, TypeDecl>,
 
     pub trait_map: HashMap<String, TraitDecl>,
+    pub trait_impl_map: HashMap<(String, String), TraitImpl>,
 }
 
 /// The things exported from a compilation unit. Not really part of the AST but very related.

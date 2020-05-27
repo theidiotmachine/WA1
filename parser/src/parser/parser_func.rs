@@ -145,7 +145,7 @@ fn transform_type(t: &Type,
         Type::Any | Type::Bool | Type::FakeVoid | Type::FloatLiteral(_) 
         | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
         | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeNull
-        | Type::UnsafeStruct{name: _} | Type::TraitVariableUsage{name: _}
+        | Type::UnsafeStruct{name: _}
             => t.clone(),
         Type::Array(t) => Type::Array(Box::new(transform_type(t, type_map, loc, parser_context))),
         Type::Func{func_type} => {
@@ -524,7 +524,7 @@ fn deduce_generic_type(
         Type::Any | Type::Bool | Type::FakeVoid | Type::FloatLiteral(_) 
             | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
             | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeNull
-            | Type::UnsafeStruct{name: _} | Type::TraitVariableUsage{name: _}
+            | Type::UnsafeStruct{name: _}
                 => {},
 
         Type::Array(w) => match got{

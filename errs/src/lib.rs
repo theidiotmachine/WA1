@@ -62,6 +62,10 @@ pub enum Error {
     OnlyOneConstructor(SourceLocation),
     EncapsulationFailure(SourceLocation, Type, String),
     UnnecessaryMut(SourceLocation, Type),
+    CantImplementTraitFor(SourceLocation, Type),
+    WrongNumberOfTypeArgs(SourceLocation),
+    UnrecognizedTrait(SourceLocation, String),
+    MemberNotImplemented(SourceLocation, String),
 }
 
 impl Display for Error {
@@ -121,6 +125,10 @@ impl Display for Error {
             Error::OnlyOneConstructor(ref loc) => write!(f, "ERROR {}: only one constructor is supported", loc),
             Error::EncapsulationFailure(ref loc, ref t, ref m) => write!(f, "ERROR {}: not allowed to access member {} of {}", loc, m, t),
             Error::UnnecessaryMut(ref loc, ref t) => write!(f, "WARNING{}: type {} can't be mut, ignoring. Did you mean to mark the variable var?", loc, t),
+            Error::CantImplementTraitFor(ref loc, ref t) => write!(f, "Error{}: type {} can't have a trait implemented for it", loc, t),
+            Error::WrongNumberOfTypeArgs(ref loc) => write!(f, "Error{}: wrong number of type args", loc),
+            Error::UnrecognizedTrait(ref loc, ref name) => write!(f, "ERROR {}: unrecognized trait {}", loc, name),
+            Error::MemberNotImplemented(ref loc, ref name) => write!(f, "ERROR {}: member {} has not been implemented", loc, name),
         }
     }
 }

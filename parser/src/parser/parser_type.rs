@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::Parser;
 use crate::{ParserContext, UnsafeParseMode, ParserPhase, ParserFuncContext};
 
@@ -6,7 +8,78 @@ use ast::prelude::*;
 use types::prelude::*;
 pub use errs::Error;
 use errs::prelude::*;
-use crate::{Commitment, expect_punct, expect_next, expect_ident, check_privacy};
+use crate::{Commitment, expect_punct, expect_next, expect_ident, check_privacy, expect_keyword};
+use crate::parser::parser_int::get_int_member_funcs;
+use crate::parser::parser_unsafe::get_unsafe_ptr_member_funcs;
+
+fn substitute_trait_type(trait_name: &String, this_type: &Type, t: &Type) -> Type {
+    match t {
+        Type::Any | Type::Bool | Type::FakeVoid | Type::FloatLiteral(_) | Type::Int(_,_) | Type::ModuleLiteral(_) | Type::Never | Type::Number 
+            | Type::ObjectLiteral(_) | Type::RealVoid | Type::String | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown |Type::UnsafeNull 
+            | Type::UnsafePtr | Type::UnsafeStruct{name: _}
+            => t.clone(),
+        Type::Array(inner) => Type::Array(Box::new(substitute_trait_type(trait_name, this_type, inner))),
+        Type::Func{func_type} => Type::Func{func_type: Box::new(substitute_trait_func_type(trait_name, this_type, func_type))},
+        Type::Option(inner) => Type::Option(Box::new(substitute_trait_type(trait_name, this_type, inner))),
+        Type::Some(inner) => Type::Some(Box::new(substitute_trait_type(trait_name, this_type, inner))),
+        Type::Tuple(inner) => Type::Tuple(inner.iter().map(|x| substitute_trait_type(trait_name, this_type, &x)).collect()),
+        Type::TypeLiteral(inner) => Type::TypeLiteral(Box::new(FullType::new(&substitute_trait_type(trait_name, this_type, &inner.r#type), inner.mutability))),
+        Type::UnsafeArray(inner) => Type::UnsafeArray(Box::new(substitute_trait_type(trait_name, this_type, inner))),
+        Type::UnsafeOption(inner) => Type::UnsafeOption(Box::new(substitute_trait_type(trait_name, this_type, inner))),
+        Type::UnsafeSome(inner) => Type::UnsafeSome(Box::new(substitute_trait_type(trait_name, this_type, inner))),
+        Type::UserType{name, type_args, inner} => 
+            Type::UserType{name: name.clone(), type_args: type_args.iter().map(|x| substitute_trait_type(trait_name, this_type, &x)).collect(), inner: inner.clone()},
+        Type::VariableUsage{name, constraint: _} => {
+            if name == trait_name {
+                this_type.clone()
+            } else {
+                t.clone()
+            }
+        }
+    }
+}
+
+fn substitute_trait_func_type(trait_name: &String, this_type: &Type, func_type: &FuncType) -> FuncType {
+    let out_type = FullType::new(&substitute_trait_type(trait_name, this_type, &func_type.out_type.r#type), func_type.out_type.mutability);
+    let in_types = func_type.in_types.iter().map(|x| FullType::new(&substitute_trait_type(trait_name, this_type, &x.r#type), x.mutability)).collect();
+    FuncType{out_type, in_types}
+}
+
+pub fn get_member_funcs(t: &Type, type_map: &HashMap<String, TypeDecl>) -> Vec<MemberFunc> {
+    match t {
+        Type::Any => vec![],
+        Type::Array(_) => vec![],
+        Type::Bool => vec![],
+        Type::FakeVoid => vec![],
+        Type::FloatLiteral(_) => vec![],
+        Type::Func{func_type: _} => vec![],
+        Type::Int(lower, upper) => get_int_member_funcs(*lower, *upper),
+        Type::ModuleLiteral(_) => vec![],
+        Type::Never => vec![],
+        Type::Number => vec![],
+        Type::ObjectLiteral(_) => vec![],
+        Type::Option(_) => vec![],
+        Type::RealVoid => vec![],
+        Type::Some(_) => vec![],
+        Type::String => vec![],
+        Type::StringLiteral(_) => vec![],
+        Type::Tuple(_) => vec![],
+        Type::TypeLiteral(_) => vec![],
+        Type::Undeclared => vec![],
+        Type::Unknown => vec![],
+        Type::UnsafeArray(_) => vec![],
+        Type::UnsafeOption(_) => vec![],
+        Type::UnsafeNull => vec![],
+        Type::UnsafePtr => get_unsafe_ptr_member_funcs(),
+        Type::UnsafeSome(_) => vec![],
+        Type::UnsafeStruct{name: _} => vec![],
+        Type::UserType{name, type_args: _, inner: _} => {
+            let type_decl = type_map.get(name).unwrap();
+            type_decl.get_member_funcs()
+        },
+         Type::VariableUsage{name: _, constraint: _} => vec![],
+    }
+}
 
 impl<'a> Parser<'a> {
     pub (crate) fn parse_type_args(&mut self,
@@ -412,7 +485,7 @@ impl<'a> Parser<'a> {
             match token {
                 Token::Keyword(Keyword::Fn) => {
                     let mf = self.parse_member_function_decl(&prefix, &FullType::new_const(&this_type), &type_args, Privacy::Public, export, phase, parser_context);
-                    parser_context.append_member_func(&id, &mf);
+                    parser_context.append_type_decl_member_func(&id, &mf);
                     member_funcs.push(mf);
                 },
                 Token::Keyword(Keyword::Mut) => {
@@ -422,7 +495,7 @@ impl<'a> Parser<'a> {
                     match token {
                         Token::Keyword(Keyword::Fn) => {
                             let mf = self.parse_member_function_decl(&prefix, &FullType::new_mut(&this_type), &type_args, Privacy::Public, export, phase, parser_context);
-                            parser_context.append_member_func(&id, &mf);
+                            parser_context.append_type_decl_member_func(&id, &mf);
                             member_funcs.push(mf);
                         },
                         _ => {
@@ -450,7 +523,7 @@ impl<'a> Parser<'a> {
                     match token {
                         Token::Keyword(Keyword::Fn) => {
                             let mf = self.parse_member_function_decl(&prefix, &FullType::new_const(&this_type), &type_args, Privacy::Private, export, phase, parser_context);
-                            parser_context.append_member_func(&id, &mf);
+                            parser_context.append_type_decl_member_func(&id, &mf);
                             member_funcs.push(mf);
                         },
                         Token::Keyword(Keyword::Mut) => {
@@ -460,7 +533,7 @@ impl<'a> Parser<'a> {
                             match token {
                                 Token::Keyword(Keyword::Fn) => {
                                     let mf = self.parse_member_function_decl(&prefix, &FullType::new_mut(&this_type), &type_args, Privacy::Private, export, phase, parser_context);
-                                    parser_context.append_member_func(&id, &mf);
+                                    parser_context.append_type_decl_member_func(&id, &mf);
                                     member_funcs.push(mf);
                                 },
                                 _ => {
@@ -536,6 +609,7 @@ impl<'a> Parser<'a> {
         }        
     }
 
+    ///parse a `trait`, which is a reduced type class
     pub (crate) fn parse_trait_decl(&mut self, 
         export: bool,
         parser_context: &mut ParserContext,
@@ -548,10 +622,12 @@ impl<'a> Parser<'a> {
         let mut member_funcs = vec![];
 
         expect_punct!(self, parser_context, Punct::OpenBrace);
-        
+
         let mut next = self.peek_next_item();
         let mut token = &next.token;
-        let this_type = Type::TraitVariableUsage{name: id.clone()};
+        let this_type = Type::VariableUsage{name: id.clone(), constraint: TypeConstraint::None};
+        parser_context.push_type_scope(&vec![TypeArg{name: id.clone(), constraint: TypeConstraint::None}]);
+
         while !token.matches_punct(Punct::CloseBrace) {
             if token.is_eof() {
                 parser_context.push_err(Error::UnexpectedEoF(next.location.clone(), String::from("expecting '}'")));
@@ -589,7 +665,140 @@ impl<'a> Parser<'a> {
         }
 
         self.skip_next_item();
+        parser_context.pop_type_scope();
 
         parser_context.trait_map.insert(id.clone(), TraitDecl{name: id, export, member_funcs});
+    }
+
+    pub (crate) fn parse_trait_impl(&mut self, 
+        export: bool,
+        phase: ParserPhase,
+        parser_context: &mut ParserContext,
+    ) -> () {
+        self.skip_next_item();
+        let next = self.peek_next_item();
+        let trait_loc = self.peek_next_location();
+
+        //get the name and the type args
+        let trait_name = expect_ident!(next, parser_context, "trait must be named");
+
+        self.skip_next_item();
+        let next = self.peek_next_item();
+        let token = &next.token;
+        let mut generic = false;
+        let type_args = if token.matches_punct(Punct::LessThan) {
+            let type_args = self.parse_type_decl_args(parser_context);
+            let type_args = parser_context.push_type_scope(&type_args);
+            generic = true;
+            type_args
+        } else {
+            vec![]
+        };
+        
+        expect_keyword!(self, parser_context, Keyword::For);
+
+        //now parse the type we are implementing
+        let loc = self.peek_next_location();
+        let this_type = self.parse_type(parser_context);
+        let type_name = this_type.get_type_name();
+        let type_type_args = this_type.get_type_args();
+        let type_member_funcs = get_member_funcs(&this_type, &parser_context.type_map);
+        match &this_type {
+            Type::UserType{name:_, type_args: _, inner: _} => {},
+            _ => {
+                parser_context.push_err(Error::CantImplementTraitFor(loc, this_type.clone()));
+            }
+        }
+        
+        //ok, now get the expected member functions by loading the trait
+        let o_trait_decl = parser_context.trait_map.get(&trait_name);
+        let mut required_member_funcs = match o_trait_decl {
+            Some(trait_decl) => {
+                trait_decl.member_funcs.iter().map(|x| {
+                    TraitMemberFunc{name: x.name.clone(), func_type: substitute_trait_func_type(&trait_name, &this_type, &x.func_type)}
+                }).collect()
+            },
+            None => {
+                parser_context.push_err(Error::UnrecognizedTrait(trait_loc, trait_name.clone()));
+                vec![]
+            }
+        };
+
+        //right now these have to match
+        if type_type_args.len() != type_args.len() {
+            parser_context.push_err(Error::WrongNumberOfTypeArgs(loc));
+        }
+
+        //filter out what the type gives us for free (yes this is O(n^2))
+        for tmf in type_member_funcs {
+            required_member_funcs.retain(|x| {
+                x.name != tmf.name && x.func_type.out_type != tmf.func_type.out_type && x.func_type.in_types != tmf.func_type.in_types
+            });
+        }
+
+        let mut member_funcs = vec![];
+
+        expect_punct!(self, parser_context, Punct::OpenBrace);
+
+        let prefix = format!("!{}__!{}", trait_name, type_name);
+
+        let mut next = self.peek_next_item();
+        let mut token = &next.token;
+        while !token.matches_punct(Punct::CloseBrace) {
+            if token.is_eof() {
+                parser_context.push_err(Error::UnexpectedEoF(next.location.clone(), String::from("expecting '}'")));
+                break;
+            }
+
+            match token {
+                Token::Keyword(Keyword::Fn) => {
+                    let mf = self.parse_member_function_decl(&prefix, &FullType::new_const(&this_type), &type_args, Privacy::Public, export, phase, parser_context);
+                    required_member_funcs.retain(|x| {
+                        x.name != mf.name && x.func_type.out_type != mf.func_type.out_type && x.func_type.in_types != mf.func_type.in_types
+                    });
+                    parser_context.append_type_decl_member_func(&type_name, &mf);
+                    member_funcs.push(mf);
+                },
+                Token::Keyword(Keyword::Mut) => {
+                    self.skip_next_item();
+                    next = self.peek_next_item();
+                    token = &next.token;
+                    match token {
+                        Token::Keyword(Keyword::Fn) => {
+                            let mf = self.parse_member_function_decl(&prefix, &FullType::new_mut(&this_type), &type_args, Privacy::Public, export, phase, parser_context);
+                            required_member_funcs.retain(|x| {
+                                x.name != mf.name && x.func_type.out_type != mf.func_type.out_type && x.func_type.in_types != mf.func_type.in_types
+                            });
+                            parser_context.append_type_decl_member_func(&type_name, &mf);
+                            member_funcs.push(mf);
+                        },
+                        _ => {
+                            parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
+                            self.skip_next_item();
+                        }
+                    }
+                },
+                _ => {
+                    parser_context.push_err(Error::UnexpectedToken(next.location.clone(), token.to_string()));
+                    self.skip_next_item();
+                }
+            }
+
+            next = self.peek_next_item();
+            token = &next.token;
+        }
+
+        if generic {
+            parser_context.pop_type_scope();
+        }
+
+        self.skip_next_item();
+
+        //now check we have everything
+        for rmf in required_member_funcs {
+            parser_context.push_err(Error::MemberNotImplemented(loc.clone(), rmf.name.clone()));
+        }
+
+        parser_context.trait_impl_map.insert((type_name, trait_name.clone()), TraitImpl{trait_name, for_type: this_type, export, member_funcs});
     }
 }

@@ -1,5 +1,20 @@
 trait TraitOne{
     fn a() -> Void
     fn b(x: Int) -> Int
-    mut fn c() -> Int
+    mut fn c() -> TraitOne
+}
+
+type TypeOne = Int{
+    constructor(x: Int) => x
+
+    fn a() -> Void {}
+}
+
+implement TraitOne for TypeOne {
+    fn b(x: Int) -> Int {
+        this.getInner() + x
+    }
+    mut fn c() -> TypeOne {
+        new TypeOne(this.getInner() * 2)  
+    }
 }

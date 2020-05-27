@@ -149,7 +149,7 @@ impl<'b> Parser<'b> {
         
         (AST{start: start_func_name, global_decls: parser_context.global_decls, global_imports: parser_context.global_imports,
             func_decls: parser_context.func_decls, func_imports: parser_context.func_imports, generic_func_decls: parser_context.generic_func_decls,
-            type_map: parser_context.type_map, trait_map: parser_context.trait_map
+            type_map: parser_context.type_map, trait_map: parser_context.trait_map, trait_impl_map: parser_context.trait_impl_map
         }, parser_context.errors)
     }
 
@@ -492,6 +492,9 @@ impl<'b> Parser<'b> {
                 },
                 Keyword::UnsafeStruct => self.parse_struct_decl(true, parser_context),
                 Keyword::Alias => self.parse_alias(true, parser_context),
+                Keyword::Trait => self.parse_trait_decl(true, parser_context),
+                Keyword::Type => self.parse_trait_decl(true, parser_context),
+                Keyword::Implement => self.parse_trait_impl(true, ParserPhase::MainPhase, parser_context),
                 _ => parser_context.errors.push(Error::UnexpectedToken(next.location.clone(), String::from("Can only export functions, variables, or types")))
             },
             _ => parser_context.errors.push(Error::UnexpectedToken(next.location.clone(), String::from("Can only export functions, variables, or types")))
@@ -611,6 +614,7 @@ impl<'b> Parser<'b> {
                 Keyword::Alias => self.parse_alias(false, parser_context),
                 Keyword::Type => self.parse_type_decl(false, ParserPhase::MainPhase, parser_context),
                 Keyword::Trait => self.parse_trait_decl(false, parser_context),
+                Keyword::Implement => self.parse_trait_impl(false, ParserPhase::MainPhase, parser_context),
                 _ => { parser_context.errors.push(self.unexpected_token_error_raw(next.span, &next.location, "expecting valid statement")); self.skip_next_item(); }
             },
             _ => {

@@ -158,6 +158,7 @@ impl<'a> Tokenizer<'a> {
             8 if ident == b"continue" => Some(RawToken::Keyword(Keyword::Continue)),
             8 if ident == b"debugger" => Some(RawToken::Keyword(Keyword::Debugger)),
             9 if ident == b"Undefined" => Some(RawToken::Keyword(Keyword::Undefined)),
+            9 if ident == b"implement" => Some(RawToken::Keyword(Keyword::Implement)),
             9 if ident == b"interface" => Some(RawToken::Keyword(Keyword::Interface)),
             9 if ident == b"protected" => Some(RawToken::Keyword(Keyword::Protected)),
             10 if ident == b"instanceof" => Some(RawToken::Keyword(Keyword::InstanceOf)),
