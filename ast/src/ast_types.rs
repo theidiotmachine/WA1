@@ -10,13 +10,17 @@ pub mod prelude {
 pub struct MemberFunc{
     pub type_args: Vec<TypeArg>,
     pub func_type: FuncType,
+    ///This is the full name with the type prefix in front of it.
     pub mangled_name: String,
+    ///This is the name you would type.
     pub name: String,
     pub privacy: Privacy,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraitMemberFunc{
+    pub trait_name: String,
+    pub type_args: Vec<TypeArg>,
     pub func_type: FuncType,
     pub name: String,
 }

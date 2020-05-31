@@ -47,6 +47,7 @@ pub use errs::prelude::*;
 use crate::tree_transform::{Transform, transform_expr, transform_lvalue_expr, transform_typed_expr, transform_func_decl};
 
 use crate::{expect_keyword, expect_next, expect_ident, expect_punct, cast_typed_expr, generic_unwrap, generic_wrap, expect_semicolon};
+use crate::parser::parser_type::{matches_type_constraint, get_runtime_type_for_generic, substitute_trait_func_type};
 
 struct SimpleErrRecorder{
     errs: Vec<Error>
@@ -135,6 +136,17 @@ fn transform_full_types(ts: &Vec<FullType>,
     out
 }
 
+fn transform_func_type(func_type: &FuncType,
+    type_map: &HashMap<String, Type>,
+    loc: &SourceLocation,
+    parser_context: &mut dyn ErrRecorder,
+) -> FuncType {
+    FuncType{
+        out_type: FullType::new(&transform_type(&func_type.out_type.r#type, type_map, loc, parser_context), func_type.out_type.mutability),
+        in_types: transform_full_types(&func_type.in_types, type_map, loc, parser_context)
+    }
+}
+
 /// Substitute all type variables for their concrete values
 fn transform_type(t: &Type,
     type_map: &HashMap<String, Type>,
@@ -149,10 +161,7 @@ fn transform_type(t: &Type,
             => t.clone(),
         Type::Array(t) => Type::Array(Box::new(transform_type(t, type_map, loc, parser_context))),
         Type::Func{func_type} => {
-            Type::Func{func_type: Box::new(FuncType{
-                out_type: FullType::new(&transform_type(&func_type.out_type.r#type, type_map, loc, parser_context), func_type.out_type.mutability),
-                in_types: transform_full_types(&func_type.in_types, type_map, loc, parser_context)
-            })}
+            Type::Func{func_type: Box::new(transform_func_type(func_type, type_map, loc, parser_context))}
         },
         Type::ObjectLiteral(oles) => {
             Type::ObjectLiteral(oles.iter().map(|(k, v)| (k.clone(), transform_type(&v, type_map, loc, parser_context))).collect())
@@ -265,8 +274,9 @@ fn generate_generic_func_call(
     //runtime types are the actual types that we use with our generic function.
     let mut runtime_type_args = vec![];
     let mut mangled_type_names = vec![];
+    idx = 0;
     for resolved_type in resolved_types {
-        let o_runtime_type = get_runtime_type_for_generic(&resolved_type);
+        let o_runtime_type = get_runtime_type_for_generic(&resolved_type, &generic_func.type_args[idx].constraint, parser_context);
         match o_runtime_type {
             Some(runtime_type) => {
                 mangled_type_names.push(runtime_type.get_mangled_name());
@@ -280,6 +290,7 @@ fn generate_generic_func_call(
                 mangled_type_names.push(Type::Undeclared.get_mangled_name());
             }
         }
+        idx += 1;
     }
 
     let mut runtime_type_map: HashMap<String, Type> = HashMap::new();
@@ -312,7 +323,7 @@ fn generate_generic_func_call(
     generic_unwrap(&resolved_func_decl.return_type, Box::new(runtime_call), parser_context)
 }
 
-///Given a set of type arguments that have deduced from a set of function arguments, check them, and generate
+///Given a set of type arguments that have been deduced from a set of function arguments, check them, and generate
 /// a function call.
 fn generate_generic_func_call_deduced_types(
     this_expr: &Option<TypedExpr>,
@@ -335,7 +346,7 @@ fn generate_generic_func_call_deduced_types(
             parser_context.push_err(Error::FailedGenericDeduction(loc.clone(), type_arg.name.clone(), Type::Undeclared));
         }
 
-        if !matches_type_constraint(resolved_type, &(generic_func.type_args[idx].constraint)) {
+        if !matches_type_constraint(resolved_type, &(generic_func.type_args[idx].constraint), parser_context) {
             parser_context.push_err(Error::FailedTypeArgConstraint(loc.clone()));
         }
 
@@ -361,6 +372,22 @@ fn generate_generic_func_call_deduced_types(
     generate_generic_func_call(func_name, generic_func, args, &resolved_types, &resolved_func_decl, loc, parser_context)
 }
 
+fn generate_specific_func_call(
+    this_expr: &Option<TypedExpr>,
+    func_name: &String,
+    func_decl: &FuncDecl,
+    args: &Vec<TypedExpr>,
+    loc: &SourceLocation,
+) -> TypedExpr {
+    let func_return_type = func_decl.return_type.clone();
+    let loc = SourceLocation::new(loc.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(loc.end.clone()));
+    let mut this_args = args.clone();
+    if this_expr.is_some() {
+        this_args.insert(0, this_expr.as_ref().unwrap().clone());
+    }
+    TypedExpr{expr: Expr::StaticFuncCall(func_name.clone(), func_decl.clone(), this_args.clone()), r#type: func_return_type, loc: loc}
+}
+
 struct GenericFuncTypeTransformer<'a>{
     pub type_map: HashMap<String, Type>,
     pub parser_context: &'a mut ParserContext
@@ -377,36 +404,80 @@ impl<'a> Transform for GenericFuncTypeTransformer<'a>{
         let new_type = transform_type(&typed_expr.r#type.r#type, &self.type_map, &typed_expr.loc, parser_context);
         Some(TypedExpr{expr: transform_expr(&typed_expr.expr, self, &typed_expr.loc, parser_context), loc: typed_expr.loc, r#type: FullType::new(&new_type, typed_expr.r#type.mutability)})
     }
-    fn transform_expr(&mut self, expr: &Expr, loc: &SourceLocation, parser_context: &mut dyn ErrRecorder) -> Option<Expr> {
+    fn transform_expr(&mut self, expr: &Expr, loc: &SourceLocation, err_recorder: &mut dyn ErrRecorder) -> Option<Expr> {
         match expr {
             Expr::SizeOf(t) => {
-                let new_type = transform_type(&t, &self.type_map, loc, parser_context);
+                let new_type = transform_type(&t, &self.type_map, loc, err_recorder);
                 Some(Expr::SizeOf(new_type))
             },
             Expr::TypeLiteral(t) => {
-                let new_type = transform_type(&t.r#type, &self.type_map, loc, parser_context);
+                let new_type = transform_type(&t.r#type, &self.type_map, loc, err_recorder);
                 Some(Expr::TypeLiteral(FullType::new(&new_type, t.mutability)))
             },
             Expr::VariableInit{internal_name, init} => {
                 Some(Expr::VariableInit{
                     internal_name: internal_name.clone(),
-                    init: Box::new(init.as_ref().as_ref().map(|te| transform_typed_expr(&te, self, parser_context))),
+                    init: Box::new(init.as_ref().as_ref().map(|te| transform_typed_expr(&te, self, err_recorder))),
                 })
             },
             Expr::UnresolvedGenericFuncCall{name, unresolved_func_decl, args, unresolved_types} => {
                 let generic_func = self.parser_context.get_generic_fn_from_generics(name).unwrap();
                 let mut resolved_args = vec![];
                 for arg in args {
-                    resolved_args.push(transform_typed_expr(&arg, self, parser_context));
+                    resolved_args.push(transform_typed_expr(&arg, self, err_recorder));
                 }
                 let mut resolved_types = vec![];
                 for unresolved_type in unresolved_types {
-                    resolved_types.push(transform_type(&unresolved_type, &self.type_map, loc, parser_context));
+                    resolved_types.push(transform_type(&unresolved_type, &self.type_map, loc, err_recorder));
                 }
-                let resolved_func_decl = transform_func_decl(&unresolved_func_decl, self, loc, parser_context);
+                let resolved_func_decl = transform_func_decl(&unresolved_func_decl, self, loc, err_recorder);
                 Some(generate_generic_func_call(name, &generic_func, resolved_args, &resolved_types, &resolved_func_decl,
                     loc, self.parser_context
                 ).expr)
+            },
+            Expr::TraitMemberFuncCall{trait_member_func, this_expr, args} => {
+                let resolved_this_expr = transform_typed_expr(&this_expr, self, err_recorder);
+
+                let mut resolved_args = vec![];
+                for arg in args {
+                    resolved_args.push(transform_typed_expr(&arg, self, err_recorder));
+                }
+
+                if resolved_this_expr.r#type.r#type.is_type_variable() {
+                    let resolved_func_type = transform_func_type(&trait_member_func.func_type, &self.type_map, loc, err_recorder);
+                    
+                    let resolved_trait_member_func = TraitMemberFunc{
+                        trait_name: trait_member_func.trait_name.clone(),
+                        name: trait_member_func.name.clone(),
+                        func_type: resolved_func_type,
+                        type_args: trait_member_func.type_args.clone()
+                    };
+                    Some(Expr::TraitMemberFuncCall{
+                        this_expr: Box::new(resolved_this_expr),
+                        args: resolved_args,
+                        trait_member_func: resolved_trait_member_func
+                    })
+                } else {
+                    //ok we know the type of 'this' now. So, let's find the member function that corresponds to this trait
+                    let type_decl = self.parser_context.get_type_decl(&resolved_this_expr.r#type.r#type.get_type_name()).unwrap();
+                    let member_funcs = type_decl.get_member_funcs();
+                    let mf = member_funcs.iter().find(|x| x.name == trait_member_func.name).unwrap();
+                    let o_f_d = self.parser_context.get_fn_decl_from_decls(&mf.mangled_name);
+                    match o_f_d {
+                        Some(f_d) => {
+                            Some(generate_specific_func_call(
+                                &Some(resolved_this_expr),
+                                &mf.mangled_name,
+                                &f_d,
+                                &resolved_args,
+                                loc,
+                            ).expr)
+                        },
+                        None => {
+                            panic!()
+                        }
+                    }
+                }
             },
             _ => None
         }
@@ -436,6 +507,7 @@ impl<'a> Transform for GenericFuncTypeTransformer<'a>{
             export: func_decl.export, generic_impl: func_decl.generic_impl, type_guard: o_type_guard, member_func: func_decl.member_func,
         })
     }
+
 }
 
 fn transform_generic_body(
@@ -926,9 +998,10 @@ impl<'a> Parser<'a> {
         Some(TypeGuard{branches: branches})
     }
 
-    ///Very simple function for parsing trait member function headers. Does not deal with type args, constructors, anon functions or a bazillion other things.
+    ///Very simple function for parsing trait member function headers. Does not deal with constructors, anon functions or a bazillion other things.
     pub (crate) fn parse_trait_func_decl_header(&mut self,
         this_type: &FullType,
+        trait_name: &String,
         parser_context: &mut ParserContext,
     ) -> TraitMemberFunc {
         expect_keyword!(self, parser_context, Keyword::Fn);
@@ -937,8 +1010,20 @@ impl<'a> Parser<'a> {
         let name = expect_ident!(next, parser_context, "trait fn must have name");
         self.skip_next_item();
 
+        //type args
+        let next = self.peek_next_item();
+        let token = &next.token;
+        let type_args = if token.matches_punct(Punct::LessThan) {
+            self.parse_type_decl_args(parser_context)
+        } else {
+            vec![]
+        };
+
         //now get the args
-        let arg_list = self.parse_function_decl_args(&Some(this_type.clone()), parser_context);
+        let arg_list = self.parse_function_decl_args(
+            //&None, 
+            &Some(this_type.clone()),
+            parser_context);
 
         //and the return type
         let next = self.peek_next_item();
@@ -958,7 +1043,7 @@ impl<'a> Parser<'a> {
         }
 
         TraitMemberFunc{
-            name: name.to_string(), func_type: FuncType{out_type: return_type.clone(), in_types: in_types}
+            name: name.to_string(), func_type: FuncType{out_type: return_type.clone(), in_types: in_types}, type_args, trait_name: trait_name.clone()
         }
     }
 
@@ -1312,13 +1397,8 @@ impl<'a> Parser<'a> {
         parser_context: &mut ParserContext,
     ) -> TypedExpr {
         let arg_types = func_decl.get_arg_types();
-        let mut args = self.parse_function_call_args(this_expr, &arg_types, parser_func_context, parser_context);
-        let func_return_type = func_decl.return_type.clone();
-        let loc = SourceLocation::new(loc.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(loc.end.clone()));
-        if this_expr.is_some() {
-            args.insert(0, this_expr.as_ref().unwrap().clone());
-        }
-        TypedExpr{expr: Expr::StaticFuncCall(func_name.clone(), func_decl.clone(), args), r#type: func_return_type, loc: loc}
+        let args = self.parse_function_call_args(this_expr, &arg_types, parser_func_context, parser_context);
+        generate_specific_func_call(this_expr, func_name, func_decl, &args, loc)
     }
 
     pub (crate) fn try_parse_func_call(&mut self,
@@ -1390,6 +1470,35 @@ impl<'a> Parser<'a> {
                 (TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc}, type_to_construct)
             }
         }
+    }
+
+    pub (crate) fn parse_trait_member_function_call(&mut self,
+        this_expr: &TypedExpr,
+        trait_member_func: &TraitMemberFunc,
+        loc: &SourceLocation,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> TypedExpr {
+        //first swap out the type of the trait with the current type variable
+        //let mut type_map = HashMap::new();
+        //type_map.insert(trait_member_func.trait_name.clone(), this_expr.r#type.r#type.clone());
+        //let func_type = transform_func_type(&trait_member_func.func_type, &type_map, loc, parser_context);
+        let func_type = substitute_trait_func_type(&trait_member_func.trait_name, &this_expr.r#type.r#type, &trait_member_func.func_type);
+        
+        let arg_types = &func_type.in_types;
+        let out_type = &func_type.out_type;
+
+        let //mut 
+            args = self.parse_function_call_args(
+            //&None, 
+            &Some(this_expr.clone()),
+            arg_types, parser_func_context, parser_context);
+        let func_return_type = out_type.clone();
+        let loc = SourceLocation::new(loc.start.clone(), args.last().map(|a| a.loc.end.clone()).unwrap_or(loc.end.clone()));
+
+        //args.insert(0, this_expr.clone());
+        
+        TypedExpr{expr: Expr::TraitMemberFuncCall{trait_member_func: trait_member_func.clone(), this_expr: Box::new(this_expr.clone()), args}, r#type: func_return_type, loc: loc}
     }
 
     pub (crate) fn parse_member_function_call(&mut self,

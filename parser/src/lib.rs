@@ -397,6 +397,9 @@ struct ParserContext {
 
 impl ParserContext {
     fn new(unsafe_parse_mode: UnsafeParseMode, file_name: &String) -> ParserContext {
+        let mut trait_map = HashMap::new();
+        let trait_name = String::from("IsAStruct");
+        trait_map.insert(trait_name.clone(), TraitDecl{name: trait_name.clone(), member_funcs: vec![], export: true});
         ParserContext{
             global_decls: vec![],
             global_imports: vec![],
@@ -406,7 +409,7 @@ impl ParserContext {
             generic_func_impls: HashSet::new(),
             errors: vec![],
             type_map: HashMap::new(),
-            trait_map: HashMap::new(),
+            trait_map: trait_map,
             trait_impl_map: HashMap::new(),
             import_namespace_map: HashMap::new(),
             unsafe_parse_mode: unsafe_parse_mode,
@@ -451,6 +454,19 @@ impl ParserContext {
         }
         self.type_var_stack.push(TypeScope{var_names: v});
         out
+    }
+
+    ///A trait type scope does not need a unique name: traits are global things. I think?
+    fn push_trait_type_scope(&mut self, arg: &TypeArg) -> () {
+        let mut v: HashMap<String, TypeArg> = match self.type_var_stack.last() {
+            None => HashMap::new(),
+            Some(s) => {
+                s.var_names.clone()
+            } 
+        };
+   
+        v.insert(arg.name.clone(), arg.clone());
+        self.type_var_stack.push(TypeScope{var_names: v});
     }
 
     fn push_empty_type_scope(&mut self) {
@@ -683,6 +699,10 @@ impl ParserContext {
 
     fn get_global_var(&self, name: &String) -> Option<&GlobalVariableDecl> {
         self.global_decls.iter().find(|&x| x.name == *name)
+    }
+
+    fn type_implements_trait(&self, t: &Type, trait_name: &String) -> bool {
+        self.trait_impl_map.contains_key(&(t.get_type_name(), trait_name.clone()))
     }
 }
 

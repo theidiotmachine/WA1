@@ -1,4 +1,4 @@
-export fn __Option_unwrap<T: __struct T>(x: __Option<T>) -> T {
+export fn __Option_unwrap<T: IsAStruct>(x: __Option<T>) -> T {
     if (x == __Null) {
         __trap()
     } else {
@@ -6,7 +6,7 @@ export fn __Option_unwrap<T: __struct T>(x: __Option<T>) -> T {
     }
 }
 
-export fn __Option_unwrapMut<T: __struct T>(x: mut __Option<T>) -> mut T {
+export fn __Option_unwrapMut<T: IsAStruct>(x: mut __Option<T>) -> mut T {
     if (x == __Null) {
         __trap()
     } else {
@@ -14,22 +14,22 @@ export fn __Option_unwrapMut<T: __struct T>(x: mut __Option<T>) -> mut T {
     }
 }
 
-export fn __Some_unwrap<T: __struct T>(x: __Some<T>) -> T {
+export fn __Some_unwrap<T: IsAStruct>(x: __Some<T>) -> T {
     x as __Ptr as T
 }
 
-export fn __Some_unwrapMut<T: __struct T>(x: mut __Some<T>) -> mut T {
+export fn __Some_unwrapMut<T: IsAStruct>(x: mut __Some<T>) -> mut T {
     x as mut __Ptr as mut T
 }
 
-export fn __Option_isSome<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
+export fn __Option_isSome<T: IsAStruct>(x: __Option<T>) -> Bool __typeguard {
     true => __Some<T>
     false => __Null
 } {
     x != __Null
 }
 
-export fn __Option_isNull<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
+export fn __Option_isNull<T: IsAStruct>(x: __Option<T>) -> Bool __typeguard {
     true => __Null
     false => __Some<T>
 } {

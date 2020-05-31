@@ -180,6 +180,11 @@ pub fn transform_expr(
         Expr::StaticFuncCall(s, fd, v) => Expr::StaticFuncCall(s.clone(), transform_func_decl(fd, transform, loc, parser_context),
             transform_typed_exprs(v, transform, parser_context)),
         Expr::TupleLiteral(v) => Expr::TupleLiteral(transform_typed_exprs(v, transform, parser_context)),
+        Expr::TraitMemberFuncCall{trait_member_func, this_expr, args} => Expr::TraitMemberFuncCall{
+            this_expr: Box::new(transform_typed_expr(this_expr, transform, parser_context)),
+            args: transform_typed_exprs(args, transform, parser_context),
+            trait_member_func: trait_member_func.clone()
+        },
         Expr::TypeLiteral(t) => Expr::TypeLiteral(t.clone()),
         Expr::UnaryOperator{expr: te, op} => Expr::UnaryOperator{expr: Box::new(transform_typed_expr(te, transform, parser_context)), op: *op},
         Expr::UnsafeSome(te) => Expr::UnsafeSome(Box::new(transform_typed_expr(te, transform, parser_context))),

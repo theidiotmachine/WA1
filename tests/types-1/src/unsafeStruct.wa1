@@ -36,11 +36,11 @@ let gm: malloc_state = __static malloc_state{
   ],
 };
 
-export fn __Some_unwrap<T: __struct T>(x: __Some<T>) -> T {
+export fn __Some_unwrap<T: IsAStruct>(x: __Some<T>) -> T {
     x as __Ptr as T
 }
 
-fn __Option_isSome<T: __struct T>(x: __Option<T>) -> Bool __typeguard {
+fn __Option_isSome<T: IsAStruct>(x: __Option<T>) -> Bool __typeguard {
     true => __Some<T>
     false => __Null
 } {
