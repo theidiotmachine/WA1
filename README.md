@@ -300,8 +300,6 @@ You use the `new` keyword to construct.
 fn testOne() => {
     let oneOne = new One(3)
     assert.assert(oneOne.add(4) == 7)
-    oneOne.set(11)
-    assert.assert(oneOne.add(4) == 15)
 }
 ```
 
