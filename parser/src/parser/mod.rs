@@ -262,33 +262,6 @@ impl<'b> Parser<'b> {
         )
     }
 
-    fn parse_type_decl_constraint(&mut self, 
-        parser_context: &mut ParserContext
-    ) -> TypeConstraint {
-        let err_out = TypeConstraint::None;
-        let next = expect_next!(self, parser_context, err_out);
-        let loc = next.location.clone();
-        let token = &next.token;
-        match token {
-            Token::Keyword(k) => {
-                match k {
-                    Keyword::UnsafeStruct => {
-                        self.skip_next_item();
-                        TypeConstraint::IsAStruct
-                    },
-                    _ => {
-                        parser_context.push_err(Error::UnrecognizedTypeArgConstraint(loc));
-                        err_out
-                    }
-                }
-            }, 
-            _ => {
-                parser_context.push_err(Error::UnrecognizedTypeArgConstraint(loc));
-                err_out
-            }
-        }
-    }
-
     ///Parse a set of type variables in angle brackets
     fn parse_type_decl_args(&mut self, 
         parser_context: &mut ParserContext
@@ -1342,7 +1315,7 @@ impl<'b> Parser<'b> {
                                                             TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::ModuleLiteral(id.clone())), loc: next.location.clone()}
                                                         } else {
                                                             parser_context.push_err(Error::VariableNotRecognized(next.location.clone(), id.clone()));
-                                                            err_ret
+                                                            return err_ret
                                                         }
                                                     }
                                                 }
@@ -1388,6 +1361,8 @@ impl<'b> Parser<'b> {
                     Type::UnsafeOption(_) => self.parse_unsafe_option_component(&holding, &id, &next.location, parser_func_context, parser_context),
                     Type::UserType{name, type_args, inner: _} => 
                         self.parse_type_member_function_call(&holding, &name, &type_args, &id, &loc, parser_func_context, parser_context),
+                    Type::VariableUsage{name: _, constraint} => 
+                        self.parse_type_variable_member_function_call(&holding, &constraint, &id, &loc, parser_func_context, parser_context),
                     _ => {
                         parser_context.push_err(Error::NoComponents(next.location.clone(), holding.r#type.r#type.clone()));
                         //give up

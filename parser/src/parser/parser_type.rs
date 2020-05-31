@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap};
 
 use crate::Parser;
 use crate::{ParserContext, UnsafeParseMode, ParserPhase, ParserFuncContext};
@@ -11,6 +11,121 @@ use errs::prelude::*;
 use crate::{Commitment, expect_punct, expect_next, expect_ident, check_privacy, expect_keyword};
 use crate::parser::parser_int::get_int_member_funcs;
 use crate::parser::parser_unsafe::get_unsafe_ptr_member_funcs;
+use crate::parser::parser_op::{BinaryOperatorData, Association};
+
+pub (crate) fn matches_type_constraint(
+    arg_type: &Type,
+    constraint: &TypeConstraint,
+    parser_context: &ParserContext,
+) -> bool {
+    match constraint {
+        TypeConstraint::None => true,
+        TypeConstraint::Intersection(inner) => {
+            inner.iter().all(|x| matches_type_constraint(arg_type, x, parser_context))
+        },
+        TypeConstraint::Union(inner) => {
+            inner.iter().any(|x| matches_type_constraint(arg_type, x, parser_context))
+        },
+        TypeConstraint::Trait(t) => {
+            parser_context.type_implements_trait(arg_type, t)
+        }
+    }
+}
+
+fn constraint_has_member_funcs(
+    constraint: &TypeConstraint,
+    parser_context: &ParserContext,
+) -> bool {
+    match constraint{
+        TypeConstraint::None => false,
+        TypeConstraint::Union(inner) => inner.iter().any(|x| constraint_has_member_funcs(x, parser_context)),
+        //this is actually not true, but it's a good first approximation
+        TypeConstraint::Intersection(inner) => inner.iter().all(|x| constraint_has_member_funcs(x, parser_context)),
+        TypeConstraint::Trait(t) => {
+            let o_trait_decl = parser_context.trait_map.get(t);
+            match o_trait_decl {
+                Some(trait_decl) => trait_decl.member_funcs.len() > 0,
+                None => false
+            }
+        }
+    }
+}
+
+fn get_member_funcs_for_type_constraint(
+    constraint: &TypeConstraint,
+    parser_context: &ParserContext,
+) -> Vec<TraitMemberFunc> {
+    match constraint {
+        TypeConstraint::None => vec![],
+        TypeConstraint::Trait(t) => {
+            let o_trait_decl = parser_context.trait_map.get(t);
+            match o_trait_decl {
+                Some(trait_decl) => trait_decl.member_funcs.clone(),
+                None => vec![]
+            }
+        },
+        //ugh this is horrible, it's like O(n^3) or something. I can't use a hashset because I can't figure out how to hash Type though
+        TypeConstraint::Union(ts) => {
+            let mut out: Vec<TraitMemberFunc> = vec![];
+            for t in ts {
+                let mfs = get_member_funcs_for_type_constraint(t, parser_context);
+                for mf in mfs {
+                    if !out.iter().any(|x| *x == mf) {
+                        out.push(mf)
+                    }
+                }
+            }
+            out
+        },
+        //you thought union was bad this is actually worse
+        TypeConstraint::Intersection(ts) => {
+            let mut out: Vec<TraitMemberFunc> = vec![];
+            for t in ts {
+                let mfs = get_member_funcs_for_type_constraint(t, parser_context);
+                for mf in mfs {
+                    let o_idx = out.iter().position(|x| *x == mf);
+                    match o_idx {
+                        Some(idx) => {
+                            out.remove(idx);
+                        },
+                        None => {
+                            out.push(mf)
+                        }
+                    }
+                }
+            }
+            out
+        }
+    }
+}
+
+pub (crate) fn get_runtime_type_for_generic(
+    arg_type: &Type,
+    constraint: &TypeConstraint,
+    parser_context: &ParserContext,
+) -> Option<Type> {
+    if *constraint != TypeConstraint::None && constraint_has_member_funcs(constraint, parser_context) {
+        return Some(arg_type.clone());
+    }
+    match arg_type {
+        Type::Bool => Some(Type::Int(0, U_32_MAX)),
+        Type::FloatLiteral(_) => Some(Type::Number),
+        Type::Int(lower, upper) => {
+            let bittage = get_bittage(*lower, *upper);
+            match bittage{
+                Bittage::S32 | Bittage::U32 => Some(Type::Int(0, U_32_MAX)),
+                Bittage::S64 | Bittage::U64 => Some(Type::Int(0, U_64_MAX)),
+                Bittage::OOR => None
+            }
+        },
+        Type::Number => Some(Type::Number),
+        Type::RealVoid => Some(Type::RealVoid),
+        Type::UnsafeOption(_) => Some(Type::Int(0, PTR_MAX)),
+        Type::UnsafePtr => Some(Type::Int(0, PTR_MAX)),
+        Type::UnsafeStruct{name: _} => Some(Type::Int(0, PTR_MAX)),
+        _ => None
+    }
+}
 
 fn substitute_trait_type(trait_name: &String, this_type: &Type, t: &Type) -> Type {
     match t {
@@ -39,7 +154,7 @@ fn substitute_trait_type(trait_name: &String, this_type: &Type, t: &Type) -> Typ
     }
 }
 
-fn substitute_trait_func_type(trait_name: &String, this_type: &Type, func_type: &FuncType) -> FuncType {
+pub (crate) fn substitute_trait_func_type(trait_name: &String, this_type: &Type, func_type: &FuncType) -> FuncType {
     let out_type = FullType::new(&substitute_trait_type(trait_name, this_type, &func_type.out_type.r#type), func_type.out_type.mutability);
     let in_types = func_type.in_types.iter().map(|x| FullType::new(&substitute_trait_type(trait_name, this_type, &x.r#type), x.mutability)).collect();
     FuncType{out_type, in_types}
@@ -81,7 +196,129 @@ pub fn get_member_funcs(t: &Type, type_map: &HashMap<String, TypeDecl>) -> Vec<M
     }
 }
 
+fn get_type_decl_binary_operator_data<'a>(token: &Token<&'a str>) -> Option<BinaryOperatorData> {
+    match token {
+        Token::Punct(Punct::Pipe) => Some(BinaryOperatorData{precedence: 7, association: Association::Left, is_member: false}),
+        Token::Punct(Punct::Ampersand) => Some(BinaryOperatorData{precedence: 9, association: Association::Left, is_member: false}),
+        _ => None
+    }
+}
+
 impl<'a> Parser<'a> {
+    fn parse_type_decl_constraint_primary(&mut self,
+        parser_context: &mut ParserContext
+    ) -> TypeConstraint {
+        let err_out = TypeConstraint::None;
+        let next = expect_next!(self, parser_context, err_out);
+        let loc = next.location.clone();
+        let token = &next.token;
+        match token {
+            Token::Ident(id) => {
+                let o_trait_decl = parser_context.trait_map.get(&id.to_string());
+                match o_trait_decl {
+                    Some(_) => TypeConstraint::Trait(id.to_string()),
+                    None => {
+                        parser_context.push_err(Error::UnrecognizedTypeArgConstraint(loc));
+                        TypeConstraint::None
+                    },
+                }
+            },
+            _ => {
+                parser_context.push_err(Error::UnrecognizedTypeArgConstraint(loc));
+                err_out
+            }
+        }
+    }
+
+    fn parse_type_decl_binary_op(&mut self, 
+        op: &Token<&str>,
+        lhs: &TypeConstraint, 
+        rhs: &TypeConstraint, 
+        loc: &SourceLocation,
+        parser_context: &mut ParserContext
+    ) -> TypeConstraint {
+        match op{
+            //intersection - has all of the members
+            Token::Punct(Punct::Ampersand) => {
+                TypeConstraint::Intersection(vec![lhs.clone(), rhs.clone()])
+            },
+            //union - has the intersection of members
+            Token::Punct(Punct::Pipe) => {
+                TypeConstraint::Union(vec![lhs.clone(), rhs.clone()])
+            },
+            _ => {
+                parser_context.push_err(Error::UnexpectedToken(loc.clone(), format!("expected | or &")));
+                TypeConstraint::None
+            }
+        }
+    }
+
+    fn parse_type_decl_constraint_1(&mut self, 
+        init_lhs: &TypeConstraint, 
+        min_precedence: i32,
+        parser_context: &mut ParserContext
+    ) -> TypeConstraint {
+        let mut lhs = init_lhs.clone();
+        let lookahead_item = self.peek_next_item();
+        let mut lookahead = lookahead_item.token;
+        let lookahead_loc = lookahead_item.location;
+        
+        // while lookahead is a binary operator whose precedence is >= min_precedence
+        loop {
+            let o_lookahead_data = get_type_decl_binary_operator_data(&lookahead);
+            match o_lookahead_data {
+                None => break,
+                Some(lookahead_data) => {
+                    if lookahead_data.precedence >= min_precedence {
+                        // op := lookahead
+                        let op = lookahead;
+                        let op_precedence = lookahead_data.precedence;
+                        // advance to next token
+                        self.skip_next_item();
+                        // rhs := parse_primary ()
+                        let r_rhs = self.parse_type_decl_constraint_primary(parser_context);
+                        let mut rhs = r_rhs;
+                        // lookahead := peek next token
+                        let lookahead_item = self.peek_next_item();
+                        lookahead = lookahead_item.token;
+                        // while lookahead is a binary operator whose precedence is greater
+                        // than op's, or a right-associative operator
+                        // whose precedence is equal to op's
+                        loop {
+                            let o_lookahead_data = get_type_decl_binary_operator_data(&lookahead);
+                            match o_lookahead_data {
+                                None => break,
+                                Some(lookahead_data) => {
+                                    if lookahead_data.precedence > op_precedence || (lookahead_data.association == Association::Right && lookahead_data.precedence == op_precedence) {
+                                        //rhs := parse_expression_1 (rhs, lookahead's precedence)
+                                        let new_rhs = self.parse_type_decl_constraint_1(&rhs, lookahead_data.precedence, parser_context);
+                                        rhs = new_rhs;
+                                        //lookahead := peek next token
+                                        let lookahead_item = self.peek_next_item();
+                                        lookahead = lookahead_item.token;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }                                
+                        }
+                        lhs = self.parse_type_decl_binary_op(&op, &lhs, &rhs, &lookahead_loc, parser_context);
+                    } else {
+                        break;
+                    }
+                }
+            }
+        };
+        return lhs.clone();
+    }
+
+    pub (crate) fn parse_type_decl_constraint(&mut self, 
+        parser_context: &mut ParserContext
+    ) -> TypeConstraint {
+        let primary = self.parse_type_decl_constraint_primary(parser_context);
+        self.parse_type_decl_constraint_1(&primary, 0, parser_context)
+    }
+
     pub (crate) fn parse_type_args(&mut self,
         type_args: &Vec<TypeArg>,
         parser_context: &mut ParserContext,
@@ -96,7 +333,7 @@ impl<'a> Parser<'a> {
         //parse the explicit types
         while idx < num {
             let arg_type = self.parse_type(parser_context);
-            if !matches_type_constraint(&arg_type, &(type_args[idx].constraint)) {
+            if !matches_type_constraint(&arg_type, &(type_args[idx].constraint), parser_context) {
                 parser_context.push_err(Error::FailedTypeArgConstraint(loc.clone()));
             }
             resolved_types.push(arg_type);
@@ -566,6 +803,28 @@ impl<'a> Parser<'a> {
         parser_context.type_map.insert(id.clone(), TypeDecl::Type{name: id, inner, type_args, export, member_funcs: member_funcs, constructor: constructor, under_construction: false});
     }
 
+    ///Given the constraints on a type variable, parse a member function call.
+    pub (crate) fn parse_type_variable_member_function_call(&mut self, 
+        this_expr: &TypedExpr,
+        constraint: &TypeConstraint,
+        func_name: &String,
+        loc: &SourceLocation,
+        parser_func_context: &mut ParserFuncContext,
+        parser_context: &mut ParserContext,
+    ) -> TypedExpr {
+        let member_funcs = get_member_funcs_for_type_constraint(constraint, parser_context);
+        let o_member_func = member_funcs.iter().find(|&x| x.name == *func_name);
+        match o_member_func {
+            Some(member_func) => {
+                self.parse_trait_member_function_call(this_expr, &member_func, loc, parser_func_context, parser_context)
+            }
+            None => {
+                parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), this_expr.r#type.r#type.clone(), func_name.clone()));
+                TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc.clone()}
+            }
+        }     
+    }
+
     pub (crate) fn parse_type_member_function_call(&mut self, 
         this_expr: &TypedExpr,
         type_name: &String, 
@@ -625,8 +884,8 @@ impl<'a> Parser<'a> {
 
         let mut next = self.peek_next_item();
         let mut token = &next.token;
-        let this_type = Type::VariableUsage{name: id.clone(), constraint: TypeConstraint::None};
-        parser_context.push_type_scope(&vec![TypeArg{name: id.clone(), constraint: TypeConstraint::None}]);
+        let this_type = Type::VariableUsage{name: id.clone(), constraint: TypeConstraint::Trait(id.clone())};
+        parser_context.push_trait_type_scope(&TypeArg{name: id.clone(), constraint: TypeConstraint::Trait(id.clone())});
 
         while !token.matches_punct(Punct::CloseBrace) {
             if token.is_eof() {
@@ -636,7 +895,7 @@ impl<'a> Parser<'a> {
 
             match token {
                 Token::Keyword(Keyword::Fn) => {
-                    let mf = self.parse_trait_func_decl_header(&FullType::new_const(&this_type), parser_context);
+                    let mf = self.parse_trait_func_decl_header(&FullType::new_const(&this_type), &id, parser_context);
                     member_funcs.push(mf);
                 },
                 Token::Keyword(Keyword::Mut) => {
@@ -645,7 +904,7 @@ impl<'a> Parser<'a> {
                     token = &next.token;
                     match token {
                         Token::Keyword(Keyword::Fn) => {
-                            let mf = self.parse_trait_func_decl_header(&FullType::new_mut(&this_type), parser_context);
+                            let mf = self.parse_trait_func_decl_header(&FullType::new_mut(&this_type), &id, parser_context);
                             member_funcs.push(mf);
                         },
                         _ => {
@@ -715,7 +974,12 @@ impl<'a> Parser<'a> {
         let mut required_member_funcs = match o_trait_decl {
             Some(trait_decl) => {
                 trait_decl.member_funcs.iter().map(|x| {
-                    TraitMemberFunc{name: x.name.clone(), func_type: substitute_trait_func_type(&trait_name, &this_type, &x.func_type)}
+                    TraitMemberFunc{
+                        name: x.name.clone(), 
+                        type_args: x.type_args.clone(), 
+                        func_type: substitute_trait_func_type(&trait_name, &this_type, &x.func_type), 
+                        trait_name: x.trait_name.clone()
+                }
                 }).collect()
             },
             None => {

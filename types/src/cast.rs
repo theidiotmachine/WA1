@@ -1,4 +1,3 @@
-use crate::generics::TypeConstraint;
 use crate::{Type, FullType, PassStyle, Mutability};
 use crate::FuncType;
 use crate::{Bittage, get_bittage, PTR_MAX, U_32_MAX, S_32_MAX, S_32_MIN, S_64_MAX, S_64_MIN, U_64_MAX, INT_U_64, INT_U_32, INT_S_64, INT_S_32};
@@ -147,15 +146,30 @@ pub fn try_cast(from: &FullType, to: &FullType, cast_type: CastType) -> TypeCast
             }
         },
 
-        Type::VariableUsage{name: _, constraint} => {
-            match constraint{
-                TypeConstraint::None => TypeCast::NotNeeded,
-                TypeConstraint::IsAStruct => {
-                    try_cast(from, &FullType::new(&Type::UnsafeStruct{name: String::from("")}, to.mutability), cast_type)
+        
+        Type::VariableUsage{name: to_name, constraint: to_constraint} => {
+            if to_constraint.contains_trait(&String::from("IsAStruct")) {
+                try_cast(from, &FullType::new(&Type::UnsafeStruct{name: String::from("")}, to.mutability), cast_type)
+            } else {
+                match from_type {
+                    Type::VariableUsage{name: from_name, constraint: from_constraint} => {
+                        if from_name == to_name {
+                            TypeCast::NotNeeded
+                        } else {
+                            if to_constraint.is_subset_of(from_constraint) {
+                                TypeCast::FreeUpcast(to.clone())
+                            } else {
+                                TypeCast::None
+                            }
+                        }
+                    },
+                    _ => TypeCast::None
                 }
+                
             }
         }
-
+        
+        
         _ => TypeCast::None,
     }
 }

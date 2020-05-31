@@ -1,20 +1,34 @@
+import {*} from "./assert"
+
 trait TraitOne{
     fn a() -> Void
     fn b(x: Int) -> Int
-    mut fn c() -> TraitOne
+    fn c() -> TraitOne
 }
 
 type TypeOne = Int{
     constructor(x: Int) => x
 
     fn a() -> Void {}
+    fn inner() -> Int this.getInner()
 }
 
 implement TraitOne for TypeOne {
     fn b(x: Int) -> Int {
         this.getInner() + x
     }
-    mut fn c() -> TypeOne {
+    fn c() -> TypeOne {
         new TypeOne(this.getInner() * 2)  
     }
+}
+
+fn fa<T: TraitOne>(x: T) -> Void x.a()
+fn fb<T: TraitOne>(x: T) -> Int x.b(1)
+fn fc<T: TraitOne>(x: T) -> T x.c()
+
+fn testOne() -> Void {
+    let x = new TypeOne(8)
+    fa(x)
+    assert.assert(fb(x) == 9)
+    assert.assert(fc(x).inner() == 16)
 }

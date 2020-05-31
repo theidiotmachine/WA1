@@ -195,6 +195,11 @@ impl<'a> Parser<'a> {
 
         parser_context.pop_type_scope();
 
+        //register the fact that this is a struct and so has the IsAStruct trait
+        let trait_name = String::from("IsAStruct");
+        parser_context.trait_impl_map.insert((id.to_string(), trait_name.clone()), TraitImpl{trait_name: trait_name, for_type: Type::UnsafeStruct{name: id.to_string()}, export: true, member_funcs: vec![]});
+
+        //and register the type itself
         parser_context.type_map.insert(id.to_string(), TypeDecl::Struct{struct_type: StructType{members: members}, under_construction: false, export: export, name: id.to_string()});
     }
 

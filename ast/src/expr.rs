@@ -3,6 +3,7 @@ use serde::{Serialize, Deserialize};
 use types::*;
 use crate::func::{FuncObjectCreation, FuncDecl};
 use crate::intrinsic::Intrinsic;
+use crate::ast_types::TraitMemberFunc;
 use errs::prelude::*;
 
 pub mod prelude {
@@ -152,6 +153,8 @@ pub enum Expr {
     MemberFuncCall(Box<TypedExpr>, String, Vec<TypedExpr>),
     /// A generic call that we haven't been able to resolve yet
     UnresolvedGenericFuncCall{name: String, unresolved_func_decl: FuncDecl, args: Vec<TypedExpr>, unresolved_types: Vec<Type>},
+    ///A trait function call
+    TraitMemberFuncCall{trait_member_func: TraitMemberFunc, this_expr: Box<TypedExpr>, args: Vec<TypedExpr>},
     /// Implicit i32 -> f64 cast
     IntToNumber(Box<TypedExpr>),
     /// A free widen of an int. May end up being i32 -> i64

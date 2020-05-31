@@ -309,6 +309,81 @@ Member functions may be private (put the `private` keyword before the `fn`).
 * Private means that you can only call the function in a member function of the same type. This means you can call other instance's private functions.
 * Protected is not yet implemented.
 
+### trait
+
+Traits in WA1 are purely compile-time constructs. They are a set of member functions that a type variable can assert that it supports.
+
+They are declared like this.
+
+```
+trait TraitOne{
+    fn a() -> Void
+    fn b(x: Int) -> Int
+    fn c() -> TraitOne
+}
+```
+
+Note the use of the trait name as a return value. This is completely fine, but traits are not actually types. Instead, the `TraitOne` 
+return type is a generic type variable that will be resolved later.
+
+You use them like this.
+
+```
+//generic function that asserts a type variable conforms to a trait, and calls a function on it
+fn fb<T: TraitOne>(x: T) -> Int x.b(1)
+```
+
+In theory you can specify a set of traits that the type variable supports. We borrow the lovely [union and intersection syntax from
+TypeScript](https://www.typescriptlang.org/docs/handbook/unions-and-intersections.html) for this. So, in a magical world this might work:
+
+```
+fn fb<T: TraitOne & TraitTwo>(x: T) -> Int x.b(1)
+```
+
+This means that the type variable T supports the intersection of `TraitOne` and `TraitTwo`, which means the *union* of their member 
+functions. Likewise the `|` operator is the union of traits, which means the intersection of their member functions. Read the 
+operator as you would a boolean - in the above example `T` has `TraitOne` and `TraitTwo` so it gets both sets.
+
+I say 'magical world' because I haven't written any tests for it so it probably has bugs.
+
+In order to implement a trait, you have to use an `implement` keyword. You don't have to provide all the functions: if the 
+type already implements the functions, just don't include them in the `implement` block.
+
+```
+type TypeOne = Int{
+    constructor(x: Int) => x
+
+    fn a() -> Void {}
+    fn inner() -> Int this.getInner()
+}
+
+implement TraitOne for TypeOne {
+    fn b(x: Int) -> Int {
+        this.getInner() + x
+    }
+    fn c() -> TypeOne {
+        new TypeOne(this.getInner() * 2)  
+    }
+}
+```
+
+I dislike the word `implement`. I think I may switch to `express`.
+
+Then, using them feels like a regular generic function invocation.
+
+```
+fn testOne() -> Void {
+    let x = new TypeOne(8)
+    assert.assert(fb(x) == 9)
+}
+```
+
+These are, of course, inspired by Haskell's type classes and are a little closer to them than Rust or Scala's traits 
+given they are pure compile-time constructs. But they are also obviously much less 
+powerful beasts, for good or for ill. 
+
+They almost certainly don't work in a million weird ways, because I literally just finished typing them, so don't expect happiness. 
+
 ## Type guards
 
 ### User defined
