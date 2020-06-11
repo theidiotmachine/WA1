@@ -310,11 +310,7 @@ impl<'b> Parser<'b> {
         if this_type.is_some() {
             let this_type = this_type.clone().unwrap();
             parser_context.add_var(&String::from("this"), &String::from("this"), &this_type, VariableMutability::Constant);
-            let idx = parser_func_context.local_vars.len();
-            parser_func_context.local_var_map.insert(String::from("this"), idx as u32);
-            parser_func_context.local_vars.push(
-                LocalVar{internal_name: String::from("this"), r#type: this_type, closure_source: false, arg: true, mutability: VariableMutability::Constant}
-            );
+            parser_func_context.add_var(&String::from("this"), &this_type, false, true, VariableMutability::Constant);
         }
         
 
@@ -323,11 +319,7 @@ impl<'b> Parser<'b> {
             parser_context.add_var(&arg.name, &internal_name, &arg.r#type, arg.mutability);
             //todo: constant params
             //todo: default params
-            let idx = parser_func_context.local_vars.len();
-            parser_func_context.local_var_map.insert(internal_name.clone(), idx as u32);
-            parser_func_context.local_vars.push(
-                LocalVar{internal_name: internal_name, r#type: arg.r#type.clone(), closure_source: false, arg: true, mutability: arg.mutability}
-            );
+            parser_func_context.add_var(&internal_name, &arg.r#type, false, true, arg.mutability);
         }
     }
 
@@ -518,6 +510,15 @@ impl<'b> Parser<'b> {
         expect_punct!(self, parser_context, Punct::Equal);
         let mut init = self.parse_expr(parser_func_context, parser_context);
         
+        //if init is temporary, strip that out
+        init = match init.expr {
+            Expr::TemporaryCreation(expr, temporary_name) => {
+                parser_context.forget_temporary(&temporary_name);
+                *expr
+            },
+            _ => init
+        };
+        
         loc.end = init.loc.end.clone();
 
         if var_type.r#type.is_undeclared() {
@@ -541,13 +542,8 @@ impl<'b> Parser<'b> {
         if !global {
             let internal_name = parser_context.get_unique_name(&name);
             parser_context.add_var(&name, &internal_name, &var_type, mutability);
-            let idx = parser_func_context.local_vars.len();
-            parser_func_context.local_vars.push(
-                LocalVar{internal_name: internal_name.clone(), r#type: 
-                    var_type.clone(), closure_source: false, arg: false, mutability: mutability}
-            );
-            parser_func_context.local_var_map.insert(internal_name.clone(), idx as u32);
-            TypedExpr{expr: Expr::VariableInit{internal_name: internal_name.clone(), init: Box::new(Some(init))}, r#type: FullType::new_const(&Type::RealVoid), loc: loc}
+            parser_func_context.add_var(&internal_name, &var_type, false, false, mutability);
+            TypedExpr{expr: Expr::VariableInit{internal_name: internal_name.clone(), init: Box::new(init)}, r#type: FullType::new_const(&Type::RealVoid), loc: loc}
         } else {
             let decl = GlobalVariableDecl{name: name.clone(), r#type: var_type, init: Some(init), export, mutability: mutability};
             parser_context.global_decls.push(decl.clone());
@@ -778,13 +774,9 @@ impl<'b> Parser<'b> {
     ) -> TypedExpr {
         let next = self.peek_next_item();
         let token = &next.token;
-        match &token {
+        parser_context.open_temporary_scope();
+        let out = match &token {
             Token::Keyword(ref k) => match k {
-                /*
-                Keyword::Const => {
-                    self.parse_variable_decl(true, false, false, parser_func_context, parser_context)
-                },
-                */
                 Keyword::Let => {
                     self.parse_variable_decl(false, false, parser_func_context, parser_context)
                 },
@@ -865,7 +857,9 @@ impl<'b> Parser<'b> {
                 expect_semicolon!(self, parser_context);
                 expr
             }
-        }
+        };
+        parser_context.close_temporary_scope(parser_func_context);
+        out
     }
 
     /// Parse an array literal into a Vec.

@@ -318,8 +318,7 @@ fn generate_generic_func_call(
         idx += 1;
     }
 
-    let runtime_call = TypedExpr{expr: Expr::StaticFuncCall(runtime_name.clone(), resolved_func_decl.clone(), runtime_args), 
-        r#type: runtime_func_decl.return_type.clone(), loc: loc.clone()};
+    let runtime_call = generate_specific_func_call(&None, &runtime_name, resolved_func_decl, &runtime_args, loc);
     generic_unwrap(&resolved_func_decl.return_type, Box::new(runtime_call), parser_context)
 }
 
@@ -385,6 +384,7 @@ fn generate_specific_func_call(
     if this_expr.is_some() {
         this_args.insert(0, this_expr.as_ref().unwrap().clone());
     }
+    
     TypedExpr{expr: Expr::StaticFuncCall(func_name.clone(), func_decl.clone(), this_args.clone()), r#type: func_return_type, loc: loc}
 }
 
@@ -417,7 +417,7 @@ impl<'a> Transform for GenericFuncTypeTransformer<'a>{
             Expr::VariableInit{internal_name, init} => {
                 Some(Expr::VariableInit{
                     internal_name: internal_name.clone(),
-                    init: Box::new(init.as_ref().as_ref().map(|te| transform_typed_expr(&te, self, err_recorder))),
+                    init: Box::new(transform_typed_expr(&init, self, err_recorder)),
                 })
             },
             Expr::UnresolvedGenericFuncCall{name, unresolved_func_decl, args, unresolved_types} => {
@@ -465,12 +465,8 @@ impl<'a> Transform for GenericFuncTypeTransformer<'a>{
                     let o_f_d = self.parser_context.get_fn_decl_from_decls(&mf.mangled_name);
                     match o_f_d {
                         Some(f_d) => {
-                            Some(generate_specific_func_call(
-                                &Some(resolved_this_expr),
-                                &mf.mangled_name,
-                                &f_d,
-                                &resolved_args,
-                                loc,
+                            Some(generate_specific_func_call(&Some(resolved_this_expr), &mf.mangled_name, &f_d,
+                                &resolved_args, loc
                             ).expr)
                         },
                         None => {

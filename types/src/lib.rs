@@ -508,7 +508,8 @@ pub fn get_type_from_type_cast(type_cast: &TypeCast, orig_type: &FullType) -> Fu
         TypeCast::None | TypeCast::ConstFail => {
             //if we get a return from get_type_casts_for_function_set it won't have a None
             unreachable!()
-        }
+        },
+        TypeCast::Clone => FullType::new_mut(&orig_type.r#type),
     }
 }
 
@@ -567,7 +568,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &FullType, rhs_type: 
             //this is simple; either rhs can be cast to lhs or it can't
             let type_cast = try_cast(rhs_type, lhs_type, CastType::Implicit);
             let out_rhs_type = match &type_cast{
-                TypeCast::NotNeeded | TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) => lhs_type.clone(),
+                TypeCast::NotNeeded | TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::Clone => lhs_type.clone(),
                 TypeCast::IntToNumberWiden => FullType::new(&Type::Number, rhs_type.mutability),
                 TypeCast::None | TypeCast::ConstFail => {
                     return None;
@@ -584,7 +585,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &FullType, rhs_type: 
                 //if it is, see if the rhs can be cast to the lhs
                 let type_cast = try_cast(rhs_type, lhs_type, CastType::Implicit);
                 let out_rhs_type = match &type_cast{
-                    TypeCast::NotNeeded | TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) => lhs_type.clone(),
+                    TypeCast::NotNeeded | TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::Clone => lhs_type.clone(),
                     TypeCast::IntToNumberWiden => FullType::new(&Type::Number, rhs_type.mutability),
                     TypeCast::None | TypeCast::ConstFail => {
                         return None;
@@ -603,7 +604,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &FullType, rhs_type: 
             match &type_cast{
                 TypeCast::NotNeeded => 
                     Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: FullType::new_const(&Type::Bool)}),
-                TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::IntToNumberWiden => 
+                TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::IntToNumberWiden | TypeCast::Clone => 
                     Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: type_cast, rhs_type: lhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: FullType::new_const(&Type::Bool)}),
                 TypeCast::None | TypeCast::ConstFail => {
                     //now try going the other way
@@ -611,7 +612,7 @@ pub fn get_binary_op_type_cast(op_type: &OpType, lhs_type: &FullType, rhs_type: 
                     match &type_cast{
                         TypeCast::NotNeeded => 
                             Some(BinOpTypeCast{lhs_type: lhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: TypeCast::NotNeeded, out_type: FullType::new_const(&Type::Bool)}),
-                        TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::IntToNumberWiden =>
+                        TypeCast::FreeUpcast(_) | TypeCast::IntWiden(_,_) | TypeCast::IntToNumberWiden | TypeCast::Clone =>
                             Some(BinOpTypeCast{lhs_type: rhs_type.clone(), lhs_type_cast: TypeCast::NotNeeded, rhs_type: rhs_type.clone(), rhs_type_cast: type_cast, out_type: FullType::new_const(&Type::Bool)}),
                         TypeCast::None | TypeCast::ConstFail => None
                     }    

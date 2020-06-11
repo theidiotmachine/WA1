@@ -114,19 +114,6 @@ macro_rules! expect_next {
 }
 
 #[macro_export]
-macro_rules! assert_ident {
-    ($n:ident, $m:expr) => (
-        {
-            let token = $n.token; 
-            match token {
-                Token::Ident(i) => i, 
-                _ => return Err(Error::UnexpectedToken($n.location.clone(), $m.to_string())) 
-            }
-        }
-    )
-}
-
-#[macro_export]
 macro_rules! expect_ident {
     ($next:ident, $parser_context:ident, $message:expr) => (
         {
@@ -183,6 +170,7 @@ fn create_cast(want: &FullType, got: &TypedExpr, cast: &TypeCast) -> Option<Type
         TypeCast::IntToNumberWiden => Some(cast_int_to_number(got, want.mutability)),
         TypeCast::None | TypeCast::ConstFail => None,
         TypeCast::NotNeeded => Some(got.clone()),
+        TypeCast::Clone => panic!()
     }
 }
 
@@ -218,6 +206,7 @@ fn cast_typed_expr(want: &FullType, got: Box<TypedExpr>, cast_type: CastType, pa
             }
             got.as_ref().clone()
         },
+        TypeCast::Clone => panic!(),
     }
 }
 
@@ -389,9 +378,16 @@ struct ParserContext {
     /// Uniqueness counter
     counter: u64,
 
-    /// local variables
+    /// This stack of local variables is used to understand the scoping rules. This is the complete set of
+    /// of local variables in the function stack we are in. Unlike the variables in the ParserFuncContext, the 
+    /// type will mutate depending on guards.
     func_var_stack: Vec<Scope>,
+    /// This stack of local variables is used to understand the scoping rules. This is the complete set of
+    /// of local variables in the block stack we are in. Unlike the variables in the ParserFuncContext, the 
+    /// type will mutate depending on guards. This is how variables shadow each other.
     block_var_stack: Vec<Scope>,
+    /// This set of variables are invisible to the code - they are created to hold temporaries needed by the code.
+    temporaries_var_stack: Vec<Scope>,
 }
 
 
@@ -418,6 +414,7 @@ impl ParserContext {
             counter: 0,
             block_var_stack: Vec::new(),
             func_var_stack: Vec::new(),
+            temporaries_var_stack: Vec::new(),
         }
     }
 
@@ -702,7 +699,50 @@ impl ParserContext {
     }
 
     fn type_implements_trait(&self, t: &Type, trait_name: &String) -> bool {
-        self.trait_impl_map.contains_key(&(t.get_type_name(), trait_name.clone()))
+        //first, has the type been patched with an implementation?
+        if self.trait_impl_map.contains_key(&(t.get_type_name(), trait_name.clone())) {
+            return true;
+        }
+
+        //no, so see if it's a type variable with a constraint
+        match t {
+            //yes it is in which case the constraint may implement the trait
+            Type::VariableUsage{name: _, constraint} => constraint.contains_trait(trait_name),
+            _ => false //give up
+        }
+    }
+
+    /// Create a scope to keep track of any statements created for this statement
+    fn open_temporary_scope(&mut self) -> () {
+        self.temporaries_var_stack.push(Scope::default());
+    }
+
+    /// Copy the temporary scope into the parser func context, so we end up with variables in the AST
+    fn close_temporary_scope(&mut self, parser_func_context: &mut ParserFuncContext) -> () {
+        let scope = self.temporaries_var_stack.pop().unwrap();
+        for (_, sv) in scope.var_names {
+            match sv {
+                ScopedVar::Local{internal_name, mutability, r#type, guard_type: _} => 
+                    parser_func_context.add_var(&internal_name, &r#type, false, false, mutability),
+                _ => unreachable!()
+            }
+        }
+    }
+
+    /*
+    fn create_temporary(&mut self, r#type: &FullType) -> String {
+        let out = self.counter;
+        self.counter += 1;
+        let scope = self.temporaries_var_stack.last_mut().unwrap();
+        let internal_var_name = format!("#{}", out);
+        scope.var_names.insert(internal_var_name.clone(), ScopedVar::Local{internal_name: internal_var_name.clone(), r#type: r#type.clone(), guard_type: None, mutability: VariableMutability::Constant});
+        internal_var_name
+    }
+    */
+
+    fn forget_temporary(&mut self, temporary_name: &String) -> () {
+        let scope = self.temporaries_var_stack.last_mut().unwrap();
+        scope.var_names.remove(temporary_name);
     }
 }
 
@@ -714,6 +754,7 @@ impl ErrRecorder for ParserContext {
 
 #[derive(Debug)]
 struct ParserFuncContext{
+    /// These are the local variables that are used to create the AST.
     pub local_vars: Vec<LocalVar>,
     pub local_var_map: HashMap<String, u32>,
     pub closure: Vec<ClosureRef>,
@@ -735,6 +776,14 @@ impl ParserFuncContext{
             in_iteration: false,
             this_type: this_type.clone(),
         }
+    }
+
+    pub fn add_var(&mut self, internal_name: &String, var_type: &FullType, closure_source: bool, arg: bool, mutability: VariableMutability) -> () {
+        let idx = self.local_vars.len();
+        self.local_var_map.insert(internal_name.clone(), idx as u32);
+        self.local_vars.push(
+            LocalVar{internal_name: internal_name.clone(), r#type: var_type.clone(), closure_source: closure_source, arg: arg, mutability: mutability}
+        );
     }
 }
 

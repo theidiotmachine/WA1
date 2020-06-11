@@ -59,7 +59,8 @@ impl TypeConstraint{
     }
 
     ///Whether this is a subset of another trait. This is super expensive at the moment. I need some CS-hammer to optimise it. It basically
-    /// goes through every combination of traits possible that this constraint conforms to, and checks that they are 
+    /// goes through every combination of traits possible that this constraint conforms to, and checks that they are conformed to in the 
+    /// other
     pub fn is_subset_of(&self, other: &TypeConstraint) -> bool {
         //first get all the contained traits of this
         let self_contained_traits = self.get_all_contained_traits();

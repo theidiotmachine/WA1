@@ -910,16 +910,11 @@ pub(crate) fn compile_expr(
 
         Expr::VariableInit{internal_name, init} => {
             //first,  run the init expression
-            match &**init {
-                Some(expr) => {
-                    compile_expr(&expr, context, local_var_map, true, wasm_module, wasm_expr, errors);
+            compile_expr(init, context, local_var_map, true, wasm_module, wasm_expr, errors);
             
-                    //then set the variable
-                    let idx = local_var_map.get(internal_name).unwrap();
-                    wasm_expr.data.push(WasmInstr::SetLocal(*idx));
-                },
-                _ => {}
-            };
+            //then set the variable
+            let idx = local_var_map.get(internal_name).unwrap();
+            wasm_expr.data.push(WasmInstr::SetLocal(*idx));
         },
 
         Expr::GlobalVariableDecl(v) => {
