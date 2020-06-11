@@ -33,6 +33,8 @@ pub enum TypeCast{
     /// Used by some places to indicate that the types are exact matches and don't need 
     /// a cast.
     NotNeeded,
+    /// Means we must make a copy, because of const issues
+    Clone,
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]
@@ -41,6 +43,28 @@ pub enum CastType{
     Implicit,
     /// Explicit cast caused by an 'as' keyword
     Explicit,
+}
+
+#[derive(Debug, Clone, PartialEq, Copy)]
+enum ConstCast{
+    Fail,
+    Pass,
+    Clone
+}
+
+fn const_check(from_pass_style: PassStyle, to_pass_style: PassStyle, from_mutability: Mutability, to_mutability: Mutability) -> ConstCast {
+    //you can't pass a const reference to a mut reference
+    if (to_pass_style == PassStyle::Reference || to_pass_style == PassStyle::ValueHoldingReference) && to_mutability == Mutability::Mut && from_mutability == Mutability::Const && from_pass_style != PassStyle::AtomicValue {
+        ConstCast::Fail
+    //the object must be duplicated
+    } else if to_pass_style == PassStyle::Value && from_pass_style == PassStyle::Value && to_mutability == Mutability::Mut && from_mutability == Mutability::Const {
+        ConstCast::Clone
+    //if we don't know, assume the worst
+    } else if (to_pass_style == PassStyle::Unknown || from_pass_style == PassStyle::Unknown) && to_mutability == Mutability::Mut && from_mutability == Mutability::Const {
+        ConstCast::Fail
+    } else {
+        ConstCast::Pass
+    }
 }
 
 ///const check - you can't pass a mut reference to a const reference
@@ -57,7 +81,8 @@ pub fn try_cast(from: &FullType, to: &FullType, cast_type: CastType) -> TypeCast
     let to_pass_style = to.get_pass_style();
     let from_pass_style = from.get_pass_style();
 
-    if const_fail(from_pass_style, to_pass_style, from.mutability, to.mutability) {
+    let const_cast = const_check(from_pass_style, to_pass_style, from.mutability, to.mutability);
+    if const_cast == ConstCast::Fail {
         return TypeCast::ConstFail;
     }
 
@@ -65,7 +90,11 @@ pub fn try_cast(from: &FullType, to: &FullType, cast_type: CastType) -> TypeCast
     let to_type = &to.r#type;
 
     if from_type == to_type {
-        return TypeCast::NotNeeded;
+        return match const_cast {
+            ConstCast::Clone => TypeCast::Clone,
+            ConstCast::Pass => TypeCast::NotNeeded,
+            ConstCast::Fail => TypeCast::None
+        };
     }
 
     if *from_type == Type::Unknown {
@@ -146,7 +175,6 @@ pub fn try_cast(from: &FullType, to: &FullType, cast_type: CastType) -> TypeCast
             }
         },
 
-        
         Type::VariableUsage{name: to_name, constraint: to_constraint} => {
             if to_constraint.contains_trait(&String::from("IsAStruct")) {
                 try_cast(from, &FullType::new(&Type::UnsafeStruct{name: String::from("")}, to.mutability), cast_type)
@@ -154,10 +182,19 @@ pub fn try_cast(from: &FullType, to: &FullType, cast_type: CastType) -> TypeCast
                 match from_type {
                     Type::VariableUsage{name: from_name, constraint: from_constraint} => {
                         if from_name == to_name {
-                            TypeCast::NotNeeded
+                            match const_cast {
+                                ConstCast::Clone => TypeCast::Clone,
+                                ConstCast::Pass => TypeCast::NotNeeded,
+                                ConstCast::Fail => TypeCast::None
+                            }
                         } else {
                             if to_constraint.is_subset_of(from_constraint) {
-                                TypeCast::FreeUpcast(to.clone())
+                                return match const_cast {
+                                    ConstCast::Clone => TypeCast::Clone,
+                                    ConstCast::Pass => TypeCast::FreeUpcast(to.clone()),
+                                    ConstCast::Fail => TypeCast::None
+                                };
+                                
                             } else {
                                 TypeCast::None
                             }
@@ -165,10 +202,8 @@ pub fn try_cast(from: &FullType, to: &FullType, cast_type: CastType) -> TypeCast
                     },
                     _ => TypeCast::None
                 }
-                
             }
         }
-        
         
         _ => TypeCast::None,
     }
@@ -421,7 +456,7 @@ pub fn get_type_casts_for_function_set(possible_func_types: &Vec<FuncType>, prop
             let type_cast = try_cast(proposed_arg_type, wanted_type, CastType::Implicit);
             match type_cast {
                 TypeCast::NotNeeded => this_arg_type_casts.push(type_cast),
-                TypeCast::FreeUpcast(_) => {
+                TypeCast::FreeUpcast(_) | TypeCast::Clone => {
                     level = cmp::min(level, 3);
                     this_arg_type_casts.push(type_cast);
                 },

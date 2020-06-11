@@ -176,7 +176,7 @@ pub enum Expr {
     /// a function declaration. This might compile to a closure creation, a function pointer, or a no op 
     FuncDecl(FuncObjectCreation),
     /// variable declaration
-    VariableInit{internal_name: String, init: Box<Option<TypedExpr>>},
+    VariableInit{internal_name: String, init: Box<TypedExpr>},
     /// global variable declaration. Only appears in the _start function.
     GlobalVariableDecl(Box<GlobalVariableDecl>),
     /// return statement
@@ -215,6 +215,8 @@ pub enum Expr {
     TupleLiteral(Vec<TypedExpr>),
     ///The __Some constructor
     UnsafeSome(Box<TypedExpr>),
+    ///The creation of a temporary
+    TemporaryCreation(Box<TypedExpr>, String),
 }
 
 impl Expr{

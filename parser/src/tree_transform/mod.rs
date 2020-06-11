@@ -179,6 +179,7 @@ pub fn transform_expr(
         Expr::SizeOf(t) => Expr::SizeOf(t.clone()),
         Expr::StaticFuncCall(s, fd, v) => Expr::StaticFuncCall(s.clone(), transform_func_decl(fd, transform, loc, parser_context),
             transform_typed_exprs(v, transform, parser_context)),
+        Expr::TemporaryCreation(te, n) => Expr::TemporaryCreation(Box::new(transform_typed_expr(te, transform, parser_context)), n.clone()),
         Expr::TupleLiteral(v) => Expr::TupleLiteral(transform_typed_exprs(v, transform, parser_context)),
         Expr::TraitMemberFuncCall{trait_member_func, this_expr, args} => Expr::TraitMemberFuncCall{
             this_expr: Box::new(transform_typed_expr(this_expr, transform, parser_context)),
@@ -195,7 +196,7 @@ pub fn transform_expr(
         Expr::VariableInit{internal_name, init} => {
             Expr::VariableInit{
                 internal_name: internal_name.clone(),
-                init: Box::new(init.as_ref().as_ref().map(|te| transform_typed_expr(&te, transform, parser_context))),
+                init: Box::new(transform_typed_expr(&init, transform, parser_context)),
             }
         },
         Expr::While(te1, te2) => Expr::While(

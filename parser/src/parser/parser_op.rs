@@ -450,7 +450,15 @@ impl<'b> Parser<'b> {
                                 let o_bin_op_type_cast = types::get_binary_op_type_cast(get_op_type_for_assop(&ass_op), &unguarded_lhs_full_type, &rhs.r#type);
                                 match o_bin_op_type_cast {
                                     Some(bin_op_type_cast) => {
-                                        let o_cast = create_cast(&bin_op_type_cast.rhs_type, rhs, &bin_op_type_cast.rhs_type_cast);
+                                        //drop any temporaries, because we are assigning this to a non temporary
+                                        let rhs_no_temp: &TypedExpr = match &rhs.expr {
+                                            Expr::TemporaryCreation(expr, temporary_name) => {
+                                                parser_context.forget_temporary(&temporary_name);
+                                                expr
+                                            },
+                                            _ => rhs
+                                        };
+                                        let o_cast = create_cast(&bin_op_type_cast.rhs_type, rhs_no_temp, &bin_op_type_cast.rhs_type_cast);
                                         let rhs_out = match o_cast {
                                             Some(cast) => Box::new(cast),
                                             None => {
