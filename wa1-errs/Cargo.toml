@@ -1,0 +1,11 @@
+[package]
+name = "wa1-errs"
+version = "0.0.1"
+authors = ["theidiotmachine <dinsdt@googlemail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+wa1-types = {path = "../wa1-types"}
+serde = "1.0.104"

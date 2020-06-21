@@ -7,7 +7,7 @@ We would like to take the opportunity to thank the authors for their contributio
 
 This project is generally licensed under the MIT license, but please see below.
 
-## writer
+## wa1-generator
 The writer crate contains elements of parity-wasm, licensed under the MIT license.
 
 ### License
@@ -37,7 +37,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-## ress
+## wa1-lexer
 The ress crate is a derived work of ress, https://github.com/freemasen/ress. That contains the following license.
 
 ### License
@@ -62,7 +62,7 @@ This is a version (aka dlmalloc) of malloc/free/realloc written by
   http://creativecommons.org/publicdomain/zero/1.0/ Send questions,
   comments, complaints, performance data, etc to dl@cs.oswego.edu
 
-## parser
+## wa1-parser
 
 This contains elements of ressa https://github.com/freemasen/ressa. That contains the following license.
 

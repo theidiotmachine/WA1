@@ -2,9 +2,9 @@
 members = [
     "wa1",
     "test-runner",
-    "ress",
-    "parser",
-    "ast",
-    "writer",
-    "errs"
+    "wa1-lexer",
+    "wa1-parser",
+    "wa1-ast",
+    "wa1-generator",
+    "wa1-errs"
 ]
