@@ -40,15 +40,6 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "ast"
-version = "0.4.0"
-dependencies = [
- "errs 0.1.0",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "types 0.1.0",
-]
-
-[[package]]
 name = "atty"
 version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -385,14 +376,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "errs"
-version = "0.1.0"
-dependencies = [
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "types 0.1.0",
-]
-
-[[package]]
 name = "faerie"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -609,19 +592,6 @@ version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "parser"
-version = "0.5.2"
-dependencies = [
- "ast 0.4.0",
- "backtrace 0.3.40 (registry+https://github.com/rust-lang/crates.io-index)",
- "errs 0.1.0",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "ress 0.8.1",
- "types 0.1.0",
-]
-
-[[package]]
 name = "plain"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -754,15 +724,6 @@ dependencies = [
  "libc 0.2.65 (registry+https://github.com/rust-lang/crates.io-index)",
  "mach 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "ress"
-version = "0.8.1"
-dependencies = [
- "errs 0.1.0",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "types 0.1.0",
 ]
 
 [[package]]
@@ -935,7 +896,7 @@ name = "test-runner"
 version = "0.1.0"
 dependencies = [
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ress 0.8.1",
+ "wa1-lexer 0.0.1",
  "wasmtime 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -987,13 +948,6 @@ version = "1.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "types"
-version = "0.1.0"
-dependencies = [
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "unicode-width"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1012,15 +966,72 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "wa1"
 version = "0.1.0"
 dependencies = [
- "ast 0.4.0",
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "errs 0.1.0",
  "parity-wasm 0.41.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "parser 0.5.2",
- "ress 0.8.1",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.44 (registry+https://github.com/rust-lang/crates.io-index)",
- "writer 0.1.0",
+ "wa1-ast 0.4.0",
+ "wa1-errs 0.0.1",
+ "wa1-generator 0.0.1",
+ "wa1-lexer 0.0.1",
+ "wa1-parser 0.0.1",
+]
+
+[[package]]
+name = "wa1-ast"
+version = "0.4.0"
+dependencies = [
+ "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wa1-errs 0.0.1",
+ "wa1-types 0.1.0",
+]
+
+[[package]]
+name = "wa1-errs"
+version = "0.0.1"
+dependencies = [
+ "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wa1-types 0.1.0",
+]
+
+[[package]]
+name = "wa1-generator"
+version = "0.0.1"
+dependencies = [
+ "parity-wasm 0.41.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wa1-ast 0.4.0",
+ "wa1-errs 0.0.1",
+ "wa1-parser 0.0.1",
+ "wa1-types 0.1.0",
+]
+
+[[package]]
+name = "wa1-lexer"
+version = "0.0.1"
+dependencies = [
+ "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wa1-errs 0.0.1",
+ "wa1-types 0.1.0",
+]
+
+[[package]]
+name = "wa1-parser"
+version = "0.0.1"
+dependencies = [
+ "backtrace 0.3.40 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wa1-ast 0.4.0",
+ "wa1-errs 0.0.1",
+ "wa1-lexer 0.0.1",
+ "wa1-types 0.1.0",
+]
+
+[[package]]
+name = "wa1-types"
+version = "0.1.0"
+dependencies = [
+ "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1175,17 +1186,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "winapi 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi-util 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "writer"
-version = "0.1.0"
-dependencies = [
- "ast 0.4.0",
- "errs 0.1.0",
- "parity-wasm 0.41.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "parser 0.5.2",
- "types 0.1.0",
 ]
 
 [[package]]

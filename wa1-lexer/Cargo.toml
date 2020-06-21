@@ -1,0 +1,16 @@
+[package]
+name = "wa1-lexer"
+version = "0.0.1"
+authors = ["Robert Masen <r@robertmasen.pizza>",  "theidiotmachine <dinsdt@googlemail.com>"]
+description = "A scanner/tokenizer for JS files, repurposed"
+keywords = ["JavaScript", "parsing", "JS", "ES", "ECMA", "TS"]
+categories = ["parsing", "text-processing", "web-programming"]
+license = "MIT"
+repository = "https://github.com/theidiotmachine/WA1"
+readme = "./README.md"
+edition = "2018"
+
+[dependencies]
+log = "0.4"
+wa1-types = { path = "../wa1-types"}
+wa1-errs = { path = "../wa1-errs"}

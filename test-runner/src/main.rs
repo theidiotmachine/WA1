@@ -2,7 +2,7 @@ extern crate clap;
 use clap::{Arg, App};
 use std::fs;
 use wasmtime::*;
-use ress::prelude::*;
+use wa1_lexer::prelude::*;
 
 fn main() {
     let matches = App::new("wa1 test runner")

@@ -1,0 +1,23 @@
+[package]
+name = "wa1-parser"
+version = "0.0.1"
+authors = ["Robert Masen <r@robertmasen.pizza>", "theidiotmachine <dinsdt@googlemail.com>"]
+repository = "https://github.com/theidiotmachine/WA1"
+description = "WA1 parser"
+license = "MIT"
+readme = "./README.md"
+keywords = ["JavaScript", "parsing", "JS", "ES", "ECMA"]
+categories = ["parsing", "text-processing", "web-programming"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+[dependencies]
+wa1-lexer = { path = "../wa1-lexer" }
+wa1-ast = { path = "../wa1-ast" }
+wa1-errs = { path = "../wa1-errs" }
+wa1-types = {path = "../wa1-types"}
+lazy_static = "1.4.0"
+log = "0.4"
+backtrace = "0"

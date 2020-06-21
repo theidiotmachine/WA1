@@ -3,16 +3,16 @@ use clap::{Arg, App, SubCommand, ArgMatches};
 use std::{fs};
 use std::path::{PathBuf, Component};
 use std::process::Command;
-use ast::{Exports, AST, Imports};
+use wa1_ast::{Exports, AST, Imports};
 
-extern crate parser;
-use parser::*;
-extern crate writer;
-pub use writer::prelude::*;
+extern crate wa1_parser;
+use wa1_parser::*;
+extern crate wa1_generator;
+pub use wa1_generator::prelude::*;
 
-extern crate errs;
-pub use errs::Error;
-pub use errs::pretty_print_errs;
+extern crate wa1_errs;
+pub use wa1_errs::Error;
+pub use wa1_errs::pretty_print_errs;
 
 pub mod build_config;
 use build_config::BuildConfig;

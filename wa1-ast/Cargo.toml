@@ -1,0 +1,17 @@
+[package]
+name = "wa1-ast"
+version = "0.4.0"
+authors = ["rfm <r@robertmasen.pizza>", "theidiotmachine <dinsdt@googlemail.com>"]
+edition = "2018"
+description = "Rusty-TypeScript Abstract Syntax Tree. Started life as resast by Robert Masen."
+repository = "https://github.com/FreeMasen/resast"
+license = "MIT"
+keywords = ["JavaScript", "parsing", "JS", "ES", "ECMA"]
+categories = ["parsing", "text-processing", "web-programming"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+wa1-types = {path="../wa1-types"}
+wa1-errs = {path="../wa1-errs"}
+serde = "1.0.104"

@@ -1,10 +1,8 @@
 [package]
-name = "test-runner"
+name = "wa1-types"
 version = "0.1.0"
 authors = ["theidiotmachine <dinsdt@googlemail.com>"]
 edition = "2018"
 
 [dependencies]
-clap = "~2.33.0"
-wasmtime = "0.8.0"
-wa1-lexer = { path = "../wa1-lexer" }
+serde = "1.0.104"
