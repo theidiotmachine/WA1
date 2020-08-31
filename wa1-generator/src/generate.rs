@@ -545,15 +545,17 @@ fn compile_l_value_pre(
 
 /// This writes the actual instruction for an l value
 fn compile_l_value_post(
-    lhs: &TypedExpr,
     l_value: &TypedLValueExpr, 
     context: &CompilerContext,
     local_var_map: &HashMap<String, u32>,
     consume_result: bool,
-    wasm_module: &mut WasmModule,
     wasm_expr: &mut WasmExpr,
     errors: &mut Vec<Error>
 ) {
+    if consume_result {
+        unreachable!();
+    }
+
     match &l_value.expr {
         LValueExpr::GlobalVariableAssign(name) => {
             let o_idx = context.global_var_map.get(name);
@@ -561,9 +563,6 @@ fn compile_l_value_post(
                 None => { errors.push(Error::VariableNotRecognized(l_value.loc.clone(), name.clone())); },
                 Some(idx) => {
                     wasm_expr.data.push(WasmInstr::SetGlobal(*idx));
-                    if consume_result {
-                        wasm_expr.data.push(WasmInstr::GetGlobal(*idx));
-                    }
                 }
             };
         },
@@ -573,11 +572,7 @@ fn compile_l_value_post(
             match o_idx {
                 None => { errors.push(Error::VariableNotRecognized(l_value.loc.clone(), name.clone())); },
                 Some(idx) => {
-                    if consume_result {
-                        wasm_expr.data.push(WasmInstr::TeeLocal(*idx));
-                    } else {
-                        wasm_expr.data.push(WasmInstr::SetLocal(*idx))
-                    }
+                    wasm_expr.data.push(WasmInstr::SetLocal(*idx))
                 }
             };
         },
@@ -586,10 +581,6 @@ fn compile_l_value_post(
             match &inner_l_value_type {
                 Type::UnsafeStruct{name: type_name} => {
                     compile_struct_member_set(type_name, member_name, context, wasm_expr);
-
-                    if consume_result {
-                        compile_expr(lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
-                    }
                 },
                 _ => errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from(format!("expr{:#?}", l_value)))),
             }
@@ -603,9 +594,6 @@ fn compile_l_value_post(
                     
                     //we do a store. Because we already calculated the address we give it an index of zero.
                     compile_array_member_set(&elem_value_type, elem_size, wasm_expr);
-                    if consume_result {
-                        compile_expr(lhs, context, local_var_map, true, wasm_module, wasm_expr, errors);
-                    }
                 },
                 _ => errors.push(Error::NotYetImplemented(l_value.loc.clone(), String::from(format!("expr{:#?}", l_value)))),
             }
@@ -615,8 +603,7 @@ fn compile_l_value_post(
     }
 }
 
-fn compile_assign_operator(
-    lhs: &TypedExpr,
+fn compile_simple_assign_operator(
     l_value: &TypedLValueExpr, 
     r_value: &TypedExpr,
     context: &CompilerContext,
@@ -628,7 +615,7 @@ fn compile_assign_operator(
 ) {
     compile_l_value_pre(l_value, context, local_var_map, wasm_module, wasm_expr, errors);
     compile_expr(&r_value, context, local_var_map, true, wasm_module, wasm_expr, errors);
-    compile_l_value_post(lhs, l_value, context, local_var_map, consume_result, wasm_module, wasm_expr, errors);
+    compile_l_value_post(l_value, context, local_var_map, consume_result, wasm_expr, errors);
 }
 
 fn bin_op_for_ass_op(ass_op: &AssignmentOperator) -> BinaryOperator {
@@ -662,7 +649,7 @@ fn compile_modify_assign_operator(
     let bin_op = bin_op_for_ass_op(ass_op);
     compile_l_value_pre(l_value, context, local_var_map, wasm_module, wasm_expr, errors);
     compile_binary_operator(&bin_op, lhs, r_value, &lhs.r#type.r#type, loc, context, local_var_map, wasm_module, wasm_expr, errors);
-    compile_l_value_post(lhs, l_value, context, local_var_map, consume_result, wasm_module, wasm_expr, errors);
+    compile_l_value_post(l_value, context, local_var_map, consume_result, wasm_expr, errors);
 }
 
 fn compile_intrinsic(
@@ -766,8 +753,8 @@ pub(crate) fn compile_expr(
             };
         },
 
-        Expr::Assignment(lhs, l_value, r_value) => {
-            compile_assign_operator(lhs, l_value, r_value, context, local_var_map, consume_result, wasm_module, wasm_expr, errors);
+        Expr::SimpleAssignment{l_value, r_value} => {
+            compile_simple_assign_operator(l_value, r_value, context, local_var_map, consume_result, wasm_module, wasm_expr, errors);
             ret_val = false;
         },
         
@@ -839,9 +826,6 @@ pub(crate) fn compile_expr(
                 },
                 _ => unreachable!()
             }
-
-            
-            
         },
 
         Expr::Return(bo_expr) => {
@@ -908,7 +892,7 @@ pub(crate) fn compile_expr(
             wasm_expr.data.push(WasmInstr::End);
         },
 
-        Expr::VariableInit{internal_name, init} => {
+        Expr::SimpleVariableInit{internal_name, init} => {
             //first,  run the init expression
             compile_expr(init, context, local_var_map, true, wasm_module, wasm_expr, errors);
             
@@ -917,7 +901,7 @@ pub(crate) fn compile_expr(
             wasm_expr.data.push(WasmInstr::SetLocal(*idx));
         },
 
-        Expr::GlobalVariableDecl(v) => {
+        Expr::SimpleGlobalVariableDecl(v) => {
             //first,  run the init expression
             match &v.init {
                 Some(expr) => {

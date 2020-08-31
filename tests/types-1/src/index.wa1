@@ -1,8 +1,14 @@
 import {*} from "./int"
 import {*} from "./unsafeStruct"
+import {*} from "./userTypes1.wa1"
+import {*} from "./userTypes2.wa1"
+import {*} from "./userTraits1.wa1"
 
 export fn test() -> Int {
     int.testInt()
     unsafeStruct.testStruct()
+    userTypes1.test()
+    userTypes2.test()
+    //userTraits1.test()
     1
 }

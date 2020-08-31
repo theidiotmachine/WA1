@@ -54,7 +54,7 @@ enum ConstCast{
 
 fn const_check(from_pass_style: PassStyle, to_pass_style: PassStyle, from_mutability: Mutability, to_mutability: Mutability) -> ConstCast {
     //you can't pass a const reference to a mut reference
-    if (to_pass_style == PassStyle::Reference || to_pass_style == PassStyle::ValueHoldingReference) && to_mutability == Mutability::Mut && from_mutability == Mutability::Const && from_pass_style != PassStyle::AtomicValue {
+    if (to_pass_style == PassStyle::Reference || to_pass_style == PassStyle::ValueHoldingReference) && to_mutability == Mutability::Mut && from_mutability == Mutability::Const && from_pass_style != PassStyle::SimpleValue {
         ConstCast::Fail
     //the object must be duplicated
     } else if to_pass_style == PassStyle::Value && from_pass_style == PassStyle::Value && to_mutability == Mutability::Mut && from_mutability == Mutability::Const {
@@ -69,7 +69,7 @@ fn const_check(from_pass_style: PassStyle, to_pass_style: PassStyle, from_mutabi
 
 ///const check - you can't pass a mut reference to a const reference
 pub fn const_fail(from_pass_style: PassStyle, to_pass_style: PassStyle, from_mutability: Mutability, to_mutability: Mutability) -> bool {
-    (to_pass_style == PassStyle::Reference || to_pass_style == PassStyle::ValueHoldingReference) && to_mutability == Mutability::Mut && from_mutability == Mutability::Const && from_pass_style != PassStyle::AtomicValue
+    (to_pass_style == PassStyle::Reference || to_pass_style == PassStyle::ValueHoldingReference) && to_mutability == Mutability::Mut && from_mutability == Mutability::Const && from_pass_style != PassStyle::SimpleValue
 }
 
 /// Try casting a type to another type.

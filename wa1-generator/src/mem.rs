@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::cmp;
 
-use wa1_types::StructType;
-use wa1_ast::prelude::TypeDecl;
+use wa1_types::{Member};
+use wa1_ast::prelude::{TypeDecl, UserClassStorage};
 
 use crate::wasm::{WasmValueType};
 use crate::wasm_types::get_wasm_value_type;
@@ -44,13 +44,13 @@ pub fn get_size_for_value_type(value_type: &WasmValueType) -> u32 {
 }
 
 fn generate_struct_mem_layout(
-    struct_type: &StructType,
+    members: &Vec<Member>,
     type_map: &HashMap<String, TypeDecl>
 ) -> StructMemLayout {
     let mut offset: u32 = 0;
     let mut alignment = 4;
     let mut out_members: HashMap<String, MemLayoutElem> = HashMap::new();
-    for mem in &struct_type.members {
+    for mem in members {
         let mem_value_type = get_wasm_value_type(&mem.r#type, type_map);
         
         let sz = get_size_for_value_type(&mem_value_type);
@@ -72,11 +72,18 @@ pub fn generate_mem_layout_map(
     let mut out: HashMap<String, UserMemLayout> = HashMap::new();
     for t in type_map {
         match t.1 {
-            TypeDecl::Struct{name: _, struct_type, under_construction: _, export: _} => {
-                out.insert(t.0.clone(), UserMemLayout::Struct(generate_struct_mem_layout(&struct_type, type_map)));
+            TypeDecl::Struct{members, under_construction: _, export: _} => {
+                out.insert(t.0.clone(), UserMemLayout::Struct(generate_struct_mem_layout(&members, type_map)));
             },
-            TypeDecl::Alias{name: _, of: _, export: _} | TypeDecl::Type{name: _, inner: _, type_args: _, member_funcs: _, export: _, constructor: _, under_construction: _} => {
+            TypeDecl::Alias{of: _, export: _} | TypeDecl::Type{inner: _, type_args: _, member_funcs: _, export: _, constructor: _, under_construction: _} => {
                 //no mem map
+            },
+            TypeDecl::UserClass{members, under_construction: _, export: _, storage, type_args: _, member_funcs: _, constructor: _} => {
+                if *storage == UserClassStorage::Heap {
+                    out.insert(t.0.clone(), UserMemLayout::Struct(generate_struct_mem_layout(&members, type_map)));
+                } else {
+                    unimplemented!();
+                }
             },
         }
     }

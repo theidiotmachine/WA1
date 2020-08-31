@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 use wa1_types::*;
 use wa1_types::prelude::TypeArg;
 pub mod prelude {
-    pub use super::{TypeDecl, MemberFunc, TraitDecl, TraitMemberFunc, TraitImpl};
+    pub use super::{TypeDecl, MemberFunc, TraitDecl, TraitMemberFunc, TraitImpl, UserClassStorage};
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -25,18 +25,26 @@ pub struct TraitMemberFunc{
     pub name: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+pub enum UserClassStorage{
+    Heap,
+    Stack
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TypeDecl{
-    Struct{name: String, struct_type: StructType, under_construction: bool, export: bool},
-    Alias{name: String, of: Type, export: bool},
-    Type{name: String, inner: Type, type_args: Vec<TypeArg>, export: bool, member_funcs: Vec<MemberFunc>, constructor: Option<MemberFunc>, under_construction: bool},
+    Struct{members: Vec<Member>, under_construction: bool, export: bool},
+    Alias{of: Type, export: bool},
+    Type{inner: Type, type_args: Vec<TypeArg>, export: bool, member_funcs: Vec<MemberFunc>, constructor: Option<MemberFunc>, under_construction: bool},
+    UserClass{type_args: Vec<TypeArg>, export: bool, member_funcs: Vec<MemberFunc>, constructor: Option<MemberFunc>, under_construction: bool, members: Vec<Member>, storage: UserClassStorage}
 }
 
 impl TypeDecl{
     pub fn get_member_funcs(&self) -> Vec<MemberFunc> {
         match self {
-            TypeDecl::Struct{name: _, struct_type: _, under_construction: _, export: _} | TypeDecl::Alias{name: _, of: _, export: _} => vec![],
-            TypeDecl::Type{name: _, inner: _, type_args: _, export: _, member_funcs, constructor: _, under_construction: _} => member_funcs.clone()
+            TypeDecl::Struct{members: _, under_construction: _, export: _} | TypeDecl::Alias{of: _, export: _} => vec![],
+            TypeDecl::Type{inner: _, type_args: _, export: _, member_funcs, constructor: _, under_construction: _} 
+                | TypeDecl::UserClass{type_args: _, export: _, member_funcs, constructor: _, under_construction: _, members: _, storage: _} => member_funcs.clone()
         }
     }
 }

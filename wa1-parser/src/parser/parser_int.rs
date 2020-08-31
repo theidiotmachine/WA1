@@ -72,7 +72,7 @@ impl<'a> Parser<'a> {
             "unsignedNegate" => &INT_UN_METHODS,
             _ => {
                 parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), holding.r#type.r#type.clone(), id.clone()));
-                return TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), loc: loc.clone()};
+                return TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), loc: loc.clone(), return_expr: ReturnExpr::None};
             }
         };
     
@@ -86,7 +86,7 @@ impl<'a> Parser<'a> {
         match t {
             None => {
                 parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), holding.r#type.r#type.clone(), id.clone()));
-                TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), loc: loc.clone()}
+                TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), loc: loc.clone(), return_expr: ReturnExpr::None}
             },
             Some(FuncCallTypeCast{func_type, arg_type_casts}) => {
                 let out_self_type_cast = arg_type_casts.get(0).unwrap().clone();
@@ -103,7 +103,7 @@ impl<'a> Parser<'a> {
                     i += 1;
                 }
 
-                TypedExpr{expr: Expr::MemberFuncCall(Box::new(o_cast.unwrap().clone()), id.clone(), out_args), r#type: func_type.out_type.clone(), loc: loc.clone()}
+                TypedExpr{expr: Expr::MemberFuncCall(Box::new(o_cast.unwrap().clone()), id.clone(), out_args), r#type: func_type.out_type.clone(), loc: loc.clone(), return_expr: ReturnExpr::None}
             }
         }
     }

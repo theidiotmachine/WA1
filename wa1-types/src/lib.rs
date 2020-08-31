@@ -17,8 +17,7 @@ pub mod prelude {
     pub use super::Privacy;
     pub use super::{get_unary_op_type_cast, UnOpTypeCast};
     pub use super::{get_binary_op_type_cast, get_type_from_type_cast};
-    pub use super::StructType;
-    pub use super::StructMember;
+    pub use super::Member;
     pub use super::cast::prelude::*;
     pub use super::generics::prelude::*;
     pub use super::{S_32_MAX, S_32_MIN, S_64_MAX, S_64_MIN, U_32_MAX, U_64_MAX, PTR_MAX};
@@ -133,21 +132,16 @@ pub enum Privacy{
 
 /// Data member of a struct.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct StructMember{
+pub struct Member{
     pub name: String,
     pub r#type: Type,
+    pub privacy: Privacy,
 }
 
-/// user-defined struct. 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct StructType{
-    pub members: Vec<StructMember>
-}
-
-impl StructType {
-    pub fn get_member_type_map(&self) -> HashMap<String, Type> {
+impl Member {
+    pub fn get_member_type_map(members: &Vec<Member>) -> HashMap<String, Type> {
         let mut out: HashMap<String, Type> = HashMap::new();
-        for m in &self.members {
+        for m in members {
             out.insert(m.name.clone(), m.r#type.clone());
         }
         out
@@ -212,6 +206,8 @@ pub enum Type {
     ModuleLiteral(String),
     /// __array type
     UnsafeArray(Box<Type>),
+    /// User class type
+    UserClass{name: String, type_args: Vec<Type>},
 }
 
 fn get_mangled_names(types: &Vec<Type>)->String{
@@ -230,6 +226,15 @@ impl Type{
         }
     }
 
+    ///Is this type an implementation of the standard value model? The standard value model allows a 
+    /// reference style type to be passed by value through copy and move semantics
+    pub fn is_standard_value_model(&self) -> bool {
+        match &self {
+            Type::UserClass{name: _, type_args: _} => true,
+            _ => false,
+        }
+    }
+
     ///Is this an unresolved type variable?
     pub fn is_type_variable(&self) -> bool {
         match &self {
@@ -242,6 +247,7 @@ impl Type{
             Type::TypeLiteral(t) => t.r#type.is_type_variable(),
             Type::Func{func_type: ft} => ft.out_type.r#type.is_type_variable() || ft.in_types.iter().any(|t| t.r#type.is_type_variable()),
             Type::ObjectLiteral(oles) => oles.iter().any(|ole| ole.1.is_type_variable()),
+            Type::UserClass{name:_, type_args: ts} => ts.iter().any(|t| t.is_type_variable()),
             Type::UserType{name:_, type_args: ts, inner} => ts.iter().any(|t| t.is_type_variable()) || inner.is_type_variable(),
             Type::Tuple(ts) => ts.iter().any(|t| t.is_type_variable()),
             Type::VariableUsage{name: _, constraint: _} => true,
@@ -274,6 +280,7 @@ impl Type{
             Type::UnsafeSome(inner) => format!("!__Some<{}>", inner.get_mangled_name()),
             Type::UnsafeNull => format!("!__Null"),
             Type::Some(inner) => format!("!Some<{}>", inner.get_mangled_name()),
+            Type::UserClass{name, type_args} => format!("!class_{}<{}>", name, get_mangled_names(type_args)),
             Type::UserType{name, type_args, inner: _} => format!("!type_{}<{}>", name, get_mangled_names(type_args)),
             Type::UnsafeStruct{name} => format!("!__struct_{}", name),
             Type::Undeclared => format!("!Undeclared"),
@@ -293,19 +300,19 @@ impl Type{
             Type::Any | Type::Func{func_type: _} | Type::ObjectLiteral(_) => panic!(),
             Type::Array(inner) | Type::Option(inner) | Type::Some(inner) | Type::UnsafeOption(inner) | Type::UnsafeSome(inner) => {
                 match inner.get_pass_style() {
-                    PassStyle::Value | PassStyle::AtomicValue => PassStyle::Value,
+                    PassStyle::Value | PassStyle::SimpleValue => PassStyle::Value,
                     PassStyle::Reference | PassStyle::ValueHoldingReference => PassStyle::ValueHoldingReference,
                     PassStyle::Unknown => PassStyle::Unknown,
                 }
             },
             Type::Bool | Type::FakeVoid | Type::FloatLiteral(_) | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never 
                 | Type::Number | Type::RealVoid | Type::TypeLiteral(_) | Type::Undeclared 
-                | Type::UnsafeNull => PassStyle::AtomicValue,
+                | Type::UnsafeNull => PassStyle::SimpleValue,
             Type::String | Type::StringLiteral(_) => PassStyle::Value,
             Type::Tuple(inners) => {
                 inners.iter().fold(PassStyle::Value, |acc, x| {
                     match x.get_pass_style() {
-                        PassStyle::Value | PassStyle::AtomicValue => acc,
+                        PassStyle::Value | PassStyle::SimpleValue => acc,
                         PassStyle::Reference | PassStyle::ValueHoldingReference => PassStyle::ValueHoldingReference,
                         PassStyle::Unknown => PassStyle::Unknown,
                     }
@@ -314,6 +321,7 @@ impl Type{
             Type::Unknown | Type::VariableUsage{name: _, constraint: _} => PassStyle::Unknown,
             Type::UnsafeArray(_) | Type::UnsafeStruct{name: _} => PassStyle::Reference,
             Type::UnsafePtr => PassStyle::Reference, //strictly wrong - the pointer is by value, but a pointer is pointing to something 
+            Type::UserClass{name: _, type_args: _} => PassStyle::Value,
             Type::UserType{name: _, type_args: _, inner} => inner.get_pass_style()
         }
     }
@@ -350,6 +358,7 @@ impl Type{
             Type::UnsafePtr => String::from("__Ptr"),
             Type::UnsafeSome(_) => String::from("__Some"),
             Type::UnsafeStruct{name} => name.clone(),
+            Type::UserClass{name, type_args: _} => name.clone(),
             Type::UserType{name, type_args: _, inner: _} => name.clone(),
             Type::VariableUsage{name, constraint: _} => name.clone(),
         }
@@ -383,6 +392,7 @@ impl Type{
             Type::UnsafePtr => vec![], 
             Type::UnsafeSome(inner) => vec![(**inner).clone()], 
             Type::UnsafeStruct{name: _} => vec![], 
+            Type::UserClass{name: _, type_args} => type_args.clone(),
             Type::UserType{name: _, type_args, inner: _} => type_args.clone(),
             Type::VariableUsage{name: _, constraint: _} => vec![],
         }
@@ -417,6 +427,7 @@ impl Display for Type {
             Type::UnsafeSome(inner) => write!(f, "__Some<{}>", inner),
             Type::UnsafeNull => write!(f, "__Null"),
             Type::Some(inner) => write!(f, "Some<{}>", inner),
+            Type::UserClass{name, type_args} => write!(f, "{}<{}>", name, display_types(type_args)),
             Type::UserType{name, type_args, inner: _} => write!(f, "{}<{}>", name, display_types(type_args)),
             Type::UnsafeStruct{name} => write!(f, "{}", name),
             Type::Undeclared => write!(f, "Undeclared"),
@@ -438,7 +449,7 @@ pub enum PassStyle{
     ///Passed by value. May be true pass by value (e.g. tuples) or synthetic pass by value (e.g. arrays)
     Value,
     ///Passed by value with no changeable internal components. Ints, bools, numbers.
-    AtomicValue,
+    SimpleValue,
     ///Passed by reference. Obviously we pass a pointer through for these.
     Reference,
     ///This is data passed by value that holds data to be passed by reference. An example might be an array holding a ref class.

@@ -1,9 +1,9 @@
 extern crate wa1_parser;
 
-mod transform;
+mod generate;
 mod compile_int;
 mod compile_ptr;
-pub use transform::{compile, TranslationUnitType, OutputType};
+pub use generate::{compile, TranslationUnitType, OutputType};
 
 pub mod prelude {
     pub use super::{compile, TranslationUnitType, OutputType};

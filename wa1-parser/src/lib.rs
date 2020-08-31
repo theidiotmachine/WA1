@@ -1,9 +1,10 @@
 use std::cmp;
 
 mod parser;
-pub use parser::Parser;
-
 mod tree_transform;
+mod generics;
+
+pub use parser::Parser;
 
 pub mod prelude {
     pub use super::{Parser, StartFuncType, UnsafeParseMode};
@@ -152,15 +153,15 @@ enum ParserPhase{
 }
 
 fn cast_int_to_number(expr: &TypedExpr, to_mutability: Mutability) -> TypedExpr {
-    TypedExpr{expr: Expr::IntToNumber(Box::new(expr.clone())), r#type: FullType{r#type: Type::Number, mutability: to_mutability}, loc: expr.loc}
+    TypedExpr{expr: Expr::IntToNumber(Box::new(expr.clone())), r#type: FullType{r#type: Type::Number, mutability: to_mutability}, loc: expr.loc, return_expr: ReturnExpr::None}
 }
 
 fn int_widen(expr: &TypedExpr, to: &FullType) -> TypedExpr {
-    TypedExpr{expr: Expr::IntWiden(Box::new(expr.clone())), r#type: to.clone(), loc: expr.loc}
+    TypedExpr{expr: Expr::IntWiden(Box::new(expr.clone())), r#type: to.clone(), loc: expr.loc, return_expr: ReturnExpr::None}
 }
 
 fn free_upcast(expr: &TypedExpr, to: &FullType) -> TypedExpr {
-    TypedExpr{expr: Expr::FreeUpcast(Box::new(expr.clone())), r#type: to.clone(), loc: expr.loc}
+    TypedExpr{expr: Expr::FreeUpcast(Box::new(expr.clone())), r#type: to.clone(), loc: expr.loc, return_expr: ReturnExpr::None}
 }
 
 fn create_cast(want: &FullType, got: &TypedExpr, cast: &TypeCast) -> Option<TypedExpr> {
@@ -184,9 +185,9 @@ fn cast_typed_expr(want: &FullType, got: Box<TypedExpr>, cast_type: CastType, pa
     let loc = got.loc.clone();
     let got_mutability = got.r#type.mutability;
     match type_cast {
-        TypeCast::FreeUpcast(_) => TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc},
-        TypeCast::IntWiden(_,_) => TypedExpr{expr: Expr::IntWiden(got), r#type: want.clone(), loc: loc},
-        TypeCast::IntToNumberWiden => TypedExpr{expr: Expr::IntToNumber(got), r#type: FullType::new(&Type::Number, got_mutability), loc: loc},
+        TypeCast::FreeUpcast(_) => TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc, return_expr: ReturnExpr::None},
+        TypeCast::IntWiden(_,_) => TypedExpr{expr: Expr::IntWiden(got), r#type: want.clone(), loc: loc, return_expr: ReturnExpr::None},
+        TypeCast::IntToNumberWiden => TypedExpr{expr: Expr::IntToNumber(got), r#type: FullType::new(&Type::Number, got_mutability), loc: loc, return_expr: ReturnExpr::None},
         TypeCast::None => {
             match cast_type {
                 CastType::Implicit => 
@@ -194,11 +195,11 @@ fn cast_typed_expr(want: &FullType, got: Box<TypedExpr>, cast_type: CastType, pa
                 CastType::Explicit  => 
                     parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone())),
             }
-            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc}
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc, return_expr: ReturnExpr::None}
         },
         TypeCast::ConstFail => {
             parser_context.push_err(Error::ConstFailure(loc, want.clone(), got.r#type.clone()));
-            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc}
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc, return_expr: ReturnExpr::None}
         },
         TypeCast::NotNeeded => {
             if cast_type == CastType::Explicit {
@@ -214,10 +215,10 @@ fn guard_downcast_expr(want: &FullType, got: Box<TypedExpr>, parser_context: &mu
     let type_cast = wa1_types::cast::try_guard_downcast_expr(&got.r#type, want);
     let loc = got.loc.clone();
     match type_cast {
-        TypeGuardDowncast::FreeDowncast => TypedExpr{expr: Expr::FreeDowncast(got), r#type: want.clone(), loc: loc},
+        TypeGuardDowncast::FreeDowncast => TypedExpr{expr: Expr::FreeDowncast(got), r#type: want.clone(), loc: loc, return_expr: ReturnExpr::None},
         TypeGuardDowncast::None => {
             parser_context.push_err(Error::CastFailure(loc, want.clone(), got.r#type.clone()));
-            TypedExpr{expr: Expr::FreeDowncast(got), r#type: want.clone(), loc: loc}
+            TypedExpr{expr: Expr::FreeDowncast(got), r#type: want.clone(), loc: loc, return_expr: ReturnExpr::None}
         },
         TypeGuardDowncast::NotNeeded => got.as_ref().clone(),
     }
@@ -227,10 +228,10 @@ fn generic_wrap(want: &FullType, got: Box<TypedExpr>, parser_context: &mut Parse
     let generic_cast = wa1_types::cast::try_generic_wrap(&got.r#type, want);
     let loc = got.loc.clone();
     match generic_cast {
-        GenericCast::FreeCast => TypedExpr{expr: Expr::FreeGenericCast(got), r#type: want.clone(), loc: loc},
+        GenericCast::FreeCast => TypedExpr{expr: Expr::FreeGenericCast(got), r#type: want.clone(), loc: loc, return_expr: ReturnExpr::None},
         GenericCast::None => {
             parser_context.push_err(Error::InternalError(loc, format!("can't cast from {} to {}", got.r#type, want)));
-            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc}
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc, return_expr: ReturnExpr::None}
         },
         GenericCast::NotNeeded => got.as_ref().clone(),
     }
@@ -240,10 +241,10 @@ fn generic_unwrap(want: &FullType, got: Box<TypedExpr>, parser_context: &mut Par
     let generic_cast = wa1_types::cast::try_generic_unwrap(&got.r#type, want);
     let loc = got.loc.clone();
     match generic_cast {
-        GenericCast::FreeCast => TypedExpr{expr: Expr::FreeGenericCast(got), r#type: want.clone(), loc: loc},
+        GenericCast::FreeCast => TypedExpr{expr: Expr::FreeGenericCast(got), r#type: want.clone(), loc: loc, return_expr: ReturnExpr::None},
         GenericCast::None => {
             parser_context.push_err(Error::InternalError(loc, format!("can't cast from {} to {}", got.r#type, want)));
-            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc}
+            TypedExpr{expr: Expr::FreeUpcast(got), r#type: want.clone(), loc: loc, return_expr: ReturnExpr::None}
         },
         GenericCast::NotNeeded => got.as_ref().clone(),
     }
@@ -687,7 +688,7 @@ impl ParserContext {
     fn append_type_decl_member_func(&mut self, type_name: &String, mf: &MemberFunc) -> () {
         let td = self.type_map.get_mut(type_name).unwrap();
         match td {
-            TypeDecl::Type{name: _, inner: _, type_args: _, export: _, member_funcs, constructor: _, under_construction: _} => {
+            TypeDecl::Type{inner: _, type_args: _, export: _, member_funcs, constructor: _, under_construction: _} => {
                 member_funcs.push(mf.clone());
             },
             _ => unreachable!()

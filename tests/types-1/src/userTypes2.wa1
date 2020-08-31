@@ -1,0 +1,20 @@
+type TypeOne = Int {
+    constructor(x: Int) => x
+}
+
+/*
+implement ConstShallowCopy for TypeOne {
+    fn shallowCopy(x: TypeOne) -> TypeOne {
+        new TypeOne(x.getInner())
+    }
+}
+*/
+
+fn testOne() -> Void {
+    let a = new TypeOne(4)
+    let b = a
+}
+
+export fn test() -> Void {
+    testOne()
+}

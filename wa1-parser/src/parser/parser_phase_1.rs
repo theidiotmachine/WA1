@@ -50,17 +50,22 @@ fn exports_from_parser_context(parser_context: &ParserContext) -> Exports {
     for t in &parser_context.type_map {
         let td = t.1;
         match td{
-            TypeDecl::Struct{name: _, struct_type: _, under_construction: _, export} => {
+            TypeDecl::Struct{members: _, under_construction: _, export} => {
                 if *export {
                     types.push(td.clone())
                 }
             },
-            TypeDecl::Alias{name: _, of: _, export} => {
+            TypeDecl::Alias{of: _, export} => {
                 if *export {
                     types.push(td.clone())
                 }
             },
-            TypeDecl::Type{name: _, inner: _, type_args: _, export, member_funcs: _, constructor: _, under_construction: _} => {
+            TypeDecl::Type{inner: _, type_args: _, export, member_funcs: _, constructor: _, under_construction: _} => {
+                if *export {
+                    types.push(td.clone())
+                }
+            }
+            TypeDecl::UserClass{type_args: _, members: _, export, member_funcs: _, constructor: _, under_construction: _, storage: _} => {
                 if *export {
                     types.push(td.clone())
                 }

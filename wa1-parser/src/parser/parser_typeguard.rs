@@ -69,8 +69,8 @@ fn get_type_guard_bounded_int_inst(lhs: &TypedExpr, rhs: &TypedExpr, op: BinaryO
         (o_lhs_name.unwrap(), op, lhs_lower, lhs_upper, rhs_lower, rhs_upper)
     };
 
-    let true_expr = TypedExpr{expr: Expr::BoolLiteral(true), r#type: FullType::new(&Type::Bool, Mutability::Const), loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))};
-    let false_expr = TypedExpr{expr: Expr::BoolLiteral(false), r#type: FullType::new(&Type::Bool, Mutability::Const), loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0))};
+    let true_expr = TypedExpr{expr: Expr::BoolLiteral(true), r#type: FullType::new(&Type::Bool, Mutability::Const), loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0)), return_expr: ReturnExpr::None};
+    let false_expr = TypedExpr{expr: Expr::BoolLiteral(false), r#type: FullType::new(&Type::Bool, Mutability::Const), loc: SourceLocation::new(Position::new(0, 0), Position::new(0, 0)), return_expr: ReturnExpr::None};
     let type_guard = match op {
         BinaryOperator::LessThan => TypeGuard{ branches: vec![
             TypeGuardBranch{literal: true_expr, guard_type: Type::Int(var_lower, cmp::min(var_upper, literal_upper - 1))},
