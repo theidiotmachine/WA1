@@ -3,11 +3,11 @@ pub use wa1_errs::Error;
 pub use wa1_errs::prelude::*;
 
 pub trait Transform{
-    fn transform_typed_expr(&mut self, typed_expr: &TypedExpr, parser_context: &mut dyn ErrRecorder) -> Option<TypedExpr>;
-    fn transform_expr(&mut self, expr: &Expr, loc: &SourceLocation, parser_context: &mut dyn ErrRecorder) -> Option<Expr>;
-    fn transform_typed_lvalue_expr(&mut self, typed_lvalue_expr: &TypedLValueExpr, parser_context: &mut dyn ErrRecorder) -> Option<TypedLValueExpr>;
-    fn transform_lvalue_expr(&mut self, lvalue_expr: &LValueExpr, loc: &SourceLocation, parser_context: &mut dyn ErrRecorder) -> Option<LValueExpr>;
-    fn transform_func_decl(&mut self, lvalue_expr: &FuncDecl, loc: &SourceLocation, parser_context: &mut dyn ErrRecorder) -> Option<FuncDecl>;
+    fn transform_typed_expr(&mut self, typed_expr: &TypedExpr, err_recorder: &mut dyn ErrRecorder) -> Option<TypedExpr>;
+    fn transform_expr(&mut self, expr: &Expr, loc: &SourceLocation, err_recorder: &mut dyn ErrRecorder) -> Option<Expr>;
+    fn transform_typed_lvalue_expr(&mut self, typed_lvalue_expr: &TypedLValueExpr, err_recorder: &mut dyn ErrRecorder) -> Option<TypedLValueExpr>;
+    fn transform_lvalue_expr(&mut self, lvalue_expr: &LValueExpr, loc: &SourceLocation, err_recorder: &mut dyn ErrRecorder) -> Option<LValueExpr>;
+    fn transform_func_decl(&mut self, lvalue_expr: &FuncDecl, loc: &SourceLocation, err_recorder: &mut dyn ErrRecorder) -> Option<FuncDecl>;
 }
 
 pub fn transform_func_decl(
@@ -99,14 +99,18 @@ pub fn transform_expr(
             | Expr::UnsafeNull | Expr::Void
             => expr.clone(),
 
-        Expr::Assignment(l1, l2, r) => {
-            Expr::Assignment(
-                Box::new(transform_typed_expr(l1, transform, parser_context)),
-                transform_typed_lvalue_expr(l2, transform, parser_context),
-                Box::new(transform_typed_expr(r, transform, parser_context)),
-            )
+        Expr::SimpleAssignment{l_value, r_value} => {
+            Expr::SimpleAssignment{
+                l_value: transform_typed_lvalue_expr(l_value, transform, parser_context),
+                r_value: Box::new(transform_typed_expr(r_value, transform, parser_context)),
+            }
         },
-        
+        Expr::UnresolvedAssignment{l_value, r_value} => {
+            Expr::UnresolvedAssignment{
+                l_value: transform_typed_lvalue_expr(l_value, transform, parser_context),
+                r_value: Box::new(transform_typed_expr(r_value, transform, parser_context)),
+            }
+        },
         Expr::BinaryOperator{lhs, rhs, op} => Expr::BinaryOperator{
             lhs: Box::new(transform_typed_expr(lhs, transform, parser_context)),
             rhs: Box::new(transform_typed_expr(rhs, transform, parser_context)),
@@ -138,8 +142,8 @@ pub fn transform_expr(
         Expr::FreeGenericCast(te) => Expr::FreeGenericCast(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::FreeUpcast(te) => Expr::FreeUpcast(Box::new(transform_typed_expr(te, transform, parser_context))),
         Expr::FuncDecl(foc) => Expr::FuncDecl(foc.clone()),
-        Expr::GlobalVariableDecl(gvd) => 
-            Expr::GlobalVariableDecl(Box::new(GlobalVariableDecl{name: gvd.name.clone(), r#type: gvd.r#type.clone(), export: gvd.export, 
+        Expr::SimpleGlobalVariableDecl(gvd) => 
+            Expr::SimpleGlobalVariableDecl(Box::new(GlobalVariableDecl{name: gvd.name.clone(), r#type: gvd.r#type.clone(), export: gvd.export, 
                 init: gvd.init.as_ref().map(|e| transform_typed_expr(&e, transform, parser_context)), mutability: gvd.mutability
             })),
         Expr::IfThen(te1, te2) =>
@@ -193,9 +197,16 @@ pub fn transform_expr(
             Expr::UnresolvedGenericFuncCall{name: name.clone(), unresolved_func_decl: transform_func_decl(unresolved_func_decl, transform, loc, parser_context),
                 args: transform_typed_exprs(args, transform, parser_context), unresolved_types: unresolved_types.clone()
             },
-        Expr::VariableInit{internal_name, init} => {
-            Expr::VariableInit{
+        Expr::SimpleVariableInit{internal_name, init} => {
+            Expr::SimpleVariableInit{
                 internal_name: internal_name.clone(),
+                init: Box::new(transform_typed_expr(&init, transform, parser_context)),
+            }
+        },
+        Expr::UnresolvedVariableInit{internal_name, var_type, init} => {
+            Expr::UnresolvedVariableInit{
+                internal_name: internal_name.clone(),
+                var_type: var_type.clone(),
                 init: Box::new(transform_typed_expr(&init, transform, parser_context)),
             }
         },
@@ -218,6 +229,6 @@ pub fn transform_typed_expr(
     }
     TypedExpr{
         expr: transform_expr(&typed_expr.expr, transform, &typed_expr.loc, parser_context), 
-        loc: typed_expr.loc, r#type: typed_expr.r#type.clone()
+        loc: typed_expr.loc, r#type: typed_expr.r#type.clone(), return_expr: ReturnExpr::None
     }
 }

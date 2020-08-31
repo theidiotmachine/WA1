@@ -54,7 +54,7 @@ impl<'a> Parser<'a> {
         loc.end = loc_after.end.clone();
 
         expect_punct!(self, parser_context, Punct::CloseParen);
-        TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemoryGrow(Box::new(expr))), r#type: FullType::new(&SIZE_T, Mutability::Const), loc: loc}
+        TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemoryGrow(Box::new(expr))), r#type: FullType::new(&SIZE_T, Mutability::Const), loc: loc, return_expr: ReturnExpr::None}
     }
 
     pub(crate) fn parse_mem_size(&mut self,
@@ -63,7 +63,7 @@ impl<'a> Parser<'a> {
     ) -> TypedExpr {
         let loc = self.peek_next_location();
         self.parse_empty_function_call_args(parser_func_context, parser_context);
-        TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemorySize), r#type: FullType::new(&SIZE_T, Mutability::Const), loc: loc}
+        TypedExpr{expr: Expr::Intrinsic(Intrinsic::MemorySize), r#type: FullType::new(&SIZE_T, Mutability::Const), loc: loc, return_expr: ReturnExpr::None}
     }
 
     pub(crate) fn parse_trap(&mut self,
@@ -72,7 +72,7 @@ impl<'a> Parser<'a> {
     ) -> TypedExpr {
         let loc = self.peek_next_location();
         self.parse_empty_function_call_args(parser_func_context, parser_context);
-        TypedExpr{expr: Expr::Intrinsic(Intrinsic::Trap), r#type: FullType::new(&Type::Never, Mutability::Const), loc: loc}
+        TypedExpr{expr: Expr::Intrinsic(Intrinsic::Trap), r#type: FullType::new(&Type::Never, Mutability::Const), loc: loc, return_expr: ReturnExpr::None}
     }
 
     pub(crate) fn parse_sizeof(&mut self,    
@@ -86,11 +86,11 @@ impl<'a> Parser<'a> {
 
         match expr.r#type.r#type {
             Type::TypeLiteral(t) => {
-                TypedExpr{expr: Expr::SizeOf((t.r#type).clone()), r#type: FullType::new(&SIZE_T, Mutability::Const), loc: loc}
+                TypedExpr{expr: Expr::SizeOf((t.r#type).clone()), r#type: FullType::new(&SIZE_T, Mutability::Const), loc: loc, return_expr: ReturnExpr::None}
             },
             _ => {
                 parser_context.push_err(Error::NotYetImplemented(loc, String::from("__sizeof only works on __structs")));
-                TypedExpr{expr: Expr::NoOp, r#type: FullType::new(&SIZE_T, Mutability::Const), loc: loc}
+                TypedExpr{expr: Expr::NoOp, r#type: FullType::new(&SIZE_T, Mutability::Const), loc: loc, return_expr: ReturnExpr::None}
             }
         }
     }
@@ -113,15 +113,15 @@ impl<'a> Parser<'a> {
         match lookahead {
             Token::Punct(Punct::OpenBrace) => {
                 let out = self.parse_object_literal_to_vec(&type_to_construct.r#type, &loc, parser_func_context, parser_context);
-                TypedExpr{expr: Expr::ConstructStaticFromObjectLiteral(type_to_construct.r#type.clone(), out), loc: loc, r#type: type_to_construct}
+                TypedExpr{expr: Expr::ConstructStaticFromObjectLiteral(type_to_construct.r#type.clone(), out), loc: loc, r#type: type_to_construct, return_expr: ReturnExpr::None}
             },
             Token::Punct(Punct::OpenBracket) => {
                 let out = self.parse_array_literal_to_vec(&type_to_construct.r#type, &loc, parser_func_context, parser_context);
-                TypedExpr{expr: Expr::ConstructStaticFromArrayLiteral(type_to_construct.r#type.clone(), out), loc: loc, r#type: type_to_construct}
+                TypedExpr{expr: Expr::ConstructStaticFromArrayLiteral(type_to_construct.r#type.clone(), out), loc: loc, r#type: type_to_construct, return_expr: ReturnExpr::None}
             },
             _ => {
                 let out = self.parse_object_literal_to_vec(&type_to_construct.r#type, &loc, parser_func_context, parser_context);
-                TypedExpr{expr: Expr::ConstructStaticFromObjectLiteral(type_to_construct.r#type.clone(), out), loc: loc, r#type: type_to_construct}
+                TypedExpr{expr: Expr::ConstructStaticFromObjectLiteral(type_to_construct.r#type.clone(), out), loc: loc, r#type: type_to_construct, return_expr: ReturnExpr::None}
             }
         }
     }
@@ -155,11 +155,11 @@ impl<'a> Parser<'a> {
 
         parser_context.push_empty_type_scope();
 
-        let mut members: Vec<StructMember> = vec![];
+        let mut members: Vec<Member> = vec![];
 
         expect_punct!(self, parser_context, Punct::OpenBrace);
 
-        parser_context.type_map.insert(id.to_string(), TypeDecl::Struct{struct_type: StructType{members: vec![]}, under_construction: true, export: export, name: id.to_string()});
+        parser_context.type_map.insert(id.to_string(), TypeDecl::Struct{members: vec![], under_construction: true, export: export});
 
         loop {
             let lookahead_item = self.peek_next_item();
@@ -184,7 +184,7 @@ impl<'a> Parser<'a> {
                     expect_punct!(self, parser_context, Punct::Colon);
                     let member_type = self.parse_type(parser_context);
                     expect_semicolon!(self, parser_context);
-                    members.push(StructMember{name: i.to_string(), r#type: member_type.clone()});
+                    members.push(Member{name: i.to_string(), r#type: member_type.clone(), privacy: Privacy::Public});
                 },
                 _ => {
                     self.skip_next_item();
@@ -200,14 +200,14 @@ impl<'a> Parser<'a> {
         parser_context.trait_impl_map.insert((id.to_string(), trait_name.clone()), TraitImpl{trait_name: trait_name, for_type: Type::UnsafeStruct{name: id.to_string()}, export: true, member_funcs: vec![]});
 
         //and register the type itself
-        parser_context.type_map.insert(id.to_string(), TypeDecl::Struct{struct_type: StructType{members: members}, under_construction: false, export: export, name: id.to_string()});
+        parser_context.type_map.insert(id.to_string(), TypeDecl::Struct{members: members, under_construction: false, export: export});
     }
 
     ///Helper function to create a '__null' expr
     pub(crate) fn create_unsafe_null(
         loc: &SourceLocation,
     ) -> TypedExpr {
-        TypedExpr{expr:Expr::UnsafeNull, r#type: FullType::new(&Type::UnsafeNull, Mutability::Const), loc: loc.clone()}
+        TypedExpr{expr:Expr::UnsafeNull, r#type: FullType::new(&Type::UnsafeNull, Mutability::Const), loc: loc.clone(), return_expr: ReturnExpr::None}
     }
 
     /// Parse '__Some(x)'. Because options are built in at a fairly low level, this is a parser function, not a library function.
@@ -235,7 +235,7 @@ impl<'a> Parser<'a> {
 
         let inner_loc = inner.loc.clone();
         let inner_type = inner.r#type.clone();
-        TypedExpr{expr: Expr::UnsafeSome(Box::new(inner)), r#type: FullType::new(&Type::UnsafeSome(Box::new(inner_type.r#type)), inner_type.mutability), loc: inner_loc}
+        TypedExpr{expr: Expr::UnsafeSome(Box::new(inner)), r#type: FullType::new(&Type::UnsafeSome(Box::new(inner_type.r#type)), inner_type.mutability), loc: inner_loc, return_expr: ReturnExpr::None}
     }
 
     pub(crate) fn parse_unsafe_option_component(&mut self,
@@ -250,14 +250,14 @@ impl<'a> Parser<'a> {
                 self.parse_empty_function_call_args(parser_func_context, parser_context);
                 TypedExpr{
                     expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::NotEqual, rhs: Box::new(Parser::create_unsafe_null(&loc))},
-                    r#type: FullType::new(&Type::Bool, Mutability::Const), loc: loc.clone()
+                    r#type: FullType::new(&Type::Bool, Mutability::Const), loc: loc.clone(), return_expr: ReturnExpr::None
                 }
             },
             "isNone" => {
                 self.parse_empty_function_call_args(parser_func_context, parser_context);
                 TypedExpr{
                     expr: Expr::BinaryOperator{lhs: Box::new(lhs.clone()), op: BinaryOperator::Equal, rhs: Box::new(Parser::create_unsafe_null(&loc))},
-                    r#type: FullType::new(&Type::Bool, Mutability::Const), loc: loc.clone()
+                    r#type: FullType::new(&Type::Bool, Mutability::Const), loc: loc.clone(), return_expr: ReturnExpr::None
                 }
             },
             "unwrap" => {
@@ -290,7 +290,7 @@ impl<'a> Parser<'a> {
         TypedExpr{
             expr: Expr::DynamicMember(Box::new(lhs_clone), Box::new(cast_expr)),
             r#type: FullType::new(inner_type, lhs.r#type.mutability),
-            loc: loc,
+            loc: loc, return_expr: ReturnExpr::None
         }
     }
 
@@ -307,7 +307,7 @@ impl<'a> Parser<'a> {
             "minusUOffsetMut" => &PTR_MUOM_METHODS,
             _ => {
                 parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), holding.r#type.r#type.clone(), id.clone()));
-                return TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), loc: loc.clone()};
+                return TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), loc: loc.clone(), return_expr: ReturnExpr::None};
             }
         };
     
@@ -321,7 +321,7 @@ impl<'a> Parser<'a> {
         match t {
             None => {
                 parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), holding.r#type.r#type.clone(), id.clone()));
-                TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), loc: loc.clone()}
+                TypedExpr{expr: Expr::MemberFuncCall(Box::new(holding.clone()), id.clone(), vec![]), r#type: holding.r#type.clone(), loc: loc.clone(), return_expr: ReturnExpr::None}
             },
             Some(FuncCallTypeCast{func_type, arg_type_casts}) => {
                 let out_self_type_cast = arg_type_casts.get(0).unwrap().clone();
@@ -338,7 +338,7 @@ impl<'a> Parser<'a> {
                     i += 1;
                 }
 
-                TypedExpr{expr: Expr::MemberFuncCall(Box::new(o_cast.unwrap().clone()), id.clone(), out_args), r#type: func_type.out_type.clone(), loc: loc.clone()}
+                TypedExpr{expr: Expr::MemberFuncCall(Box::new(o_cast.unwrap().clone()), id.clone(), out_args), r#type: func_type.out_type.clone(), loc: loc.clone(), return_expr: ReturnExpr::None}
             }
         }
     }

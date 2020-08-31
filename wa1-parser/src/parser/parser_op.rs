@@ -258,7 +258,7 @@ fn as_l_value(
             match o_g{
                 Some(g) => {
                     if g.mutability == VariableMutability::Variable {
-                        Some(TypedLValueExpr{r#type: typed_expr.r#type.r#type.clone(), expr: LValueExpr::GlobalVariableAssign(name.clone()), loc: typed_expr.loc})
+                        Some(TypedLValueExpr{r#type: typed_expr.r#type.clone(), expr: LValueExpr::GlobalVariableAssign(name.clone()), loc: typed_expr.loc})
                     } else {
                         None
                     }
@@ -270,7 +270,7 @@ fn as_l_value(
         Expr::LocalVariableUse(name) => {
             let (_, sv) = parser_context.find_named_scoped_var_given_internal_name(&name);
             if sv.is_var() {
-                Some(TypedLValueExpr{r#type: typed_expr.r#type.r#type.clone(), expr: LValueExpr::LocalVariableAssign(name.clone()), loc: typed_expr.loc})
+                Some(TypedLValueExpr{r#type: typed_expr.r#type.clone(), expr: LValueExpr::LocalVariableAssign(name.clone()), loc: typed_expr.loc})
             } else {
                 None
             }
@@ -279,21 +279,21 @@ fn as_l_value(
             if typed_expr.type_is_const() {
                 None
             } else {
-                Some(TypedLValueExpr{r#type: typed_expr.r#type.r#type.clone(), expr: LValueExpr::ClosureVariableAssign(name.clone()), loc: typed_expr.loc})
+                Some(TypedLValueExpr{r#type: typed_expr.r#type.clone(), expr: LValueExpr::ClosureVariableAssign(name.clone()), loc: typed_expr.loc})
             }
         },
         Expr::NamedMember(lhs, name) => {
             if typed_expr.type_is_const() {
                 None
             } else {
-                Some(TypedLValueExpr{r#type: typed_expr.r#type.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(lhs.clone(), lhs.r#type.r#type.clone(), name.clone()), loc: typed_expr.loc})
+                Some(TypedLValueExpr{r#type: typed_expr.r#type.clone(), expr: LValueExpr::StaticNamedMemberAssign(lhs.clone(), lhs.r#type.r#type.clone(), name.clone()), loc: typed_expr.loc})
             }
         },
         Expr::DynamicMember(outer, inner) => {
             if typed_expr.type_is_const() {
                 None
             } else {
-                Some(TypedLValueExpr{r#type: typed_expr.r#type.r#type.clone(), expr: LValueExpr::DynamicMemberAssign(outer.clone(), outer.r#type.r#type.clone(), inner.clone()), loc: typed_expr.loc})
+                Some(TypedLValueExpr{r#type: typed_expr.r#type.clone(), expr: LValueExpr::DynamicMemberAssign(outer.clone(), outer.r#type.r#type.clone(), inner.clone()), loc: typed_expr.loc})
             }
         },
         Expr::Parens(inner) => as_l_value(&inner, parser_context),
@@ -411,11 +411,11 @@ impl<'b> Parser<'b> {
                                     }
                                 };
                                 
-                                TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: lhs_out, rhs: rhs_out}, r#type: bin_op_type_cast.out_type, loc: loc}
+                                TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: lhs_out, rhs: rhs_out}, r#type: bin_op_type_cast.out_type, loc: loc, return_expr: ReturnExpr::None}
                             },
                             None => {
                                 parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), lhs.r#type.clone(), rhs.r#type.clone()));
-                                TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone())}, r#type: FullType::new_const(&Type::Unknown), loc: loc}
+                                TypedExpr{expr: Expr::BinaryOperator{op: bin_op, lhs: Box::new(lhs.clone()), rhs: Box::new(rhs.clone())}, r#type: FullType::new_const(&Type::Unknown), loc: loc, return_expr: ReturnExpr::None}
                             }
                         }
                     }
@@ -444,7 +444,7 @@ impl<'b> Parser<'b> {
                                 }
 
                                 //The l-value code will have stripped away any type guards, so we use that
-                                let unguarded_lhs_full_type = FullType::new(&l_value.r#type, lhs.r#type.mutability);
+                                let unguarded_lhs_full_type = l_value.r#type.clone();
 
                                 //now type check the assignment operator. Note that we only need a type check from the rhs
                                 let o_bin_op_type_cast = wa1_types::get_binary_op_type_cast(get_op_type_for_assop(&ass_op), &unguarded_lhs_full_type, &rhs.r#type);
@@ -467,14 +467,25 @@ impl<'b> Parser<'b> {
                                             }
                                         };
                                         if ass_op == AssignmentOperator::Assign {
-                                            TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, loc: loc}
+                                            //if we don't know the assignment model, worry about it later
+                                            if rhs_out.r#type.r#type.is_type_variable() {
+                                                TypedExpr{expr: Expr::UnresolvedAssignment{l_value, r_value: rhs_out}, r#type: bin_op_type_cast.out_type, loc: loc, return_expr: ReturnExpr::None}
+                                            } else {
+                                                let is_standard_value_model = rhs_out.r#type.r#type.is_standard_value_model();
+                                                if (is_standard_value_model && l_value.r#type.mutability == Mutability::Const && rhs_out.r#type.mutability == Mutability::Const) || !is_standard_value_model{
+                                                    TypedExpr{expr: Expr::SimpleAssignment{l_value, r_value: rhs_out}, r#type: bin_op_type_cast.out_type, loc: loc, return_expr: ReturnExpr::None}
+                                                } else {
+                                                    //this needs to be a deep copy
+                                                    unimplemented!()
+                                                }
+                                            }
                                         } else {
-                                            TypedExpr{expr: Expr::ModifyAssignment(ass_op, Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, loc: loc}
+                                            TypedExpr{expr: Expr::ModifyAssignment(ass_op, Box::new(lhs.clone()), l_value, rhs_out), r#type: bin_op_type_cast.out_type, loc: loc, return_expr: ReturnExpr::None}
                                         } 
                                     },
                                     None => {
                                         parser_context.push_err(Error::TypeFailureBinaryOperator(loc, op.to_string(), unguarded_lhs_full_type.clone(), rhs.r#type.clone()));
-                                        TypedExpr{expr: Expr::Assignment(Box::new(lhs.clone()), l_value, Box::new(rhs.clone())), r#type: FullType::new_const(&Type::Unknown), loc: loc}
+                                        TypedExpr{expr: Expr::UnresolvedAssignment{l_value, r_value: Box::new(rhs.clone())}, r#type: FullType::new_const(&Type::Unknown), loc: loc, return_expr: ReturnExpr::None}
                                     }
                                 }
                             }

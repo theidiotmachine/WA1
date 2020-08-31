@@ -144,6 +144,8 @@ fn substitute_trait_type(trait_name: &String, this_type: &Type, t: &Type) -> Typ
         Type::UnsafeSome(inner) => Type::UnsafeSome(Box::new(substitute_trait_type(trait_name, this_type, inner))),
         Type::UserType{name, type_args, inner} => 
             Type::UserType{name: name.clone(), type_args: type_args.iter().map(|x| substitute_trait_type(trait_name, this_type, &x)).collect(), inner: inner.clone()},
+        Type::UserClass{name, type_args} => 
+            Type::UserClass{name: name.clone(), type_args: type_args.iter().map(|x| substitute_trait_type(trait_name, this_type, &x)).collect()},
         Type::VariableUsage{name, constraint: _} => {
             if name == trait_name {
                 this_type.clone()
@@ -188,11 +190,15 @@ pub fn get_member_funcs(t: &Type, type_map: &HashMap<String, TypeDecl>) -> Vec<M
         Type::UnsafePtr => get_unsafe_ptr_member_funcs(),
         Type::UnsafeSome(_) => vec![],
         Type::UnsafeStruct{name: _} => vec![],
+        Type::UserClass{name, type_args: _} => {
+            let type_decl = type_map.get(name).unwrap();
+            type_decl.get_member_funcs()
+        },
         Type::UserType{name, type_args: _, inner: _} => {
             let type_decl = type_map.get(name).unwrap();
             type_decl.get_member_funcs()
         },
-         Type::VariableUsage{name: _, constraint: _} => vec![],
+        Type::VariableUsage{name: _, constraint: _} => vec![],
     }
 }
 
@@ -397,14 +403,22 @@ impl<'a> Parser<'a> {
                 },
                 Some(user_type) => {
                     match user_type {
-                        TypeDecl::Struct{name: _, struct_type: _, under_construction: _, export: _} => Some(Type::UnsafeStruct{name: ident.clone()}),
-                        TypeDecl::Alias{name: _, of, export: _} => Some(of.clone()),
-                        TypeDecl::Type{name: _, inner, type_args, export: _, member_funcs: _, constructor: _, under_construction: _} => {
+                        TypeDecl::Struct{members: _, under_construction: _, export: _} => Some(Type::UnsafeStruct{name: ident.clone()}),
+                        TypeDecl::Alias{of, export: _} => Some(of.clone()),
+                        TypeDecl::Type{inner, type_args, export: _, member_funcs: _, constructor: _, under_construction: _} => {
                             if type_args.len() > 0 {
                                 let types = self.parse_type_args(&type_args, parser_context);
                                 Some(Type::UserType{name: ident.clone(), type_args: types, inner: Box::new(inner)})
                             } else {
                                 Some(Type::UserType{name: ident.clone(), type_args: vec![], inner: Box::new(inner)})
+                            }
+                        },
+                        TypeDecl::UserClass{type_args, export: _, member_funcs: _, constructor: _, under_construction: _, members: _, storage: _} => {
+                            if type_args.len() > 0 {
+                                let types = self.parse_type_args(&type_args, parser_context);
+                                Some(Type::UserClass{name: ident.clone(), type_args: types})
+                            } else {
+                                Some(Type::UserClass{name: ident.clone(), type_args: vec![]})
                             }
                         },
                     }
@@ -586,7 +600,7 @@ impl<'a> Parser<'a> {
             self.skip_next_item();
         }
         let t = self.parse_type(parser_context);
-        if t.get_pass_style() == PassStyle::AtomicValue && mutability == Mutability::Mut{
+        if t.get_pass_style() == PassStyle::SimpleValue && mutability == Mutability::Mut{
             parser_context.push_err(Error::UnnecessaryMut(mut_loc, t.clone()));
             mutability = Mutability::Const;
         }
@@ -644,7 +658,7 @@ impl<'a> Parser<'a> {
         self.skip_next_item();
         expect_punct!(self, parser_context, Punct::Equal);
         let t = self.parse_type(parser_context);
-        parser_context.type_map.insert(id.clone(), TypeDecl::Alias{name: id, of: t, export});
+        parser_context.type_map.insert(id.clone(), TypeDecl::Alias{of: t, export});
     }
 
     ///Parse a `type`, which is WA1 for an encapsulated alias plus member functions.
@@ -702,7 +716,7 @@ impl<'a> Parser<'a> {
             )
         }
 
-        parser_context.type_map.insert(id.clone(), TypeDecl::Type{name: id.clone(), inner: inner.clone(), type_args: type_args.clone(), export, 
+        parser_context.type_map.insert(id.clone(), TypeDecl::Type{inner: inner.clone(), type_args: type_args.clone(), export, 
             member_funcs: member_funcs.clone(), 
             constructor: None, under_construction: true});
 
@@ -800,7 +814,7 @@ impl<'a> Parser<'a> {
             parser_context.pop_type_scope();
         }
 
-        parser_context.type_map.insert(id.clone(), TypeDecl::Type{name: id, inner, type_args, export, member_funcs: member_funcs, constructor: constructor, under_construction: false});
+        parser_context.type_map.insert(id.clone(), TypeDecl::Type{inner, type_args, export, member_funcs: member_funcs, constructor: constructor, under_construction: false});
     }
 
     ///Given the constraints on a type variable, parse a member function call.
@@ -820,7 +834,7 @@ impl<'a> Parser<'a> {
             }
             None => {
                 parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), this_expr.r#type.r#type.clone(), func_name.clone()));
-                TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc.clone()}
+                TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc.clone(), return_expr: ReturnExpr::None}
             }
         }     
     }
@@ -836,7 +850,7 @@ impl<'a> Parser<'a> {
     ) -> TypedExpr {
         let user_type = parser_context.get_type_decl(type_name);
         match user_type{
-            Some(TypeDecl::Type{name: _, inner, type_args: _, export: _, member_funcs, constructor: _, under_construction: _}) => {
+            Some(TypeDecl::Type{inner, type_args: _, export: _, member_funcs, constructor: _, under_construction: _}) => {
                 let boo = member_funcs.clone();
                 let o_member_func = boo.iter().find(|&x| x.name == *func_name);
                 match o_member_func {
@@ -847,11 +861,11 @@ impl<'a> Parser<'a> {
                         match mangled_name.as_str(){
                             "__getInner" => {
                                 self.parse_empty_function_call_args(parser_func_context, parser_context);
-                                TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: FullType::new(&inner, Mutability::Const), loc: loc.clone()}
+                                TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: FullType::new(&inner, Mutability::Const), loc: loc.clone(), return_expr: ReturnExpr::None}
                             },
                             "__getInnerMut" => {
                                 self.parse_empty_function_call_args(parser_func_context, parser_context);
-                                TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: FullType::new(&inner, Mutability::Mut), loc: loc.clone()}
+                                TypedExpr{expr: Expr::FreeUserTypeUnwrap(Box::new(this_expr.clone())), r#type: FullType::new(&inner, Mutability::Mut), loc: loc.clone(), return_expr: ReturnExpr::None}
                             },
                             _ => {
                                 self.parse_member_function_call(this_expr, &type_args, &member_func, parser_func_context, parser_context)
@@ -860,7 +874,7 @@ impl<'a> Parser<'a> {
                     },
                     None => {
                         parser_context.push_err(Error::ObjectHasNoMember(loc.clone(), this_expr.r#type.r#type.clone(), func_name.clone()));
-                        TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc.clone()}
+                        TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc.clone(), return_expr: ReturnExpr::None}
                     }
                 }
             },

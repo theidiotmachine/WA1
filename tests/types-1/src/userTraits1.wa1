@@ -26,7 +26,7 @@ fn fa<T: TraitOne>(x: T) -> Void x.a()
 fn fb<T: TraitOne>(x: T) -> Int x.b(1)
 fn fc<T: TraitOne>(x: T) -> T x.c()
 
-fn testOne() -> Void {
+export fn test() -> Void {
     let x = new TypeOne(8)
     fa(x)
     assert.assert(fb(x) == 9)

@@ -7,7 +7,7 @@ use wa1_types::prelude::*;
 
 use crate::wasm::wasm_code::WasmExpr;
 use crate::wasm::wasm_module::{WasmModule};
-use crate::transform::{CompilerContext, compile_expr};
+use crate::generate::{CompilerContext, compile_expr};
 use crate::wasm::wasm_instructions::{WasmInstr};
 
 pub (crate) fn compile_int_member_func(

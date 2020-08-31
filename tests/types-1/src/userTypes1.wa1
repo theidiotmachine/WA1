@@ -1,0 +1,45 @@
+//This tests vert simple user types. You probably wouldn't use these in reality
+
+import {*} from "./assert"
+
+type One = Int {
+    constructor(x: Int) => x
+    
+    fn add(r: Int) -> Int { 
+        //this.getInner() + 
+        r
+    }
+
+    //private fn somePrivacy(y: Int) -> Void {}
+
+    //fn ext(x: Int) -> Void this.somePrivacy(x)
+}
+
+fn testOne() -> Void {
+    let oneOne = new One(3)
+    //assert.assert(oneOne.add(4) == 7)
+    oneOne.add(4)
+
+    //oneOne.set(11)
+    //assert.assert(oneOne.add(4) == 15)
+}
+
+/*
+type Two<T> = __Array<T> {
+    constructor(x: __Array<T>) => x
+
+    fn head() -> T {
+        this.getInner()[0]
+    }
+}
+
+fn testTwo() => {
+    let oneTwo = new Two<Int>(__static __Array<Int>[12001, 12002])
+    assert.assert(oneTwo.head() == 12001)
+}
+*/
+
+export fn test() -> Void {
+    testOne()
+    //testTwo()
+}

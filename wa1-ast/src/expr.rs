@@ -19,6 +19,7 @@ pub mod prelude {
     pub use super::ClosureRef;
     pub use super::ObjectLiteralElem;
     pub use super::VariableMutability;
+    pub use super::ReturnExpr;
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
@@ -141,8 +142,10 @@ pub enum Expr {
     ClosureVariableUse(String),
     ///round brackets
     Parens(Box<TypedExpr>),
-    /// assignment expression. First arg is the lvalue as a typed expr, second is the lvalue, third is the r value
-    Assignment(Box<TypedExpr>, TypedLValueExpr, Box<TypedExpr>),
+    /// Simple assignment expression that can use the built in variable assignment. First arg is the lvalue as a typed expr, second is the lvalue, third is the r value
+    SimpleAssignment{l_value: TypedLValueExpr, r_value: Box<TypedExpr>},
+    /// Unresolved assignment expression. First arg is the lvalue as a typed expr, second is the lvalue, third is the r value
+    UnresolvedAssignment{l_value: TypedLValueExpr, r_value: Box<TypedExpr>},
     /// modify and assign expression
     ModifyAssignment(AssignmentOperator, Box<TypedExpr>, TypedLValueExpr, Box<TypedExpr>),
     /// static func call. Arg is func name.
@@ -175,10 +178,12 @@ pub enum Expr {
     IfThenElse(Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>),
     /// a function declaration. This might compile to a closure creation, a function pointer, or a no op 
     FuncDecl(FuncObjectCreation),
-    /// variable declaration
-    VariableInit{internal_name: String, init: Box<TypedExpr>},
+    /// Variable declaration where the type is a simple type
+    SimpleVariableInit{internal_name: String, init: Box<TypedExpr>},
+    /// Variable declaration where we don't know what the type is
+    UnresolvedVariableInit{internal_name: String, var_type: FullType, init: Box<TypedExpr>},
     /// global variable declaration. Only appears in the _start function.
-    GlobalVariableDecl(Box<GlobalVariableDecl>),
+    SimpleGlobalVariableDecl(Box<GlobalVariableDecl>),
     /// return statement
     Return(Box<Option<TypedExpr>>),
     /// if-then
@@ -230,17 +235,41 @@ impl Expr{
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ReturnExpr {
+    None,
+    Block,
+    Func
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TypedExpr{
     pub expr: Expr,
     pub r#type: FullType,
     pub loc: SourceLocation,
+    pub return_expr: ReturnExpr,
 }
 
 impl TypedExpr{
     pub fn type_is_const(&self) -> bool {
         self.r#type.mutability == Mutability::Const
-    }    
+    }
+
+    pub fn set_return_expr(&mut self, return_expr: ReturnExpr) -> () {
+        match &mut self.expr {
+            Expr::Block(tes) => {
+                if tes.last().is_some() {
+                    tes.last_mut().unwrap().set_return_expr(return_expr);
+                }
+            },
+            Expr::IfThenElse(_, tte, ete) => {
+                tte.set_return_expr(return_expr);
+                ete.set_return_expr(return_expr);
+            },
+            _ => {}
+        }
+        self.return_expr = return_expr;
+    }
 }
 
 /// An l value expression
@@ -262,6 +291,6 @@ pub enum LValueExpr{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TypedLValueExpr{
     pub expr: LValueExpr,
-    pub r#type: Type,
+    pub r#type: FullType,
     pub loc: SourceLocation,
 }

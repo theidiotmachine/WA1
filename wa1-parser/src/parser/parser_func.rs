@@ -45,7 +45,7 @@ pub use wa1_errs::Error;
 pub use wa1_errs::prelude::*;
 
 use crate::tree_transform::{Transform, transform_expr, transform_lvalue_expr, transform_typed_expr, transform_func_decl};
-
+use crate::generics::{transform_func_type, transform_type, new_type_map};
 use crate::{expect_keyword, expect_next, expect_ident, expect_punct, cast_typed_expr, generic_unwrap, generic_wrap, expect_semicolon};
 use crate::parser::parser_type::{matches_type_constraint, get_runtime_type_for_generic, substitute_trait_func_type};
 
@@ -109,84 +109,6 @@ fn resolve_generic_func_decl<'a>(
     FuncDecl{args: out_args, export: generic_func.func.decl.export, name: resolved_name.clone(), 
         return_type: FullType::new(&out_return_type, generic_func.func.decl.return_type.mutability), 
         generic_impl: true, type_guard: type_guard, member_func: generic_func.func.decl.member_func
-    }
-}
-
-fn transform_types(ts: &Vec<Type>,
-    type_map: &HashMap<String, Type>,
-    loc: &SourceLocation,
-    parser_context: &mut dyn ErrRecorder,
-) -> Vec<Type> {
-    let mut out = vec![];
-    for t in ts {
-        out.push(transform_type(t, type_map, loc, parser_context));
-    }
-    out
-}
-
-fn transform_full_types(ts: &Vec<FullType>,
-    type_map: &HashMap<String, Type>,
-    loc: &SourceLocation,
-    parser_context: &mut dyn ErrRecorder,
-) -> Vec<FullType> {
-    let mut out = vec![];
-    for t in ts {
-        out.push(FullType::new(&transform_type(&t.r#type, type_map, loc, parser_context), t.mutability));
-    }
-    out
-}
-
-fn transform_func_type(func_type: &FuncType,
-    type_map: &HashMap<String, Type>,
-    loc: &SourceLocation,
-    parser_context: &mut dyn ErrRecorder,
-) -> FuncType {
-    FuncType{
-        out_type: FullType::new(&transform_type(&func_type.out_type.r#type, type_map, loc, parser_context), func_type.out_type.mutability),
-        in_types: transform_full_types(&func_type.in_types, type_map, loc, parser_context)
-    }
-}
-
-/// Substitute all type variables for their concrete values
-fn transform_type(t: &Type,
-    type_map: &HashMap<String, Type>,
-    loc: &SourceLocation,
-    parser_context: &mut dyn ErrRecorder,
-) -> Type {
-    match t {
-        Type::Any | Type::Bool | Type::FakeVoid | Type::FloatLiteral(_) 
-        | Type::Int(_, _) | Type::ModuleLiteral(_) | Type::Never | Type::Number | Type::RealVoid | Type::String 
-        | Type::StringLiteral(_) | Type::Undeclared | Type::Unknown | Type::UnsafePtr | Type::UnsafeNull
-        | Type::UnsafeStruct{name: _}
-            => t.clone(),
-        Type::Array(t) => Type::Array(Box::new(transform_type(t, type_map, loc, parser_context))),
-        Type::Func{func_type} => {
-            Type::Func{func_type: Box::new(transform_func_type(func_type, type_map, loc, parser_context))}
-        },
-        Type::ObjectLiteral(oles) => {
-            Type::ObjectLiteral(oles.iter().map(|(k, v)| (k.clone(), transform_type(&v, type_map, loc, parser_context))).collect())
-        },
-        Type::Option(t) => Type::Option(Box::new(transform_type(&t, type_map, loc, parser_context))),
-        Type::Some(t) => Type::Some(Box::new(transform_type(&t, type_map, loc, parser_context))),
-        Type::Tuple(ts) => Type::Tuple(transform_types(&ts, type_map, loc, parser_context)),
-        Type::TypeLiteral(t) => Type::TypeLiteral(Box::new(FullType::new(&transform_type(&t.r#type, type_map, loc, parser_context), t.mutability))),
-        Type::UnsafeArray(t) => Type::UnsafeArray(Box::new(transform_type(t, type_map, loc, parser_context))),
-        Type::UnsafeOption(t) => Type::UnsafeOption(Box::new(transform_type(&t, type_map, loc, parser_context))),
-        Type::UnsafeSome(t) => Type::UnsafeSome(Box::new(transform_type(&t, type_map, loc, parser_context))),
-        Type::UserType{name, type_args, inner} => 
-            Type::UserType{name: name.clone(), type_args: transform_types(&type_args, type_map, loc, parser_context), inner: Box::new(transform_type(&inner, type_map, loc, parser_context))},
-        Type::VariableUsage{name, constraint: _} => {
-            let o_n_t = type_map.get(name);
-            match o_n_t {
-                Some(n_t) => {
-                    (*n_t).clone()
-                },
-                None => {
-                    parser_context.push_err(Error::UnresolvedTypeArg(loc.clone(), name.clone()));
-                    t.clone()
-                }
-            }
-        },
     }
 }
 
@@ -262,7 +184,7 @@ fn generate_generic_func_call(
             return TypedExpr{expr: Expr::UnresolvedGenericFuncCall{
                 name: func_name.clone(), unresolved_func_decl: resolved_func_decl.clone(), args: args, 
                 unresolved_types: resolved_types.clone()
-            }, r#type: resolved_func_decl.return_type.clone(), loc: loc.clone()}
+            }, r#type: resolved_func_decl.return_type.clone(), loc: loc.clone(), return_expr: ReturnExpr::None}
         } else {
             //something went wrong
             for unresolved_type_arg in unresolved_type_args {
@@ -385,7 +307,7 @@ fn generate_specific_func_call(
         this_args.insert(0, this_expr.as_ref().unwrap().clone());
     }
     
-    TypedExpr{expr: Expr::StaticFuncCall(func_name.clone(), func_decl.clone(), this_args.clone()), r#type: func_return_type, loc: loc}
+    TypedExpr{expr: Expr::StaticFuncCall(func_name.clone(), func_decl.clone(), this_args.clone()), r#type: func_return_type, loc: loc, return_expr: ReturnExpr::None}
 }
 
 struct GenericFuncTypeTransformer<'a>{
@@ -402,7 +324,7 @@ impl<'a> GenericFuncTypeTransformer<'a>{
 impl<'a> Transform for GenericFuncTypeTransformer<'a>{
     fn transform_typed_expr(&mut self, typed_expr: &TypedExpr, parser_context: &mut dyn ErrRecorder,) -> Option<TypedExpr> {
         let new_type = transform_type(&typed_expr.r#type.r#type, &self.type_map, &typed_expr.loc, parser_context);
-        Some(TypedExpr{expr: transform_expr(&typed_expr.expr, self, &typed_expr.loc, parser_context), loc: typed_expr.loc, r#type: FullType::new(&new_type, typed_expr.r#type.mutability)})
+        Some(TypedExpr{expr: transform_expr(&typed_expr.expr, self, &typed_expr.loc, parser_context), loc: typed_expr.loc, r#type: FullType::new(&new_type, typed_expr.r#type.mutability), return_expr: ReturnExpr::None})
     }
     fn transform_expr(&mut self, expr: &Expr, loc: &SourceLocation, err_recorder: &mut dyn ErrRecorder) -> Option<Expr> {
         match expr {
@@ -414,11 +336,37 @@ impl<'a> Transform for GenericFuncTypeTransformer<'a>{
                 let new_type = transform_type(&t.r#type, &self.type_map, loc, err_recorder);
                 Some(Expr::TypeLiteral(FullType::new(&new_type, t.mutability)))
             },
-            Expr::VariableInit{internal_name, init} => {
-                Some(Expr::VariableInit{
+            Expr::UnresolvedVariableInit{internal_name, var_type, init} => {
+                let init = transform_typed_expr(&init, self, err_recorder);
+                if !init.r#type.r#type.is_type_variable() {
+                    let is_standard_value_model = init.r#type.r#type.is_standard_value_model();
+                    if (is_standard_value_model && var_type.mutability == Mutability::Const && init.r#type.mutability == Mutability::Const) || !is_standard_value_model{
+                        return Some(Expr::SimpleVariableInit{
+                            internal_name: internal_name.clone(),
+                            init: Box::new(init)
+                        })
+                    } else {
+                        unimplemented!();
+                    }
+                }
+
+                return Some(Expr::UnresolvedVariableInit{
                     internal_name: internal_name.clone(),
+                    var_type: var_type.clone(),
                     init: Box::new(transform_typed_expr(&init, self, err_recorder)),
                 })
+            },
+            Expr::UnresolvedAssignment{l_value, r_value} => {
+                let new_l_value = self.transform_typed_lvalue_expr(&l_value, err_recorder).unwrap();
+                let new_r_value = transform_typed_expr(&r_value, self, err_recorder);
+                if !new_r_value.r#type.r#type.is_type_variable() {
+                    let is_standard_value_model = new_r_value.r#type.r#type.is_standard_value_model();
+                    if (is_standard_value_model && new_l_value.r#type.mutability == Mutability::Const && new_r_value.r#type.mutability == Mutability::Const) || !is_standard_value_model{
+                        return Some(Expr::SimpleAssignment{l_value: new_l_value.clone(), r_value: Box::new(new_r_value.clone())});
+                    }
+                }
+
+                Some(Expr::UnresolvedAssignment{l_value: l_value.clone(), r_value: r_value.clone()})
             },
             Expr::UnresolvedGenericFuncCall{name, unresolved_func_decl, args, unresolved_types} => {
                 let generic_func = self.parser_context.get_generic_fn_from_generics(name).unwrap();
@@ -479,8 +427,8 @@ impl<'a> Transform for GenericFuncTypeTransformer<'a>{
         }
     }
     fn transform_typed_lvalue_expr(&mut self, typed_lvalue_expr: &TypedLValueExpr, parser_context: &mut dyn ErrRecorder) -> Option<TypedLValueExpr> {
-        let new_type = transform_type(&typed_lvalue_expr.r#type, &self.type_map, &typed_lvalue_expr.loc, parser_context);
-        Some(TypedLValueExpr{expr: transform_lvalue_expr(&typed_lvalue_expr.expr, self, &typed_lvalue_expr.loc, parser_context), loc: typed_lvalue_expr.loc, r#type: new_type})
+        let new_type = transform_type(&typed_lvalue_expr.r#type.r#type, &self.type_map, &typed_lvalue_expr.loc, parser_context);
+        Some(TypedLValueExpr{expr: transform_lvalue_expr(&typed_lvalue_expr.expr, self, &typed_lvalue_expr.loc, parser_context), loc: typed_lvalue_expr.loc, r#type: FullType::new(&new_type, typed_lvalue_expr.r#type.mutability)})
     }
     fn transform_lvalue_expr(&mut self, _lvalue_expr: &LValueExpr, _loc: &SourceLocation, _parser_context: &mut dyn ErrRecorder) -> Option<LValueExpr> {
         None
@@ -656,6 +604,15 @@ fn deduce_generic_type(
             _ => {},
         },
 
+        Type::UserClass{name: w_name, type_args: w} => match got{
+            Type::UserClass{name: g_name, type_args: g} => {
+                if w_name == g_name {
+                    deduce_generic_types(w, g, type_map, loc, parser_context)
+                }
+            },
+            _ => {},
+        },
+
         Type::UserType{name: w_name, type_args: w, inner: _} => match got{
             Type::UserType{name: g_name, type_args: g, inner: _} => {
                 if w_name == g_name {
@@ -701,15 +658,6 @@ fn deduce_generic_function_call_args(
         
         idx += 1;
     }
-}
-
-/// Helper to create a type map, which is a map from type arg name to type. Starts off all undeclared
-fn new_type_map(type_args: &Vec<TypeArg>) -> HashMap<String, Type> {
-    let mut resolved_type_map: HashMap<String, Type> = HashMap::new();
-    for type_arg in type_args {
-        resolved_type_map.insert(type_arg.name.clone(), Type::Undeclared);
-    }
-    resolved_type_map
 }
 
 fn cast_function_call_args(
@@ -1017,7 +965,6 @@ impl<'a> Parser<'a> {
 
         //now get the args
         let arg_list = self.parse_function_decl_args(
-            //&None, 
             &Some(this_type.clone()),
             parser_context);
 
@@ -1187,8 +1134,12 @@ impl<'a> Parser<'a> {
             }
             let func_type = func.decl.get_func_type();
             parser_context.func_decls.push(func); 
-            (Some(TypedExpr{
-                expr: Expr::FuncDecl(FuncObjectCreation{name: mangled_name.clone(), closure: func_closure}), r#type: FullType::new_const(&Type::Func{func_type: Box::new(func_type.clone())}), loc: loc}), 
+            (Some(
+                TypedExpr{
+                    expr: Expr::FuncDecl(FuncObjectCreation{name: mangled_name.clone(), closure: func_closure}), 
+                    r#type: FullType::new_const(&Type::Func{func_type: Box::new(func_type.clone())}), 
+                    loc: loc, return_expr: ReturnExpr::None
+                }), 
                 mangled_name, name, vec![], func_type
             )
         }
@@ -1455,7 +1406,7 @@ impl<'a> Parser<'a> {
                             },
                             None => {
                                 parser_context.push_err(Error::FuncNotRecognized(loc.clone(), func_name.clone()));
-                                (TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc}, type_to_construct)
+                                (TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc, return_expr: ReturnExpr::None}, type_to_construct)
                             }
                         }
                     }
@@ -1463,7 +1414,7 @@ impl<'a> Parser<'a> {
             },
             _ => {
                 parser_context.push_err(Error::CantConstruct(loc.clone(), type_to_construct.r#type.clone()));
-                (TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc}, type_to_construct)
+                (TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc, return_expr: ReturnExpr::None}, type_to_construct)
             }
         }
     }
@@ -1494,7 +1445,7 @@ impl<'a> Parser<'a> {
 
         //args.insert(0, this_expr.clone());
         
-        TypedExpr{expr: Expr::TraitMemberFuncCall{trait_member_func: trait_member_func.clone(), this_expr: Box::new(this_expr.clone()), args}, r#type: func_return_type, loc: loc}
+        TypedExpr{expr: Expr::TraitMemberFuncCall{trait_member_func: trait_member_func.clone(), this_expr: Box::new(this_expr.clone()), args}, r#type: func_return_type, loc: loc, return_expr: ReturnExpr::None}
     }
 
     pub (crate) fn parse_member_function_call(&mut self,
@@ -1520,7 +1471,7 @@ impl<'a> Parser<'a> {
                     },
                     None => {
                         parser_context.push_err(Error::FuncNotRecognized(loc.clone(), member_func.name.clone()));
-                        TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc}
+                        TypedExpr{expr: Expr::NoOp, r#type: FullType::new_const(&Type::Undeclared), loc: loc, return_expr: ReturnExpr::None}
                     }
                 }
             }
