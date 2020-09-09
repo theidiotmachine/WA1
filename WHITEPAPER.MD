@@ -208,7 +208,7 @@ This is done because type inference in some languages (Scala in particular) is o
 
 ### Simple static functions
 
-Simple static functions are declared using the `fn` keyword. They require a list of typed arguments and use Rust's thin arrow (`->`) to declare their return type. Because the last element of a block is its return and because a block of a single element does not need curly brackets, this is legal.
+Simple static functions are declared using the `fn` keyword. They require a list of typed arguments and use Rust's thin arrow (`->`) to declare their return type. Because the last element of a block is its return and because a block of a single element does not need curly brackets, it is legal to have a one expression function without curly brackets.
 
 ```
 fn double(x: Number) -> Number x * 2
@@ -234,7 +234,7 @@ The same type inference rules for `if` are used for `return`: that is, if we can
 
 ### Generic functions
 
-This language has very limited support for 'true' generics - that is, a shared function that has its generic arguments erased to some low-level base type, with compile-time coercion applied where necessary. Instead, it uses templates: unique functions generated as needed. We hope that a post-link optimise step can aggregate and share identical functions. (Such a thing exists in Clang, but, we think, not in the LLVM WebAssembly toolchain.) 
+This language has very limited support for 'true' generics - that is, a shared function that has its generic arguments erased to some low-level base type, with compile-time coercion applied where necessary. Instead, it uses what C++ calls templates: unique functions generated as needed. (The actual term is 'monomorphization'.) We hope that a post-link optimise step can aggregate and share identical functions. (Such a thing exists in Clang, but, we think, not in the LLVM WebAssembly toolchain.) 
 
 There are a number of reasons for this. The first is that very simple types are not boxed; at the runtime we cannot interchange a `Number` with a pointer. Java gets round this with `double` and `Double` and we hate that. If we want to put small types on the stack with the multi-value extension, this is also hard. (Scala takes a different approach: it generates boxes automatically. This has a code-size vs speed trade-off. Perhaps we will do this later, but our bet is for the type of systems we are targeting there will be relatively few user-written generics.)
 
@@ -270,9 +270,11 @@ Traits are inspired by (but are not as powerful as) Haskell type classes. Unlike
 trait TraitOne{
     fn a() -> Void
     fn b(x: Int) -> Int
-    fn c() -> TraitOne
+    fn c() -> This
 }
 ```
+
+You may notice the `This`. That's the type that conforms to this trait.
 
 Because a trait is not a type, it cannot be used as an argument to a function. Instead, you must make a generic function and express that a type argument conforms to a trait. Then you can call functions from that trait.
 
@@ -393,7 +395,7 @@ The standard object model describes how objects are created, copied, and destroy
 
 #### Allocation types
 
-There are two allocation types. Because of pass-by-value this could be invisible to the user, but we expect some people will want control of this. Our very naive suggestion right now is 'if it is 64bit or less it lives on the stack, otherwise the heap'.
+There are three allocation types. 
 
 Allocation type is a property of a type. That is, if a type is declared as a heap allocated object it can't change its mind without a recompile.
 
@@ -404,22 +406,34 @@ This allocation type lives completely on the stack. We use the multi value exten
 There are some limitations on stack allocated classes. 
 * You can't have recursive definitions. 
 * You can't have mutator functions. 
+* You can't implement interfaces.
 
-##### Heap
+##### Heap by-value
 
-This allocation type lives on the heap. It is allocated, the thing passed around is a pointer, and at some point it is deallocated. A heap allocated object holds a stack allocated object as an inlined set of members. A stack allocated object holds a heap allocated object as a pointer.
+This allocation type lives on the heap. It is allocated, the thing passed around is a pointer, and at some point it is deallocated. A heap allocated object holds a stack allocated object as an inlined set of members. A stack allocated object holds a heap allocated object as a pointer. 
+
+It represents a pass by value datatype, which means that there will almost certainly be deep copies involved.
+
+##### Heap by-ref
+This is the scary one. After carefully making a pass-by-value language we throw it all away to make a pass-by-reference data type! This exists because we pragmatically acknowledge you will probably need it sometimes.
+
+This allocation type also lives on the heap, and is almost identical to heap by-value. However, it is passed by value, meaning a copy will mostly be shallow.
+
+You can't use type guards on these things - literally every function you call could mutate them, so you can't make any provable assertions. (Note, this may change later. See research topics, below.) You can, however, store these things in globals and as members in other `ref ptr` objects. (This last still needs some design.)
 
 #### Type qualifiers
 
-There are four type qualifiers. These are inspired by C++ cv type qualifiers. It is important to notice that these qualify the type, not the variable.
+There are three type qualifiers. These are inspired by C++ cv type qualifiers. It is important to notice that these qualify the type, not the variable.
 
-##### Strong const
+##### Const
 
-This is the standard. Because it is the standard, it doesn't have any special keywords. When you move things around, you shallow copy. This means for heap allocations, this is just a pointer copy. For stack allocation, it's a full copy because that's all you can do, but if your stack allocated object contains a pointer to a heap allocated object, that is a shallow copy.
+For by-ref, this is the standard. Because it is the standard, it doesn't have any special keywords. When you move things around, you shallow copy. This means for heap allocations, this is just a pointer copy. For stack allocation, it's a full copy because that's all you can do, but if your stack allocated object contains a pointer to a heap allocated object, that is a shallow copy.
 
-##### Value Mutable
+The by-ref heap allocation can't be const. There is no point having const for that - it exists to be modified.
 
-This means that you are passing data around by value; and it is mutable. We use the `mut` keyword.
+##### Mutable
+
+This means that you are passing mutable data around. We use the `mut` keyword.
 
 ```
 let c: mut Thing = new mut Thing()
@@ -435,7 +449,7 @@ let c = new mut Thing() //notice the type inference here
 let d = c //this is a deep copy. d and c do not alias each other.
 ```
 
-This means that a function 'owns' all the arguments passed in to it, and can freely mutate them.
+This means that a function 'owns' all the by value arguments passed in to it, and can freely mutate them.
 
 Because deep copy is an expensive operation, we propose a copy ellison step, like C++. This replaces some copies with moves. A move is a shallow copy. The rule is, when copying from a temporary or a variable's last access, that copy can be turned into a move.
 
@@ -450,7 +464,7 @@ Because deep copy is an expensive operation, we propose a copy ellison step, lik
 
 We think that this reduces the cost of value passing significantly.
 
-A copy from a const to a mutable is always a deep copy. We don't track immutable objects, so we can't tell if it's a move or not. A copy from a mutable to const is tracked, and so may also be optimized by move elision. This is nice because it means you can use mutation for local construction of complicated objects, and then return them as const for no extra cost; this is something that Scala uses its builder pattern for (or used to, I think the standard library has been rewritten).
+A copy from a const to a mutable is a deep copy for value allocation types. We don't track immutable objects, so we can't tell if it's a move or not. A copy from a mutable to const is tracked, and so may also be optimized by move elision. This is nice because it means you can use mutation for local construction of complicated objects, and then return them as const for no extra cost; this is something that Scala uses its builder pattern for (or used to, I think the standard library has been rewritten).
 
 ```
 {
@@ -463,7 +477,9 @@ A copy from a const to a mutable is always a deep copy. We don't track immutable
 
 Type guards on value mutable objects only are in effect from the the opening `if` to the first time it is mutated.
 
-##### Borrowed reference mutable
+For ref mutable objects, much of this does not apply. You don't get nice things with those. We expect you to manage your lifecycle.
+
+##### Borrowed reference to heap value mutable
 
 This is for short-term pass-by-reference mutable data. The intent here is to allow us to factor out mutator functions in such a way that we can mutate a thing over a single function call. The idea of borrowing is obviously, er, borrowed from Rust -- but the intent is very different. We are only tracking ownership in terms of understanding when something can be mutated, not when we can delete it. It is also even more restrictive than Rust's borrowing.
 
@@ -480,27 +496,15 @@ let mut a = new Thing
 changeThatThing(a)
 ```
 
-The data is shallow copied. This only works for heap allocated types (you could make it work for stack allocated types, but it would require boxing and so would be less efficient than naively correct pass-by-value functions).
+The data is shallow copied. This only works for heap allocated types (you could make it work for stack allocated types, but it would require boxing and so would be less efficient than naively correct pass-by-value functions). To make it into a value passed `mut` or a const is a deep copy.
 
 A `mut ref` object has a a bunch of constraints on it to ensure the correctness we are applying.
 
-1. You can only pass it down. You can't return it.
+1. You can only pass it down. You can't return it. (This is a lie, but we shall see more of this later.)
 1. Calling a function that takes a `mut ref` counts as mutating it for the purposes of e.g. type guards.
 1. You can't store these things, so they can't live as a member of an object, in a container, or in a global.
 
-##### Global reference pointer
-
-This is the scary one. After carefully making a pass-by-value language we throw it all away to make a pass-by-reference data type! This exists because we pragmatically acknowledge you will probably need it sometimes.
-
-We use the `ptr` keyword. Note - is this too short? Should it be `pointer`, or something more ugly?
-
-```
-let p = new mut ptr GlobalThingy(5)
-```
-
-These are shallow copied everywhere. Stack allocated objects are boxed. You can't use type guards on these things - literally every function you call could mutate them, so you can't make any provable assertions. (Note, this may change later. See research topics, below.) You can, however, store these things in globals and as members in other `ref ptr` objects. (This last still needs some design.)
-
-So... why would you ever use borrowed `mut ref` over `mut ptr`? The type guard thing is useful, but the key detail is the creation. You don't create an object as `mut ref`, you create it as `mut`; and the `ref` bit just lets you take temporary ownership to mutate it as if you were mutating in place. On the other hand a `mut ptr` is made that way. To make it into a value passed `mut` or a const is a deep copy.
+So... why would you ever use borrowed `mut ref` over heap by-ref? The type guard thing is useful, but the key detail is the creation. You don't create an object as `mut ref`, you create it as `mut`; and the `ref` bit just lets you take temporary ownership to mutate it as if you were mutating in place. On the other hand a heap by-ref is made that way. 
 
 ### Class declarations
 
@@ -683,22 +687,230 @@ class heap TypeOne{
     }
 }
 
-implement NumberThatCanGoUp for TypeOne {
+class TypeOne implements NumberThatCanGoUp{
     mut fn inc() -> Void {
         this.x += 1
     }
 }
 ```
 
-The keyword `implement` here is actually not brilliant. We will see later.
-
 A trait implementation does not have access to private members of the class, otherwise you could trivially break encapsulation.
+
+Traits can have type arguments. They must be passed into the trait from the class when it is implemented.
+
+```
+trait Wrapper<T> {
+    fn get() -> T
+    mut fn set(t: T) -> Void
+}
+
+class heap Storer<T> {
+    var t: T
+    fn get() -> T this.t
+    mut fn set(t: T) -> this.t = t
+}
+
+class Storer<T> implements Wrapper<T> {}
+```
+
+### Inheritance
+
+So far every function call has been known at compile time - 'static' in Java/C++ speak. It is useful to have function calls that are not known at run-time - 'virtual' in C++. We use interfaces for this. Interfaces are very similar to classic Java interfaces.
+
+An interface looks very similar to a trait.
+
+```
+interface HelloThisIsMe{
+    fn someFn() -> Int
+    mut fn letsChangeIt(x: Int) -> Void
+}
+```
+
+The first big difference between an interface and a trait is that an interface is a type, whereas a trait is not. So, you can pass them as arguments to functions, store them as members of objects, declare them as variables and so on.
+
+```
+fn (a: HelloThisIsMe) -> Int {
+    //...
+}
+```
+
+The second is that a class implements an interface as part of its declaration, rather than externally like a trait. In the MVP only heap classes can implement interfaces. This is so the interface is a predictable size on the stack.
+
+We use the keyword `implements`. This is ugly because of the incredibly similar `implement` used by traits. 
+
+```
+class heap SomeConcreteClass implements HelloThisIsMe & SomeOtherInterface {
+    fn someFn() -> Int {
+        //...
+    }
+    mut fn letsChangeIt(x: Int) -> Void {
+        //...
+    }
+}
+```
+
+The relationship between a class and an interface is 'is-a'. The relationship between a class and a trait is 'has-a'.
+
+At runtime a class that implements an interface always carries around a vtable pointer. This is always the first member of the class. That means that any call to a function indirects to the vtable. (A research topic is passing the vtable pointer with the `this` pointer, so that an interface is two pointers big.It may perhaps be better.)
+
+We have seen Java code where every class has an interface associated with it, presumably to reduce cognitive load on the callers of the class. Please, we beseech you. Don't do that. C++ does that because it has to. If we think some sort of class api syntax would be useful, that looks like an interface but has no runtime cost, we can do that.
+
+Interfaces can extend other interfaces. Classes cannot extend other classes.
+
+```
+interface Base{
+    //...
+}
+
+interface Derived extends Base & OtherBase {
+    //...
+}
+```
+
+Have you noticed how we are using `&` to show we are deriving the intersection of the base classes? Yes, we think that's very clever too, thank you. Could you derive the union of types? No. Maybe not so clever then...
+
+### Arrays
+
+Arrays are allocated on the heap. Our arrays are resizable if they've been allocated as mutable. Arrays follow the same standard object model rules as other objects, with shallow copies of immutable and deep copies of mutable ones. A resize may cause a copy of the elements as the underlying memory changes. That is always a move, so always a shallow copy.
+
+We have given a lot of concessions to TypeScript syntax, but we draw the line at that horrible square bracket syntax for array type declaration (`a: number[]`).
+
+```
+let a = new mut Array<Int<0, 255>>
+a.push(1)
+a.push(2)
+```
+
+Array literals are declared with square brackets. Array literal types are quite simple. We don't have any fancy type guards like we do with ints.
+
+```
+//literal is of type [1, 2, 4, 8, 16]. a is of type Array<Number>, which is obviously an acceptable widening.
+let a: Array<Number> = [1, 2, 4, 8, 16] 
+//both b and literal are of type [true, true, false]
+let b = [true, true, false] 
+//the literal is of type [0, 1, 1, 0]. The variable is of type mut Array<Int>. This means a deep copy from the literal.
+let c: mut Array<Int> = [0, 1, 1, 0] 
+```
+
+It's worth discussing an interesting optimization here. Strong and deep const means we can pre-compute array literals and put them into WebAssembly memory, so that instead of an allocation and assignment it's ready out of the box. This is quite interesting. We imagine we can probably optimise quite a lot of literal expressions this way.
+
+Arrays have a length and a capacity. We don't need the capacity in immutable arrays, but having it means we can avoid a deep copy from an owned mutable array to an immutable one (because the memory layout would be different) and we think that might be quite common.
+
+Under the covers, an array is an `__Array`, which is a fixed size unsafe array, plus a length and capacity. We can't decide whether to pass the array around as a triple (length, capacity, pointer) or as a single pointer and do some l33t h4x0r pointer manipulation on the allocated buffer. Both have their upsides. One thing we are not going to do is expose the low-level unsafe array outside of unsafe code.
+
+### Iterators
+
+Our iterators are deliberately underpowered. An iterator is an incredibly unsafe view of the internals of an object. For const objects, this is not a big deal - you can't do anything bad with it. For `mut` objects, this is essentially a pointer to the internals, and it breaks a lot of the ownership rules.
+
+So we took a very limited view on iterators. Here are the iterator traits.
+
+```
+trait IsIterator<T> {
+    fn hasNext() -> Bool
+    mut fn advance() -> Void
+    fn get() -> T
+}
+
+trait IsIterable<T, I: IsIterator<T>> {
+    fn iterator() -> mut I
+}
+
+trait IsVarIterator<T> extends IsIterator<T>{
+    mut fn set(t: T) -> Void
+}
+
+trait IsVarIterable<T, I: IsVarIterator<T>> {
+    mut fn varIterator() -> mut I
+}
+
+trait IsMutRefIterator<T: IsHeap> extends IsIterator<T>{
+    fn getMutRef() -> mut ref T
+}
+
+trait IsMutRefIterable<T: IsHeap, I: IsMutRefIterator<T>> {
+    mut fn mutRefIterator() -> mut I
+}
+```
+
+We can only mutate heap classes. We use the built-in trait `IsHeap` to make sure that only containers that contain heap allocated objects can provide implementations of `IsMutIterable`. There is currently a syntax gap as to how a generic class conditionally implements traits, but I don't think it should be so hard.
+
+Note that the `IsMutRefIterator` returns a `mut ref T`. This can only be written or called in unsafe code. It means that these iterators can only be used implicitly in `for` loops, which manages the lifetime of the iterator for you. The other iterators can be used freely, by calling `iterator` and `varIterator` yourself.
+
+There is no iterator that returns a `mut T`. What would be the point? You can't change the array member, you are just mutating a copied value. 
+
+Here are some examples of the loops in action.
+
+```
+let arr: Array<Number> = [1,2,3]
+for(let it of arr) {
+    let var n = it.get()
+    n *= 3
+}
+
+let arr2: mut Array<Number> = [1,2,3]
+for(let it of arr2) {
+    let n = it.get()
+    i.set(n * 3)
+}
+
+let arr3: mut Array<Thing> = [new Thing]
+for(let it of arr3) {
+    let n = it.getMutRef()
+    n.mutate()
+}
+```
+
+As it should be fairly obvious, a `for ... of` loop is just a macro. `for` loops are just macros in general, really, but we don't go quite as crazy as Scala's for comprehensions. Here is what the code unrolls to.
+
+```
+let arr: Array<Number> = [1,2,3]
+{
+    let var it = arr.iterator()
+    while (it.hasNext()) {
+        let var n = it.get()
+        n *= 3    
+        it.advance()
+    }
+}
+
+let arr2: mut Array<Number> = [1,2,3]
+{
+    let var it = arr.varIterator()
+    while (it.hasNext()) {
+        let n = it.get()
+        i.set(n * 3)
+        it.advance()
+    }
+}
+
+let arr3: mut Array<Thing> = [new Thing]
+{
+    let var it = arr.mutRefIterator()
+    while (it.hasNext()) {
+        let n = it.getMutRef()
+        n.mutate()
+        it.advance()
+    }
+}
+```
+
+We figure the iterator type from the type of the iterated object. Given there is no runtime cost to this, this feels safe. I have the feeling we may need a fourth iterator type, that combines the `var` and `mut ref` flavours.
 
 ## Research notes
 
+These are topics that have been set aside for a later release. Some are true research topics; others are just involve reading up how other languages do them.
+
 ### Trait default implementations
 
+For the MVP we don't have trait default implementations. But, most languages do this. We should probably do that.
+
 ### Trait members
+
+Scala has trait members. Obviously, a Scala trait is really more like our `interface` but the lessons apply. Basically a regular member is syntax sugar for a `getX()` function, and a variable member also has a `setX()` function; and the code inserts those.
+
+### Trait functions with extra type conditions
+
+Haskell does this and it is rather nice. It basically says that some functions in a type class need extra constraints to be satisfied before they show up. It might simplify some of the iterator stuff - that is, you could have one `IsIterable` trait with multiple `getX` functions, each one of which has a constraint. Maybe I should figure the syntax out now and implement this feature later.
 
 ### Type guards and mutability
 
@@ -711,6 +923,14 @@ A trait implementation does not have access to private members of the class, oth
 ### Mocking at compile time
 
 ### Mutating stack objects
+
+### Stack objects implementing interfaces
+
+### Interfaces are a pair of pointers
+
+### Immutable arrays don't need capacity
+
+### Tuples as function arguments; Void as the zero tuple
 
 ## Things that WASM needs
 
