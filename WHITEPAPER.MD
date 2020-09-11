@@ -359,6 +359,8 @@ let var byte: Int<0, 255> = 16
 
 The runtime will chose something appropriate: in this case, a 32 bit unsigned on the stack, and an 8 bit unsigned on the heap.
 
+Because we are neither sadists not masochists, `Int` without qualifiers gives you a 32 bit signed int, which seems like a good default.
+
 Ints can be widened for free; so you can always decrease the min or increase max because that is safe. Arithmetic operators will do this. (You cannot, however exceed the 64 bit limit, that's a compile error. We may lift that later.) 
 
 ```
@@ -736,8 +738,6 @@ fn (a: HelloThisIsMe) -> Int {
 
 The second is that a class implements an interface as part of its declaration, rather than externally like a trait. In the MVP only heap classes can implement interfaces. This is so the interface is a predictable size on the stack.
 
-We use the keyword `implements`. This is ugly because of the incredibly similar `implement` used by traits. 
-
 ```
 class heap SomeConcreteClass implements HelloThisIsMe & SomeOtherInterface {
     fn someFn() -> Int {
@@ -753,7 +753,7 @@ The relationship between a class and an interface is 'is-a'. The relationship be
 
 At runtime a class that implements an interface always carries around a vtable pointer. This is always the first member of the class. That means that any call to a function indirects to the vtable. (A research topic is passing the vtable pointer with the `this` pointer, so that an interface is two pointers big.It may perhaps be better.)
 
-We have seen Java code where every class has an interface associated with it, presumably to reduce cognitive load on the callers of the class. Please, we beseech you. Don't do that. C++ does that because it has to. If we think some sort of class api syntax would be useful, that looks like an interface but has no runtime cost, we can do that.
+We have seen Java code where every class has an interface associated with it, presumably to reduce cognitive load on the callers of the class. Please, we beseech you: don't do that here. C++ does that because it has to. If we think some sort of class api syntax would be useful, which looks like an interface but has no runtime cost, we could do that.
 
 Interfaces can extend other interfaces. Classes cannot extend other classes.
 
@@ -896,9 +896,76 @@ let arr3: mut Array<Thing> = [new Thing]
 
 We figure the iterator type from the type of the iterated object. Given there is no runtime cost to this, this feels safe. I have the feeling we may need a fourth iterator type, that combines the `var` and `mut ref` flavours.
 
+### By-ref arrays
+
+Arrays as they stand are by-value; this means the same copy rules apply as by-value heap objects. We expect there will be call for by-ref arrays too. This is conceptually very easy but requires some syntax. We haven't done that yet.
+
+### Linking
+
+Of all the things we love about TypeScript the one we love the most is the vanilla `import` syntax that it inherits from es6. We like that we don't have to worry about getting com.robots.factory.model.core.interfaces.singleton.Maker correct, and the very simple aliasing rules. Having said that, they are, frankly, far too over-featured for our liking. So we took the bare minimum we could and designed the linking system we have always wanted.
+
+To export something from your file you use `export`. 
+
+```
+export fn thisIsGlobal(a: Int) -> Int {...}
+```
+
+The full name of this exported symbol is `<project>.<file>.<symbol>`. So this means that we treat the files in your project as a flat namespace. We woke up in the middle of the night fretting about this a bit, but then we decided that actually we didn't care.
+
+Symbols are encapsulated in their files: you can't get at them if they are not exported. We remember the despair that was caused when Java's Project Jigsaw was introduced and we want to get ahead of that right now.
+
+Import syntax uses `import`.
+
+```
+import {*} from '../somewhere'
+
+somewhere.overTheRainbow()
+```
+
+Importing is not macro substitution. Come now, we are not savages. We have two passes across our code files: the first is a very quick skim that parses exported declarations and puts them into a json file. The second is the full compile which reads these export declarations when an import directive is encountered. When you import a symbol from a file, it appears in your namespace as `<file>.<symbol>`. We like the idea of the `as` syntax to locally rename `file`.
+
+```
+import {*} as 'whatever' from './folder/somewhereElse'
+
+let youNeed = whatever.youWant()
+```
+
+Once these have been built, we compile down to WASM object files and use the LVM liker to link; we then get a final .wasm file. This is amazing! It means we can then run whole-program optimizations using the standard tooling. We really love WebAssembly.
+
+This falls down somewhat when you want to expose stuff from your project. We don't want `export` to mean 'you can see this externally' because then we can't eliminate dead code. So we have two proposals; not sure which is best.
+
+#### An entry point
+
+In this model we have a special entry point file (by default called 'index', natch) and when you export stuff from that it's called `<project>.<symbol>`. This works great, so long as you don't want to share these symbols internally, and then it gets a bit horrible. How do you import? We have a couple of options - the first is the slightly crazy `export import` syntax, used only in the entry point file. 
+
+```
+export import {thingToExpose} from './someInternalFile'
+```
+
+The idea here is you don't declare anything you want to share internally in the entry point; but you do have a mechanism for easily exposing stuff declared elsewhere. This is quite nice, but it's not completely clear that it's technically feasible; and it feels very modernist, in a bad way. (It is obviously modelled on Jigsaw which in turn was modelled on exposing symbols from a dll.)
+
+
+#### Another keyword
+
+In this model we don't have an entry point file. When you export a symbol from the project you need an extra keyword. 
+
+```
+export global class heap WowThatsALotOfKeywords{
+    //...
+}
+```
+
+Maybe there are better keywords? But the point is, internally this is still known as `<project>.<file>.<symbol>` and externally `<project>.<symbol>` because it's not helpful to expose the internal file structure. This is nice and messy, with no irritating modernist entry point. But the syntax is definitely worse; and it is also not completely clear it's feasible.
+
+### Strings
+
+We are nearly done, I promise. 
+
+Ok, look, here is another rant. You thought integers were hard? Strings are harder. 
+
 ## Research notes
 
-These are topics that have been set aside for a later release. Some are true research topics; others are just involve reading up how other languages do them.
+These are topics that have been set aside for a later release. Some are true research topics; others just involve reading up how other languages do them.
 
 ### Trait default implementations
 
@@ -910,7 +977,11 @@ Scala has trait members. Obviously, a Scala trait is really more like our `inter
 
 ### Trait functions with extra type conditions
 
-Haskell does this and it is rather nice. It basically says that some functions in a type class need extra constraints to be satisfied before they show up. It might simplify some of the iterator stuff - that is, you could have one `IsIterable` trait with multiple `getX` functions, each one of which has a constraint. Maybe I should figure the syntax out now and implement this feature later.
+Haskell does this and it is rather nice. It basically says that some functions in a type class need extra constraints to be satisfied before they show up. It might simplify some of the iterator stuff - that is, you could have one `IsIterable` trait with multiple `getX` functions, each one of which has a constraint. Maybe we should figure the syntax out now and implement this feature later.
+
+### Reflection
+
+We have no reflection. If we introduce reflection we need to make sure it doesn't break module or data encapsulation, or const correctness. That means we will be only exposing a subset of members and functions: the subset that you would be able to see at compile time. What does that mean? Does such a language exist? Java does not and it is without question the very worst aspect of that language.
 
 ### Type guards and mutability
 
