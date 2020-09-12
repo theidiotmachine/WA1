@@ -1,8 +1,85 @@
-# White paper: a design document for an untitled WebAssembly programing language 
+
+# White paper: a design document for an untitled WebAssembly programing language <!-- omit in toc -->
+
+- [Introduction](#introduction)
+- [Defining philosophical principles](#defining-philosophical-principles)
+  - [1 - Request-response](#1---request-response)
+  - [2 - Development speed and runtime speed](#2---development-speed-and-runtime-speed)
+  - [3 - Pragmatism with a sound theoretical basis (aka 'cunning and brutal')](#3---pragmatism-with-a-sound-theoretical-basis-aka-cunning-and-brutal)
+  - [4 - The path of least resistance should be to the safest code](#4---the-path-of-least-resistance-should-be-to-the-safest-code)
+  - [5 - Learn from other places, postmodernism](#5---learn-from-other-places-postmodernism)
+- [Underpinning technical principles](#underpinning-technical-principles)
+  - [1 - Pass-by-value](#1---pass-by-value)
+  - [2 - Garbage collection](#2---garbage-collection)
+  - [3 - Strong and deep immutability](#3---strong-and-deep-immutability)
+  - [4 - Expression-based language](#4---expression-based-language)
+- [Features](#features)
+  - [Mundane syntax choices](#mundane-syntax-choices)
+    - [Indenting](#indenting)
+    - [Colons](#colons)
+    - [Semicolons](#semicolons)
+    - [Casing](#casing)
+  - [By default, symbols are constants, not variables](#by-default-symbols-are-constants-not-variables)
+  - [Block rules](#block-rules)
+  - [Low-level types](#low-level-types)
+  - [Other simple types](#other-simple-types)
+  - [Type inference](#type-inference)
+  - [`if` statements](#if-statements)
+  - [Simple static functions](#simple-static-functions)
+  - [Generic functions](#generic-functions)
+  - [Traits](#traits)
+  - [Unsafe mode](#unsafe-mode)
+  - [Type guards](#type-guards)
+  - [Ints](#ints)
+  - [The standard object model](#the-standard-object-model)
+    - [Allocation types](#allocation-types)
+      - [Stack](#stack)
+      - [Heap by-value](#heap-by-value)
+      - [Heap by-ref](#heap-by-ref)
+    - [Type qualifiers](#type-qualifiers)
+      - [Const](#const)
+      - [Mutable](#mutable)
+      - [Borrowed reference to heap value mutable](#borrowed-reference-to-heap-value-mutable)
+  - [Class declarations](#class-declarations)
+  - [Generic classes](#generic-classes)
+  - [Member functions](#member-functions)
+  - [Traits again](#traits-again)
+  - [Inheritance](#inheritance)
+  - [Arrays](#arrays)
+  - [Iterators](#iterators)
+  - [By-ref arrays](#by-ref-arrays)
+  - [Linking](#linking)
+    - [An entry point](#an-entry-point)
+    - [Another keyword](#another-keyword)
+  - [Strings](#strings)
+  - [Tuples](#tuples)
+  - [Lambdas](#lambdas)
+- [Research notes](#research-notes)
+  - [Trait default implementations](#trait-default-implementations)
+  - [Trait members](#trait-members)
+  - [Trait functions with extra type conditions](#trait-functions-with-extra-type-conditions)
+  - [Reflection](#reflection)
+  - [Operators](#operators)
+  - [Type guards and mutability](#type-guards-and-mutability)
+  - [Commas are optional](#commas-are-optional)
+  - [Generic stack objects](#generic-stack-objects)
+  - [Type of a constant object with the default constructor](#type-of-a-constant-object-with-the-default-constructor)
+  - [Mocking at compile time](#mocking-at-compile-time)
+  - [Mutating stack objects](#mutating-stack-objects)
+  - [Stack objects implementing interfaces](#stack-objects-implementing-interfaces)
+  - [Interfaces are a pair of pointers](#interfaces-are-a-pair-of-pointers)
+  - [Immutable arrays don't need capacity](#immutable-arrays-dont-need-capacity)
+  - [Tuples as function arguments; Void as the zero tuple](#tuples-as-function-arguments-void-as-the-zero-tuple)
+- [Things that WASM needs](#things-that-wasm-needs)
+  - [A garbage collector](#a-garbage-collector)
+  - [A good string library](#a-good-string-library)
+  - [A good way of shipping runtime](#a-good-way-of-shipping-runtime)
+  - [Access to TZ](#access-to-tz)
+## Introduction 
 
 This document defines a proposed WebAssembly language. The WA1 prototype that it comes with implements some of this, and fails to implement others, but generally acts as a research project.
 
-This document is a white paper, because that sounds much better than 'random bag of terrible ideas'.
+This document is a white paper, because that sounds much better than 'random bag of terrible ideas'. We use the first person plural because it's a habit we got into when we were Queen Victoria. Also it means if we ever have a friend it will be easy to make it look like this was a group effort!
 
 We don't know what to call the language, by the way. WA1 is a terrible name, but it is better than all the others. We pronounce it 'Wah-won'.
 
@@ -959,9 +1036,21 @@ Maybe there are better keywords? But the point is, internally this is still know
 
 ### Strings
 
-We are nearly done, I promise. 
+Ok, look, here is another rant. You thought integers were hard? Strings are harder. Some people labour under the delusion that strings are lightweight. My friend, nothing could be further from the truth. Strings are complicated, scary objects.
 
-Ok, look, here is another rant. You thought integers were hard? Strings are harder. 
+If you are somehow surprised by this statement, it is worth stopping at this point and reading something on the topic. We suggest [this blog by Manish Goregaokar](https://manishearth.github.io/blog/2017/01/14/stop-ascribing-meaning-to-unicode-code-points/). If that doesn't scare you, you should read up about Unicode normalization. If *that* doesn't scare you, you are probably a Unicode board member - to which we say, stop reading this and implement superscript 'q'!
+
+Anyway, our strings are passed by value. We propose that they be UTF-8 NFD. We dislike `+` for string concatenation because addition should be commutative, and string concatenation is not, so we won't do that. Honestly the template syntax that ECMAScript introduced recently should be enough, although we have a soft spot for Lua's `..`. The string libraries will be based on the stuff that Rust does because it tries really hard to get it right, but that is scary.
+
+Because of all this special syntax, strings need to be baked pretty hard into the compiler. We don't want to be clever here and if we have to do a ton of special casing then so be it, strings are hard. Having said that, take a look at the research topics.
+
+### Tuples
+
+Stack objects. Need special compiler work because of the `()` syntax that everyone expects tuples to have. TypeScript uses `[]` for tuples, but that's just wrong, and even then an array and a tuple are very different under the covers. Scala does these in the standard library, but I mean come on. We can do better than that.
+
+### Lambdas
+
+
 
 ## Research notes
 
@@ -982,6 +1071,8 @@ Haskell does this and it is rather nice. It basically says that some functions i
 ### Reflection
 
 We have no reflection. If we introduce reflection we need to make sure it doesn't break module or data encapsulation, or const correctness. That means we will be only exposing a subset of members and functions: the subset that you would be able to see at compile time. What does that mean? Does such a language exist? Java does not and it is without question the very worst aspect of that language.
+
+### Operators
 
 ### Type guards and mutability
 
@@ -1005,7 +1096,7 @@ We have no reflection. If we introduce reflection we need to make sure it doesn'
 
 ## Things that WASM needs
 
-### Some way of finding garbage roots on the stack
+### A garbage collector
 
 ### A good string library
 
