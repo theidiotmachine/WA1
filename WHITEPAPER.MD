@@ -54,6 +54,13 @@
   - [Strings](#strings)
   - [Tuples](#tuples)
   - [Lambdas](#lambdas)
+    - [Basic implementation](#basic-implementation)
+    - [Type](#type)
+  - [Enums, `switch`, Options](#enums-switch-options)
+    - [Enums](#enums)
+    - [`switch`](#switch)
+    - [Back to enums](#back-to-enums)
+  - [I can't believe you read this](#i-cant-believe-you-read-this)
 - [Research notes](#research-notes)
   - [Trait default implementations](#trait-default-implementations)
   - [Trait members](#trait-members)
@@ -70,6 +77,13 @@
   - [Interfaces are a pair of pointers](#interfaces-are-a-pair-of-pointers)
   - [Immutable arrays don't need capacity](#immutable-arrays-dont-need-capacity)
   - [Tuples as function arguments; Void as the zero tuple](#tuples-as-function-arguments-void-as-the-zero-tuple)
+  - [Lambdas that mutate variables](#lambdas-that-mutate-variables)
+  - [Holding `heap ptr` classes in other classes](#holding-heap-ptr-classes-in-other-classes)
+  - [Promotion of functions to typeguards](#promotion-of-functions-to-typeguards)
+  - [Being honest about our type system and proofs](#being-honest-about-our-type-system-and-proofs)
+  - [Run-time type information](#run-time-type-information)
+  - [Boxing pushed down to the compiler](#boxing-pushed-down-to-the-compiler)
+  - [Unions](#unions)
 - [Things that WASM needs](#things-that-wasm-needs)
   - [A garbage collector](#a-garbage-collector)
   - [A good string library](#a-good-string-library)
@@ -603,9 +617,7 @@ class heap Hello{
 
 Firstly, the constructor. We very much like the way Scala has a primary constructor, which defines the members of the class, so we stole that. We imagine we might have secondary constructors too. We will need a syntax to call the primary one.
 
-The class has a storage declaration between the the `class` keyword and the name. This is one of `stack` or `heap`. We are slightly concerned that the `stack` keyword is longer, because we consider this to be the better option.
-
-Members are declared as constructor arguments. 
+The class has a storage declaration between the the `class` keyword and the name. This is one of `stack` or `heap`. We are slightly concerned that the `stack` keyword is longer, because we consider this to be the better option. In this case `heap` means emulated by-value. The by-ref case is covered further down.
 
 Members are, by default, const. Const members are, by default, public. Here we declare two const members, one public and one private.
 
@@ -665,6 +677,15 @@ class stack ChangeWhatIHold{
 }
 ```
 
+For heap by-ref classes, the syntax looks like this.
+
+```
+class heap ptr ThisIsTheScarySort{
+
+}
+```
+
+These are the only classes that are allowed to hold other heap by-ref objects. Obviously they can also hold regular by value objects.
 
 ### Generic classes
 
@@ -1040,9 +1061,11 @@ Ok, look, here is another rant. You thought integers were hard? Strings are hard
 
 If you are somehow surprised by this statement, it is worth stopping at this point and reading something on the topic. We suggest [this blog by Manish Goregaokar](https://manishearth.github.io/blog/2017/01/14/stop-ascribing-meaning-to-unicode-code-points/). If that doesn't scare you, you should read up about Unicode normalization. If *that* doesn't scare you, you are probably a Unicode board member - to which we say, stop reading this and implement superscript 'q'!
 
-Anyway, our strings are passed by value. We propose that they be UTF-8 NFD. We dislike `+` for string concatenation because addition should be commutative, and string concatenation is not, so we won't do that. Honestly the template syntax that ECMAScript introduced recently should be enough, although we have a soft spot for Lua's `..`. The string libraries will be based on the stuff that Rust does because it tries really hard to get it right, but that is scary.
+Anyway, our strings are passed by value. We propose that they be UTF-8 NFD. We dislike `+` for string concatenation because addition should be commutative, and string concatenation is not, so we won't do that. Honestly the template syntax that ECMAScript introduced recently should be enough, although we have a soft spot for Lua's `..` operator. The string libraries will be based on the stuff that Rust does because it tries really hard to get it right.
 
 Because of all this special syntax, strings need to be baked pretty hard into the compiler. We don't want to be clever here and if we have to do a ton of special casing then so be it, strings are hard. Having said that, take a look at the research topics.
+
+Internally, strings are probably an `__Array`, a buffer capacity, a byte length and a grapheme cluster count (the number of 'characters' in a string, and therefore the length). We won't have a character type because that just isn't a thing in Unicode: instead we will have strings which contain one grapheme cluster. (These may well be multiple unicode code points. A great example from the above blog is the family emoji 👩‍👩‍👧‍👦 -- this is seven unicode code points! A lot of editors and browsers get this wrong.) If we do a square bracket operator (`str[i]`) that will just return an option on a string.
 
 ### Tuples
 
@@ -1050,11 +1073,273 @@ Stack objects. Need special compiler work because of the `()` syntax that everyo
 
 ### Lambdas
 
+#### Basic implementation 
 
+A function declared inline is a lambda - that is, it can see the scope it's in. What that means depends on the allocation type of the thing.
+
+The simplest case is const. This is easy, because the lambda can just examine the object, safe in the knowledge that all it has done is added a gc pointer.
+
+```
+{
+    let a = new Thing
+    let f = fn() => a.someFunction()
+    f()
+}
+```
+
+Your mental model of a lambda should be a packet of data, along with a single function. The packet of data is initialized by statically analyzing what part of the outer environment the lambda calls, so you end up with something that is semantically this.
+
+```
+class heap Packet {
+    constructor(private a: Thing) {}
+
+    fn apply() => {
+        this.a.someFunction()
+    }
+}
+
+{
+    let a = new Thing
+    let f = new Packet(a)
+    f.apply(packet)
+}
+```
+
+This semantic model is important because it dictates how we deal with the other allocation classes. For mutable by-ref, aka `heap ptr` classes, it is also easy. You need to annotate the lambda as a `mut`.
+
+```
+{
+    //this is a class heap ptr, a mutable by-ref class
+    let a = new mut CrazyThing
+    let f = mut fn() => a.someCrazyFunction()
+    f()
+}
+```
+
+This is equivalent to this.
+
+```
+class heap ptr Packet2 {
+    constructor(private a: CrazyThing) {}
+
+    fn apply() => {
+        this.a.someCrazyFunction()
+    }
+}
+
+{
+    let a = new mut CrazyThing
+    let f = new mut Packet2(a)
+    f.apply(packet)
+}
+```
+
+(Is that right? Should it be `ptr` rather than `mut`?)
+
+So far so good. But what about mutable by-value? The problem with those is if you take a reference to one of them you end up with a deep copy -- they are by-value, so you can't reference them. But our old friend `mut ref` comes to our rescue. 
+
+```
+{
+    //this is a class heap, a mutable by ref class
+    let a = new mut Thing
+    let f = mut ref fn() => a.someMutatingFunction()
+    f()
+}
+```
+
+This means that we have taken a borrowed mutable reference to `a`. We are bound by the same rules for `f` as we are for all other `mut ref` things: we can't store it, and we can't return it from a function, we can only pass it downwards. In other words, it can't escape up from this scope. From the moment it is created to the moment it is destroyed, just like a `mut ref`, we can't trust the thing that `a` points to, so type guards stop working.
+
+The equivalent code is, of course, a class that holds a `mut ref`; but because that's illegal, this has to be generated by the compiler.
+
+```
+class heap Packet3 {
+    //error! May not have a member of qualifier `ref`
+    constructor(private a: mut ref Thing) {}
+
+    fn apply() => {
+        this.a.someMutatingFunction()
+    }
+}
+
+{
+    let a = new mut Thing
+    let f = new Packet3(a)
+    f.apply(packet)
+}
+```
+
+This is, of course, Rust ownership-lite. The lambda (like the iterator earlier) has taken a reference to an object and we use the compiler to track it. Unlike Rust there are no explicit ownership scope rules, so we are very conservative so we don't get it wrong.
+
+#### Type
+
+The type of a lambda is made up of its argument types and return type. In practice this means that a lambda is a virtual function call. So our temporary classes also implement a well-known interface, synthesized by the compiler. Because types are entirely compile-time we can erase this and the only people who know are us. This means we can now treat lambada as special syntax for interfaces. 
+
+```
+fn mapSum(a: Array<Number>, f: fn(Number) -> Number) -> Number {
+    let out = 0
+    for (it of a) {
+        out += f(it.get())
+    }
+    out
+}
+```
+
+This, then, compiles to this.
+
+```
+//This is defined by the compiler; it probably won't be called this
+interface LambdaNumberNumber {
+    fn apply(x0: Number) -> Number
+}
+
+fn mapSum(a: Array<Number>, f: LambdaNumberNumber) -> Number {
+    let out = 0
+    let var it = a.iterator()
+    while (it.hasNext()) {
+        out += f.apply(it.get())
+        it.advance()
+    }
+    out
+}
+```
+
+We would hope that we are smart enough to build our iterator so that it can be inlined, and the whole thing then collapses down to a nice loop doing pointer maths.
+
+### Enums, `switch`, Options
+
+#### Enums
+Rust enums are utterly amazing. Essentially they are discriminated unions, and you can just use the discriminator on its own to get what most languages call an enum, or you can stick data in them too. They have some restrictions -- they can't be recursive, for example -- but they are a clean and easy way to do polymorphism. 
+
+We are not proud, so we steal this concept wholesale. 
+
+```
+enum ThisIsAnEnum{
+    FirstThing
+    SecondThing {
+        constructor(a: Number) {}
+    }
+}
+
+{
+    let b = ThisIsAnEnum.FirstThing
+    let c = ThisIsAnEnum.SecondThing(5)
+    //this is fine because c is of type ThisIsAnEnum.SecondThing
+    let d = c.a
+}
+```
+
+The enum lives on the stack... sort of. This is harder than in Rust because that just stack allocates a block of memory corresponding to the largest size an enum element can be, and does pointer casting. We don't have stack allocation, so we need to allocate slots for each data type and the discriminator. That means if we have, say, an enum where one element has an i32 and one has an f64, we will need to create stack elements for both, because Wasm has strong typing at the instruction level. Obviously we can share this if multiple members have the same types, but it means our enums will be larger than Rust's.
+
+In terms of typing, the enum has a type, obviously; the members have a type, too, and are `<enum name>.<enum member name>`. So you can, if you want, declare a function to have an argument that is typed to an individual enum member. We think this may be more useful than it sounds because it will mean being able to break big switch statements up.
+
+It goes without saying -- no actually, it doesn't so let's say it -- that all the members are deep const. You can't have a by-ref heap classes in an enum. This again could change - this puts a very nasty constraint that we shall see later.
+
+#### `switch`
+
+On that topic, `switch` and `enum` go together like I don't know designing programming languages and angst. So let's do them together.
+
+Not for us the classic C `switch` statement that made it through even into Java. Guys, why did you even do that? No, this is a `match` statement in `switch` clothes. That means we don't have break or falling through, it's a branch to a block. And, it's an expression, of course.
+
+The simplest is a switch on value. Here is a completely stupid example. Notice fat arrow doing double duty on the branches. This is supposed to show that the return type of the switch is being implied from the branches, but honestly it looks a bit wonky.
+
+```
+let a: Number = getSomeNumber()
+let b = switch (a) {
+    4 => 1
+    5 => {
+        //this doesn't need to be a block but here it is to show you
+        a + 9
+    }
+    //default. Should this use the default keyword?
+    _ => 0
+}
+```
+
+If you have runtime type information, you can switch on a type. Only enums have that so far. Switches on types look like this. Yes, this is a type guard, so you can get at the inner members.
+
+```
+switch(c) {
+    c: Enum.Member1 => {
+        c.memberOfMember1
+    }
+}
+```
+
+It's important to understand that Rust and Scala both work very differently to this: they pattern match the members whereas this is a type narrowing based on the discriminator. This is much more like TypeScript. A pattern match could well be possible too, it's just not in the MVP. 
+
+#### Back to enums
+
+As you probably guessed, an enum is a macro for a stack-allocated class with a magic discriminator member and weird aliasing rules for its other members. It's really the stack based answer to interfaces. Because of the casting, you couldn't implement it in user code. But, you can get jiggy with some other things. Let's build up to something you might recognize. 
+
+First, enums can be generics and have member functions.
+
+```
+enum ThisLooksFamiliar<T>{
+    None
+    Some{constructor(val: T) {}}
+
+    fn isSome() -> Bool {
+        this.discriminator == ThisLooksFamiliar<T>.Some
+    }
+}
+```
+
+That's nice, isn't it? The constructor syntax is clunky but honest. You can't have shared data members, but that might be a possibility.
+
+Next, the `discriminator` member. This is a semi-magical member. It's actually not magic at all in some senses: it really exists on the enum and it really is called that. It's the one common member, which is why other common data members might be possible. It is magic in the sense that it's not in the constructor of the members. It is also magic in the sense that you can never ever change it. It has another powerful piece of sorcery, which we will see later, but which should not be a surprise.
+
+Now let's go ceh-ray-zee.
+
+```
+enum IHaveSeenThisBefore<T>{
+    None{
+        fn map<U>(f: fn(t: T) -> U) -> IHaveSeenThisBefore<U> {
+            IHaveSeenThisBefore<U>.None
+        }    
+    }
+    Some{
+        constructor(val: T) {}
+        fn get() -> T this.val
+        fn map<U>(f: fn(t: T) -> U) -> IHaveSeenThisBefore<U> {
+            IHaveSeenThisBefore<U>.Some(f(this.val))
+        }
+    }
+}
+
+enum IHaveSeenThisBefore<T> implements SomeTraitWithMap<T> {
+}
+```
+
+Look, yes, this is an Option. Because enums are stack classes, and they can't contain `heap ptr`s, you can't have Options on `heap ptr`s. This is obviously bad. There is a potential solution to this, in the research.
+
+Now let's talk about the other, more interesting parts of this. If you write a function in every member of an enum which has the same name and the same signature (and yes: same name, different signature is a syntax error) the compiler synthesizes a function that inserts a switch for you.
+
+```
+enum IHaveSeenThisBefore<T>{
+    //what we had previously...
+
+    //This function is generated by the compiler. It's a static function so 
+    //we can strip it out later if it's not used.
+    fn map<U>(f: fn(t: T) -> U) -> IHaveSeenThisBefore<U> {
+        switch (this) {
+            x: IHaveSeenThisBefore<T>.None => x.map<U>(f)
+            x: IHaveSeenThisBefore<T>.Some => x.map<U>(f)
+        }
+    }
+}
+```
+
+The way that works, by the way, is a typeguard: but actually, it wouldn't work that way, because the compiler can insert the switch on the discriminator and cast, but there isn't a syntax for that. That's why the syntax looks so wonky.
+
+Of course the result of this is that we have satisfied the requirement of `SomeTraitWithMap` (Functor? I can honestly never remember) and so we can call a good old `map`.
+
+### I can't believe you read this
+
+Really! You crazy person! Thanks!
 
 ## Research notes
 
-These are topics that have been set aside for a later release. Some are true research topics; others just involve reading up how other languages do them.
+These are topics that have been set aside for a later release. Some are true research topics, and will involve mock ups and reading more papers. Others just involve reading up how other languages do them.
 
 ### Trait default implementations
 
@@ -1073,6 +1358,8 @@ Haskell does this and it is rather nice. It basically says that some functions i
 We have no reflection. If we introduce reflection we need to make sure it doesn't break module or data encapsulation, or const correctness. That means we will be only exposing a subset of members and functions: the subset that you would be able to see at compile time. What does that mean? Does such a language exist? Java does not and it is without question the very worst aspect of that language.
 
 ### Operators
+
+There are no user defined operators. 
 
 ### Type guards and mutability
 
@@ -1093,6 +1380,91 @@ We have no reflection. If we introduce reflection we need to make sure it doesn'
 ### Immutable arrays don't need capacity
 
 ### Tuples as function arguments; Void as the zero tuple
+
+### Lambdas that mutate variables
+
+Everything we have discussed so far has been lambdas tracking *objects*, not *variables*. This is important because we are not supporting a feature that other languages support -- which is the ability to change what a variable points to. We actually could do it if we wanted to, but it's quite scary, so here is a proposal that we won't be implementing, at least for the MVP.
+
+```
+{
+    let var a = 3
+    let f = mut fn() {
+        a += 1
+    }
+    a += 1
+    f() //a is now 5
+}
+```
+
+So how does this work? It translates as this.
+
+```
+class heap ptr BoxedNumber{
+    constructor(private var inner: Number) {}
+}
+
+class heap ptr Packet4 {
+    constructor(private a: BoxedNumber) {}
+
+    fn apply() => {
+        this.a.inner += 1
+    }
+}
+
+{
+    let a = new mut BoxedNumber(3)
+    let f = new mut Packet4(a)
+    a.inner += 1
+    f.apply(packet)
+}
+```
+
+Oh no! This is insane! We are boxing the number so we can get at the contents to vary it. This of course means that every reference to the variable `a` has to be changed to `a.inner`. The fact that it's a `heap ptr` is actually not too bad - the variable lasts as long as the scope, as normal; but of course you get to hold onto the object for ages afterwards.
+
+This feels like a very leaky abstraction, so we won't be doing this initially, and lambdas that refer to a `let var` will be a syntax error.
+
+### Holding `heap ptr` classes in other classes
+
+### Promotion of functions to typeguards
+
+Cast your mind back to our Option enum. We wrote an `isSome` function. That checked the discriminator was `Some` and returned true if it was. Classic options in other languages don't find that very useful, though. You tend to write stuff like this (if for whatever reason you can't use a `map` like you are supposed to).
+
+```
+{
+    switch(x) {
+        x: Option.Some => {
+            let v = x.get()
+            //do some work on v...
+        }
+        _ => {}
+    }
+}
+```
+
+The problem with this, is it's super wordy. Really you would like to do this.
+
+```
+{
+    if (x.isSome()) { 
+        v = x.get()
+        //do some work on v...
+    }
+}
+```
+
+Of course you can't: the compiler hasn't flagged the function as a type guard, so no narrowing has occurred.
+
+The thing is, it could. If `x` is not a `var`, because the discriminator of an enum is strong const, a function that makes a very simple assessment of an enum discriminator could be promoted to a typeguard. 
+
+This makes the language feel even more scripty, and is therefore good: it requires some research but could be added.
+
+### Being honest about our type system and proofs
+
+### Run-time type information
+
+### Boxing pushed down to the compiler
+
+### Unions
 
 ## Things that WASM needs
 
