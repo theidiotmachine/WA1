@@ -60,6 +60,7 @@
     - [Enums](#enums)
     - [`switch`](#switch)
     - [Back to enums](#back-to-enums)
+  - [Modules](#modules)
   - [I can't believe you read this](#i-cant-believe-you-read-this)
 - [Research notes](#research-notes)
   - [Trait default implementations](#trait-default-implementations)
@@ -67,13 +68,12 @@
   - [Trait functions with extra type conditions](#trait-functions-with-extra-type-conditions)
   - [Reflection](#reflection)
   - [Operators](#operators)
+  - [Function purity](#function-purity)
+  - [Tail recursion](#tail-recursion)
   - [Type guards and mutability](#type-guards-and-mutability)
-  - [Commas are optional](#commas-are-optional)
-  - [Generic stack objects](#generic-stack-objects)
+  - [Commas can trail, commas are optional](#commas-can-trail-commas-are-optional)
   - [Type of a constant object with the default constructor](#type-of-a-constant-object-with-the-default-constructor)
   - [Mocking at compile time](#mocking-at-compile-time)
-  - [Mutating stack objects](#mutating-stack-objects)
-  - [Stack objects implementing interfaces](#stack-objects-implementing-interfaces)
   - [Interfaces are a pair of pointers](#interfaces-are-a-pair-of-pointers)
   - [Immutable arrays don't need capacity](#immutable-arrays-dont-need-capacity)
   - [Tuples as function arguments; Void as the zero tuple](#tuples-as-function-arguments-void-as-the-zero-tuple)
@@ -83,6 +83,8 @@
   - [Being honest about our type system and proofs](#being-honest-about-our-type-system-and-proofs)
   - [Run-time type information](#run-time-type-information)
   - [Boxing pushed down to the compiler](#boxing-pushed-down-to-the-compiler)
+  - [Packing in data - option sizes](#packing-in-data---option-sizes)
+  - [Inlining](#inlining)
   - [Unions](#unions)
 - [Things that WASM needs](#things-that-wasm-needs)
   - [A garbage collector](#a-garbage-collector)
@@ -691,13 +693,13 @@ These are the only classes that are allowed to hold other heap by-ref objects. O
 
 In this language, unlike in Java, classes are a compile-time construct. This means a generic class is also a compile-time construct: it does not compile down to an erased class. It is really a template.
 
-Generic classes can only be heap classes. This is because a generic class could be recursive.
-
 ```
 class heap Generic<T> {
     constructor(a: T, var b: T) {}
 }
 ```
+
+Stack classes can be generics - but you can of course end up with a recursive stack class by accident, so a stack class can refuse to be concretized based around what type arguments you concretize it with.
 
 ### Member functions
 
@@ -1333,6 +1335,18 @@ The way that works, by the way, is a typeguard: but actually, it wouldn't work t
 
 Of course the result of this is that we have satisfied the requirement of `SomeTraitWithMap` (Functor? I can honestly never remember) and so we can call a good old `map`.
 
+### Modules
+
+We talked about the linker. One thing we didn't talk about was library deployment. We -- you will no doubt be astonished to learn -- have opinions on this. This is a topic as important to a language's success as things like bracket conventions and casing: i.e. very. In some ways it's more important because it is the first barrier to entry to new developers who want to start.
+
+Anecdotally, package repositories are expensive to host. This has caused us some heartache because while we don't expect to make any money from this we certainly don't want to lose it. Another thing to consider is a particular problem for JavaScript: this is the attack vector of inserting a package into npm which has not been generated from the underlying open source code, so you are running something with nasty things and don't know it. We think this is a bad situation and we want to avoid it. Lastly, we will be honest, we think the idea that downloading pre-built code is a new-fangled thing and we got on just fine by weeping over makefiles. Get off our lawn!
+
+So we want to build a module system from code downloads, where you just download the code and build it yourself. Because we hate that node_modules folder with a passion, we will do what Yarn, Rust, Maven and all other sane package managers do: and have a central cache of code on your machine. We will download and compile code with the given compiler version to produce compiled objects that can be linked. We imagine this means we will need to depend on something like a repo name plus a commit identity. We think Go does something like that but we are not that familiar with Go.
+
+We will need some kind of package description file. We like npm's way of doing semantic versioning dependency and will almost certainly steal that. Module dependencies will either be public or private. A public dependency is a singleton, and so shared with all other modules in the runtime, so all the module's version numbers of this have to agree or you get build errors. This is because we have seen the horrors of Java programs shipping like five versions of a logging library. 
+
+However, you can have a get-out clause of having a private dependency. This means you and you alone see this instance of this module. This essentially works by telling the linker that the module is a different name. We think? If it stores data, sucks to be you if you think you can share this. But! We can actually tell this fairly easily from our code analysis, so maybe we can warn. We know that private modules will be abused, but we also know that on the server where people don't care about executable size this sort of thing is just a fact of life.
+
 ### I can't believe you read this
 
 Really! You crazy person! Thanks!
@@ -1359,23 +1373,89 @@ We have no reflection. If we introduce reflection we need to make sure it doesn'
 
 ### Operators
 
-There are no user defined operators. 
+There are no user defined operators in the MVP. This is actually not quite true - we will probably be writing the `Array` class in user code, so we will need to be able to describe the lvalue and rvalue versions of the index operator, `a[i]`. But there are no user-defined operators the way, say, Scala does them.
+
+It's worth quickly talking about Scala. The Scala operator system is really nice from a technical point of view - everything turns into a function, and the function name is encoded using some some sort of mapping from funny char to alphanumeric characters (so `++` is something like `$plus$plus`) so it can still be represented in Java; and the compiler substitutes this:
+
+```Scala
+a ++ b
+```
+
+for this:
+
+```Scala
+a.$plus$plus(b)
+```
+
+so anyone can write any operator they like. And they did!
+
+And so the standard library was filled with `:/|-@***=` and when normal developers tried to write code, they had no idea what was going on, because you just can't google for this stuff. This caused something of a pushback from the Scala community -- and so there was very much a rowback from using operators to using simpler text-based function names. 
+
+(It's weird, though -- Haskell has a similar set up and no one grabbed pitchforks to storm that particular castle. We have opinions, but here is not the place. The sad moral of this story, though, is that this is as important to a programming language's success as to whether or not it has a sound typing system -- probably more, look at JavaScript!)
+
+Having said all that, we have had modest success with operators. It might be that we are misty-eyed about our C++ days when Stroustrup fearlessly made the bitshift operator a string mangling thing (we confess at this point that the first time our young C-trained minds saw this we were scared. What dark wizardry is this? How is he concatenating strings by bitshifting them? It it exploiting some overflow property of `char` arrays that we did not know existed?) that we think we should keep the baby and some amount of bathwater. In particular we had a lot of success using Scala to write out formulas, by providing functions called things like `²`, `³`, and `√`. It makes it easy to scan maths and make sure you transcribed it correctly, and we claim we reduced our bug count significantly.
+
+So, we propose the following rather modest, post-MVP proposal, that still needs fleshing out.
+
+We will have a predefined table of operators. Unlike Scala, we map semantic names. So, the square operator `a²` is always postfix; has a fixed precedence; and always substitutes for `a.square()`. Our operator table is scooped from common maths symbols, and is purely Unicode; we will be very conservative. Operators can never mutate underlying data, so if you call `container ∋ elem` that will map to `container.contains(elem)` and `contains` will have a non-mut signature.
+
+This has the advantage that most operator substitutions tend to be geared to the convenience of the writer. These are geared to the convenience of the reader. Unlike `:+`, you can google for `∋`, but it is a pain to type.
+
+More research is needed to build the table and precedences.
+
+### Function purity
+
+The deep const nature of the language allows us to make assertions about function purity with absolute certainty. A function that only reads from its inputs and global consts is truly pure because nothing can go and muck with the global. This means we might be able to mark functions with various levels of purity. We think this can include things like reading and writing to mutable globals, certain operations we flag specially (like file reading and writing), interacting with threading primitives (yes, we don't have any but maybe we will one day), mutating by-ref arguments, and all that other stuff.
+
+This is a research problem because it seems easy but falls apart quite quickly. What do you do with interfaces? Lambdas? How do you record it? And, most importantly, what do you do with it when you have it?
+
+### Tail recursion
+
+All the cool kids have it. We don't think it's that important for a language with good ol' fashioned while loops, but we want to be a cool kid too and it's one of those things that sometimes makes a huge performance difference to mundane code, so let's stick it on the list.
 
 ### Type guards and mutability
 
-### Commas are optional
+Right now we take a no-prisoners approach to mutability and type guards. If a type is mutable, we bale and say we can't prove anything, so the type guard has no effect. This is actually sub optimal! There are functions that definitely don't mutate their arguments and we think we can probably do a little better than that. It involves tracking object lifetimes which we think we can do a bit in a naive way. For example, our rules around operators mean we know which operators mutate their operands. There is probably a much deeper and better way, though.
 
-### Generic stack objects
+### Commas can trail, commas are optional
+
+Look can we just have this conversation? Don't go.
+
+Trailing commas are really, really useful because they reduce commit noise when you add extra arguments to multiline functions. If all function arguments have a comma at the end, then you don't need to insert a new one on the line above. (If you use leading commas, you disgust me. Get out of my house, and never darken my door again.)
+
+But better than that is... optional commas.
+
+I actually saw this discussed on the Scala contributors list, and once you have witnessed the heresy it's hard to forget. The idea is that a comma is like a semicolon: you can use a return character instead. It makes the language feel lighter and more scripty. Here is a function with long arguments.
+
+```
+myBestestFunction(
+    longArgument
+    anotherLongArgument
+    goshICanKeepTyping
+)
+```
+
+BURN THE HERETIC! 
+
+This feels very much like a feature you need to build in right at the start, so this probably should be one of the first research topics looked at.
 
 ### Type of a constant object with the default constructor
 
+We wrote this document by writing the headers first and then filling the contents out later. This one meant something to us once upon a time. No idea now. We are getting old.
+
 ### Mocking at compile time
 
-### Mutating stack objects
+One of the things that we have seen in our long time proverbially hammering screws into planks of wood with spanners is the many ways that people take beautiful languages and make them awful to write tests. Like have you seen Java injection? Even the name is terrifying.
 
-### Stack objects implementing interfaces
+But the fact is, it is very useful to be able to stub bits of your code out to write unit tests. And doing that means you have to de-static (this is a technical term we just made up) your architecture so that it accepts either the real version or the mocked version. This then makes the whole program a mass of virtual functions and it is much harder to do compile-time optimizations.
+
+So: research topic. How can one produce a unit test (which should be a standalone executable) by taking a set of source files from a project and replacing some of the imported types by stubs, so you don't need to use dynamic types in production? Must be possible, right? Java's very clever JIT does a good job here (it does tricks like only making function calls virtual when a class's subclass is loaded) and we feel like we need an AOT response!
 
 ### Interfaces are a pair of pointers
+
+So far, heap classes have been passed around as a single pointer. If they inherit from an interface, their first data member is a vtable, a pointer to a shared table of function pointers for the member functions. This is kind of irritating. Because classes don't inherit from each other, a class doesn't need the vtable: the only time it needs a vtable is when it is widened to an interface. So why not have the interface be a pair of pointers? We would move the vtable out of the class and onto the stack. 
+
+It's not clear that this is an optimization, though. It reduces the size of our classes, but increases the size of pointers to our classes, meaning things holding interfaces are bigger; and, importantly, if you have a lot of pointers to a small number of classes your memory increases significantly. More research is needed.
 
 ### Immutable arrays don't need capacity
 
@@ -1463,6 +1543,10 @@ This makes the language feel even more scripty, and is therefore good: it requir
 ### Run-time type information
 
 ### Boxing pushed down to the compiler
+
+### Packing in data - option sizes
+
+### Inlining
 
 ### Unions
 
