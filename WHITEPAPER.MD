@@ -43,6 +43,10 @@
   - [Class declarations](#class-declarations)
   - [Generic classes](#generic-classes)
   - [Member functions](#member-functions)
+  - [Static member functions](#static-member-functions)
+  - [Alternative constructor syntaxes](#alternative-constructor-syntaxes)
+    - [Scala-like](#scala-like)
+    - [Rust-like](#rust-like)
   - [Traits again](#traits-again)
   - [Inheritance](#inheritance)
   - [Arrays](#arrays)
@@ -77,7 +81,6 @@
   - [Interfaces are a pair of pointers](#interfaces-are-a-pair-of-pointers)
   - [Immutable arrays don't need capacity](#immutable-arrays-dont-need-capacity)
   - [Tuples as function arguments; Void as the zero tuple](#tuples-as-function-arguments-void-as-the-zero-tuple)
-  - [Static member functions](#static-member-functions)
   - [Lambdas that mutate variables](#lambdas-that-mutate-variables)
   - [Holding `heap ptr` classes in other classes](#holding-heap-ptr-classes-in-other-classes)
   - [Promotion of functions to typeguards](#promotion-of-functions-to-typeguards)
@@ -87,6 +90,7 @@
   - [Packing in data - option sizes](#packing-in-data---option-sizes)
   - [Inlining](#inlining)
   - [Unions](#unions)
+  - [Laziness](#laziness)
   - [Docs](#docs)
 - [Things that WASM needs](#things-that-wasm-needs)
   - [A garbage collector](#a-garbage-collector)
@@ -684,12 +688,15 @@ class stack ChangeWhatIHold{
 For heap by-ref classes, the syntax looks like this.
 
 ```
-class heap ptr ThisIsTheScarySort{
+class heap ptr ThisIsTheScarySort{}
 
+{
+    //have to be allocated mut: this is always of type mut ThisIsTheScarySort
+    let j = new mut ThisIsTheScarySort(...)
 }
 ```
 
-These are the only classes that are allowed to hold other heap by-ref objects. Obviously they can also hold regular by value objects.
+These are the only classes that are allowed to hold other heap by-ref objects. Obviously they can also hold regular by-value objects. See the research section below.
 
 ### Generic classes
 
@@ -760,9 +767,76 @@ class heap MutateMe{
 }
 ```
 
-We are not completely sure that having the `this` argument be magic is a good idea.
+This makes us think that we are not completely sure that having the `this` argument be magic is a good idea, but we discuss this later.
 
-There are no static member functions in this language. You should simply use a normal function. We quite like the Scala `object`, but given we are free from Java's tyranny of everything being an object, we feel we may as well be a bit opinionated. Having said that, we love the way Rust does its constructors, calling them out as static functions, so maybe we will look at that.
+### Static member functions
+
+Can we just say, we hate the word 'static'. It came from C where it originally meant 'global variable that is local to the function'. C++ adopted it to mean the thing we are talking about, presumably to reduce the number of keywords; and then Java did the same from C++. We know nothing about C# but we think it made it there from Java, too. 
+
+We hate the name because it utterly fails to capture the intent, which is 'global variable or function within the namespace of a type'. In Java it is at least a bit more honest, because it also means 'function that conceptually doesn't use a vtable', but that is an implementation detail leaking into the language syntax in our arrogant opinion. We know we are not alone because Scala uses something completely different: the `object` syntax. We initially loved this but found that there was conversational ambiguity when you were talking about objects -- like, what sort of object? Rust is nice because by making `self` explicit in the function declaration it is easy to write both types of function. We would like to do that, but JavaScript `this` is so hysterically broken that we imagine programmers have a sort of wary expectation that `this` is always implicitly lurking, waiting to catch them in a pit trap, and we don't want to mess with that.
+
+So our very provisional syntax is something like this.
+
+```
+class heap Hello {
+    constructor(x: Bool) {}
+
+    //it's a global so it has let
+    shared let x = 300
+
+    shared fn staticFunction() -> Number { 
+        Hello.x + 4 
+    }
+
+    shared fn factory(x: Bool) -> Hello {
+        new Hello(x)
+    }
+}
+```
+
+`shared` is a nice keyword for a couple of reasons. Firstly, it is the same length as `static`. This is important! Secondly, it is descriptive. We worry slightly that we might regret not bagging the `shared` keyword for multi-threaded stuff later.
+
+### Alternative constructor syntaxes
+
+As we typed this document, we started to dislike the `constructor` syntax. It's long, it's clumsy, it also doesn't give you much to differentiate the primary constructor from secondary constructors. Now that we have `shared`s, we started to explore alternative syntaxes. When you read the rest of this document, try and imagine these in the other places you see classes. 
+
+#### Scala-like
+
+In this one 'exposed' members are lifted to a named tuple after the class name. There is no body to the constructor. 'derived' members are declared in the body, and must be initialized using non-member function calls. These may only have 'exposed' members or previously initialized 'unexposed' members passed into them. You can also just randomly call functions in the body.
+
+```
+fn someFunction(x: Number) -> Number x * 2
+
+class heap SomeClass(x: Number, s: String) {
+    //this is a member derived from the other members
+    private let y = someFunction(x)
+}
+
+let z = new SomeClass(5, 'hello')
+```
+
+This is much less wordy. Our experience with Scala has been, though, that derived members tend to be fiddly to implement because it is hard to create local variables: you have to jump out to a function and this means it is hard to share state between the initialization of two variables within the body of the class.
+
+#### Rust-like
+
+The Rust solution to this is similar: the object is broken down into a record and factory functions. This means you can always create a 'raw' object by using the (lovely JavaScripty) syntax of record creation. We like this, but we don't like the way there is no way to hide derived members. So our version looks like this.
+
+```
+fn someFunction(x: Number) -> Number x * 2
+
+class heap SomeClass private(x: Number, s: String, private y: Number) {
+    //note that `new` is no longer a keyword
+    shared fn new(x: Number, s: String) -> SomeClass {
+        SomeClass{x, s, y: someFunction(x)}
+    }
+}
+
+let z = SomeClass.new(5, 'hello')
+```
+
+Here `private` in front of the members tuple means only the class can do the record construction syntax. It's optional, so if you omit it you get to use the record syntax everywhere.
+
+This is wordier than the Scala solution, but we prefer this one.
 
 ### Traits again
 
@@ -1069,7 +1143,7 @@ Anyway, our strings are passed by value. We propose that they be UTF-8 NFD. We d
 
 Because of all this special syntax, strings need to be baked pretty hard into the compiler. We don't want to be clever here and if we have to do a ton of special casing then so be it, strings are hard. Having said that, take a look at the research topics.
 
-Internally, strings are probably an `__Array`, a buffer capacity, a byte length and a grapheme cluster count (the number of 'characters' in a string, and therefore the length). We won't have a character type because that just isn't a thing in Unicode: instead we will have strings which contain one grapheme cluster. (These may well be multiple unicode code points. A great example from the above blog is the family emoji 👩‍👩‍👧‍👦 -- this is seven unicode code points! A lot of editors and browsers get this wrong.) If we do a square bracket operator (`str[i]`) that will just return an option on a string.
+Internally, strings are probably an `__Array`, a buffer capacity, a byte length and a grapheme cluster count (the number of 'characters' in a string, and therefore the length). We won't have a character type because that just isn't a thing in Unicode: instead we will have strings which contain one grapheme cluster. (These may well be multiple unicode code points. A great example from the above blog is the family emoji 👩‍👩‍👧‍👦 -- this is seven Unicode code points! A lot of editors and browsers get this wrong.) If we do a square bracket operator (`str[i]`) that will just return an option on a string.
 
 ### Tuples
 
@@ -1582,40 +1656,6 @@ zeroReturnFunction 4
 
 This is now completely, brutally honest (although we have a named tuple member syntax problem, but frankly that is for another day) even at the WASM level, and we have no more `Void`. But we think any JavaScript programmer who saw this syntax would run away screaming, so we will probably never do this.
 
-### Static member functions
-
-We rather flippantly say we don't have static member functions. This is actually a problem, because then our traits can only be polymorphic with an object instance. What does this mean?
-
-It means you can't write a function like this.
-
-```
-fn genericFn<T: SomeGeneric>(x: T) -> Whatever{
-    T.someStaticFunctionToDoWithT(x)
-}
-```
-
-This is actually pretty bad. You have to do trait-based polymorphism by passing an instance of `T` down. So we probably need a way of declaring static member functions.
-
-Can we just say, we hate the word 'static'. It came from C where it originally meant 'global variable that is local to the function'. C++ adopted it to mean the thing we are talking about, presumably to reduce the number of keywords; and then Java did the same from C++. We know nothing about C# but we think it made it there from Java, too. 
-
-We hate the name because it utterly fails to capture the intent, which is 'global variable or function within the namespace of a type'. In Java it is at least a bit more honest, because it also means 'function that conceptually doesn't use a vtable', but that is an implementation detail leaking into the language syntax in our arrogant opinion. We know we are not alone because Scala uses something completely different: the `object` syntax. We initially loved this but found that there was conversational ambiguity when you were talking about objects -- like, what sort of object? Rust is nice because by making `self` explicit in the function declaration it is easy to write both types of function. We would like to do that, but JavaScript `this` is so hysterically broken that we imagine programmers have a sort of wary expectation that `this` is always implicitly lurking, waiting to catch them in a pit trap, and we don't want to mess with that.
-
-So our very provisional syntax is something like this.
-
-```
-class heap Hello {
-    constructor(x: Bool) {}
-
-    //it's a global so it has let
-    shared let x = 300
-
-    shared fn staticFunction() -> Number { 
-        Hello.x + 4 
-    }
-}
-```
-
-`shared` is a nice keyword for a couple of reasons. Firstly, it is the same length as `static`. This is important! Secondly, it is descriptive. We worry slightly that we might regret not bagging the `shared` keyword for multi threaded stuff later.
 
 ### Lambdas that mutate variables
 
@@ -1661,6 +1701,30 @@ This feels like a very leaky abstraction, so we won't be doing this initially, a
 
 ### Holding `heap ptr` classes in other classes
 
+We went through the Option in some detail previously, and discussed how we can't hold `heap ptr`s in `enum`s. 
+
+This is actually a syntax issue, not a conceptual one: we don't have a way to show that the enum is *always* mutable: after all, we can happily have mutable stack classes. What we need is a way of enforcing that the 
+
+We think we could allow `heap ptr` classes in other classes and enums. When we do this, we will tag the class as being always mutable. This needs some syntax.
+
+```
+class stack mut HoldsAnAlwaysMutableThing{
+    constructor(public x: mut ThisIsAMutClassOrAHeapPtrClass) {}
+}
+
+class heap mut AlsoHoldsAnAlwaysMutableThing{
+    constructor(x: mut ThisIsAMutClassOrAHeapPtrClass) {}
+}
+
+enum mut AgainHoldsAnAlwaysMutableThing<T>{
+    Some{
+        constructor(val: mut T) {}
+    }
+}
+```
+
+This means we will have a `MutOption` type, which is not brilliant, but maybe better than nothing?
+
 ### Promotion of functions to typeguards
 
 Cast your mind back to our Option enum. We wrote an `isSome` function. That checked the discriminator was `Some` and returned true if it was. Classic options in other languages don't find that very useful, though. You tend to write stuff like this (if for whatever reason you can't use a `map` like you are supposed to).
@@ -1696,6 +1760,37 @@ This makes the language feel even more scripty, and is therefore good: it requir
 
 ### Being honest about our type system and proofs
 
+We've talked a good game, but we are in over our heads with formal proofs. There are two distinct problems that we see need to overcome. The first is, that we have no idea what we are doing! But we are reading lots of papers.
+
+The second is related, and it's about being honest about our type system. 
+
+We pushed integer range into the compiler. It was complex and specialized, but we got nice small integers as a result. That's great. But we had to open a nasty backdoor into the type system. When we thought about this for, say, strings or arrays, it got really horrible.
+
+The fact is, though, that pushing pre- and post-conditions into the language is really, really compelling. Imagine this piece of hypothetical code.
+
+```
+if (x.beginsWith('http://')) {
+    //... presumably complain you are not secure...
+}
+```
+
+The type of x should have started as `String<false>` but in the `if` block, it should be something like `String<beginsWith('http://')>`. For that to have happened, we need two distinct sections to our generic system. The first contains other types used in the construction of that type, either bound or not bound: i.e. what we use generics for today. The second is the section which contains things we have proved. That's the section that describes how big integers are, but properly generalized.
+
+Then we need the compiler to understand that you can make deductions using this. Ideally we want this to be a syntax error.
+
+```
+//x is of type String<false>
+if (x.beginsWith('http://')) {
+    //x is now of type String<beginsWith('http://')>
+    //error, if x begins with 'http://', it can never begin with 'https'
+    if (x.beginsWith('https')) {
+
+    }
+}
+```
+
+This is very hard (basically impossible - it means some deep understanding of the string library or a lot of meta-data added in), and by dabbling with this stuff if it is very easy to make the compiler non-terminating. But the fact of being honest means we get a nice slot we can put things into later.
+
 ### Run-time type information
 
 ### Boxing pushed down to the compiler
@@ -1705,6 +1800,8 @@ This makes the language feel even more scripty, and is therefore good: it requir
 ### Inlining
 
 ### Unions
+
+### Laziness
 
 ### Docs
 
