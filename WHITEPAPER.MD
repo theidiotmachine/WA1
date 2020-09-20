@@ -63,8 +63,8 @@
   - [Modules](#modules)
   - [I can't believe you read this](#i-cant-believe-you-read-this)
 - [Research notes](#research-notes)
-  - [Trait default implementations](#trait-default-implementations)
-  - [Trait members](#trait-members)
+  - [Trait and interface default implementations](#trait-and-interface-default-implementations)
+  - [Trait and interface data members](#trait-and-interface-data-members)
   - [Trait functions with extra type conditions](#trait-functions-with-extra-type-conditions)
   - [Reflection](#reflection)
   - [Operators](#operators)
@@ -77,6 +77,7 @@
   - [Interfaces are a pair of pointers](#interfaces-are-a-pair-of-pointers)
   - [Immutable arrays don't need capacity](#immutable-arrays-dont-need-capacity)
   - [Tuples as function arguments; Void as the zero tuple](#tuples-as-function-arguments-void-as-the-zero-tuple)
+  - [Static member functions](#static-member-functions)
   - [Lambdas that mutate variables](#lambdas-that-mutate-variables)
   - [Holding `heap ptr` classes in other classes](#holding-heap-ptr-classes-in-other-classes)
   - [Promotion of functions to typeguards](#promotion-of-functions-to-typeguards)
@@ -86,6 +87,7 @@
   - [Packing in data - option sizes](#packing-in-data---option-sizes)
   - [Inlining](#inlining)
   - [Unions](#unions)
+  - [Docs](#docs)
 - [Things that WASM needs](#things-that-wasm-needs)
   - [A garbage collector](#a-garbage-collector)
   - [A good string library](#a-good-string-library)
@@ -93,9 +95,9 @@
   - [Access to TZ](#access-to-tz)
 ## Introduction 
 
-This document defines a proposed WebAssembly language. The WA1 prototype that it comes with implements some of this, and fails to implement others, but generally acts as a research project.
+This document defines the MVP for a proposed WebAssembly language. The WA1 prototype that it comes with implements some of this, and fails to implement others, but generally acts as a research project.
 
-This document is a white paper, because that sounds much better than 'random bag of terrible ideas'. We use the first person plural because it's a habit we got into when we were Queen Victoria. Also it means if we ever have a friend it will be easy to make it look like this was a group effort!
+This document is a white paper, because that sounds much better than 'random bag of terrible ideas'. We use the first person plural because Science! And it's a habit we got into when we were Queen Victoria. Also it means if we ever have a friend it will be easy to make it look like this was a group effort!
 
 We don't know what to call the language, by the way. WA1 is a terrible name, but it is better than all the others. We pronounce it 'Wah-won'.
 
@@ -1071,7 +1073,27 @@ Internally, strings are probably an `__Array`, a buffer capacity, a byte length 
 
 ### Tuples
 
-Stack objects. Need special compiler work because of the `()` syntax that everyone expects tuples to have. TypeScript uses `[]` for tuples, but that's just wrong, and even then an array and a tuple are very different under the covers. Scala does these in the standard library, but I mean come on. We can do better than that.
+Tuples are immutable stack objects. They need special compiler work because of the `()` syntax that everyone expects tuples to have. (TypeScript uses `[]` for tuples, but that's just syntactically wrong, and in this language an array and a tuple are very different under the covers.) 
+
+The type of an n-tuple is `Tupleₙ<T₀, T₁... Tₙ>`. We will generate these types at compile time as needed -- we have to, because we don't have vargs in our generics. We think we can probably use magical macro type substitution so that instead of having to write the full type name we can use round brackets.
+
+```
+//This function that returns a 2-tuple
+fn quotientAndRemainder(x: Number, divisor: Number) -> (Number, Number)
+
+//...is the same as this
+fn quotientAndRemainder(x: Number, divisor: Number) -> Tuple2<Number, Number>
+```
+
+It's worth talking about the 1-tuple. (By the way: did you know this is called a monad? Well, we didn't, we only found out researching for this. It's a pity that we didn't know this when it was cool to not understand monads.) The 1-tuple is a nightmare! It is stupidly ambiguous. With a bit of parser badness you can interpret `(1,2)` as an instance of the 2-tuple. (We deliberately don't have the comma operator to make this possible, by the way.) But `(1+2)` -- what does this mean? You can legitimately consider this to be either the type `(3)` or the type `3`. In other words, The brackets are there to construct a 1-tuple, or they are they for precedence reasons.
+
+We decided that the 1-tuple will only be really needed for meta-programming. So there is no macro for it, and you need to type out the full type.
+
+```
+let x = new Tuple1(3)
+```
+
+It's worth reading the research notes on tuples for more tuple madness, by the way.
 
 ### Lambdas
 
@@ -1353,27 +1375,64 @@ Really! You crazy person! Thanks!
 
 ## Research notes
 
-These are topics that have been set aside for a later release. Some are true research topics, and will involve mock ups and reading more papers. Others just involve reading up how other languages do them.
+These are topics that have been set aside for a later release. Some are true research topics, and will involve mock ups and reading more papers. Others just involve reading up how other languages do them. Occasionally they are just primal rage turned into markdown.
 
-### Trait default implementations
+You don't need to read this to understand the language.
 
-For the MVP we don't have trait default implementations. But, most languages do this. We should probably do that.
+### Trait and interface default implementations
 
-### Trait members
+For the MVP we don't have trait default implementations. That is, we can't implement functions in a trait. Most languages do this. We should probably do it too.
 
-Scala has trait members. Obviously, a Scala trait is really more like our `interface` but the lessons apply. Basically a regular member is syntax sugar for a `getX()` function, and a variable member also has a `setX()` function; and the code inserts those.
+We also don't have interface default implementations. These would be functions that the class pulls in when it implements the interface. If there are multiple implemented functions with the same name, this is an error, unless you override it yourself. This is more contentious and it took Java ages to do it. Probably should?
+
+### Trait and interface data members
+
+We actually could do trait data members pretty easily. It is, after all, just another contract that the type adheres to.
+
+```
+trait SomethingMaybe{
+    a: Number
+}
+
+class stack AThing {
+    constructor(a: Number) {}
+}
+
+class AThing implements SomethingMaybe {}
+```
+
+The difference is that if you wanted to implement them outside the class in the true type class way, you'd need to fake it. Then a regular member is syntax sugar for a `getX()` function, and a variable member also has a `setX()` function; and the code inserts those. It means yet more special casing and parsing. Worth it? Maybe?
+
+```
+trait SomethingMaybe{
+    a: Number
+}
+
+class stack AnotherThing {
+    constructor(b: Number) {}
+}
+
+class AnotherThing implements SomethingMaybe {
+    //magical parsing of get<X> fn means this satisfies the readonly trait data member
+    fn geta(): Number {
+        this.b
+    }
+}
+```
+
+You can do a similar thing for interfaces but means yet more special casing.
 
 ### Trait functions with extra type conditions
 
-Haskell does this and it is rather nice. It basically says that some functions in a type class need extra constraints to be satisfied before they show up. It might simplify some of the iterator stuff - that is, you could have one `IsIterable` trait with multiple `getX` functions, each one of which has a constraint. Maybe we should figure the syntax out now and implement this feature later.
+Haskell does this and it is rather nice. It basically says that some functions in a type class need extra trait constraints to be satisfied before they show up. It might simplify some of the iterator stuff - that is, you could have one `IsIterable` trait with multiple `getX` functions, each one of which has a constraint. Maybe we should figure the syntax out now and implement this feature later.
 
 ### Reflection
 
-We have no reflection. If we introduce reflection we need to make sure it doesn't break module or data encapsulation, or const correctness. That means we will be only exposing a subset of members and functions: the subset that you would be able to see at compile time. What does that mean? Does such a language exist? Java does not and it is without question the very worst aspect of that language.
+We have no reflection. If we introduce reflection we need to make sure it doesn't break module or data encapsulation, or const correctness. That means we will be only exposing a subset of members and functions: the subset that you would be able to see at compile time. What does that mean? Does such a language exist? Java allows you to break all encapsulation and it is without question the very worst aspect of that language.
 
 ### Operators
 
-There are no user defined operators in the MVP. This is actually not quite true - we will probably be writing the `Array` class in user code, so we will need to be able to describe the lvalue and rvalue versions of the index operator, `a[i]`. But there are no user-defined operators the way, say, Scala does them.
+There are no user defined operators in the MVP. (This is actually not quite true - we will probably be writing the `Array` class in user code, so we will need to be able to describe the lvalue and rvalue versions of the index operator, `a[i]`. We will use the techniques below for that, probably.) But there are no user-defined operators the way, say, Scala does them.
 
 It's worth quickly talking about Scala. The Scala operator system is really nice from a technical point of view - everything turns into a function, and the function name is encoded using some some sort of mapping from funny char to alphanumeric characters (so `++` is something like `$plus$plus`) so it can still be represented in Java; and the compiler substitutes this:
 
@@ -1459,7 +1518,104 @@ It's not clear that this is an optimization, though. It reduces the size of our 
 
 ### Immutable arrays don't need capacity
 
+Our Array type has a capacity, a length and a pointer. It's either a triple that we pass around on the stack or it's a single pointer to a buffer that we manipulate to get those two values.
+
+Thing is, we don't need a capacity for an immutable array. Like, what are you going to do with the extra memory? We mention that it's nice to have so we don't need to do a deep copy from a mutable to an immutable, but what about the case where an Array is a stack-passed triple?
+
+In this world, a mutable array is a stack-passed triple but an immutable array is a stack-passed pair. This seems fiddly as heck to implement, frankly, because we'd need to have two different run-time types for one compile-time type. But... one `size_t` back!
+
 ### Tuples as function arguments; Void as the zero tuple
+
+Strictly, mathematical functions consume one thing and transform it to another. Even more strictly, from Wiki: 'a function is a binary relation over two sets that associates every element of the first set, to exactly one element of the second set.'. If your thing is multivariate, you use a tuple: so in the formal definition, either or both of the two sets can be sets of tuples. This means a function can map from a tuple to a tuple if it wants.
+
+As programmers we are so conditioned to accept the syntax of the form `f(x,y)` that we don't think too hard about the fact that it's the function `f` applied to the tuple `(x,y)`. (Yes, Haskellers, you can look smug now.) It's particularly hard because the stupid formal notation should really be `f((x,y))` but as ~~mathematicians are fundamentally lazy~~ maths is written for people, not machines, this is always shortened to the syntax we know and love.
+
+This is slightly painful because it would be nice to be able to take a lambda, and a tuple of the appropriate shape, and apply the one to the other. Unlike other languages, this even works at a machine level - a tuple is an ordered set of data on the stack! But the syntax is a nightmare.
+
+We don't really have a good answer for this. We don't know how important it is, so we didn't bother. We wondered about something like this, where we don't use brackets. But it looks hard to parse and scary. It will stay in research for the moment.
+
+```
+fn (f: fn(Number, Number) -> Number) -> Number {
+    let t = (1, 2)
+    //the tuple is applied to the function
+    f t
+}
+```
+
+While we are on this topic, let's talk about the 0-tuple. We don't use `()` to mean a function with no return, we use `Void`, but we try and privilege the `Void` type so it is a true unit type. We obviously did this to make the language more accessible to casual programmers coming from TypeScript, but we actually don't feel too bad about it.
+
+The reason is, we think that it's a lie. At the end of the day, the only function that can return the 0-tuple is one that consumes the 0-tuple. (Yes, a multivariate function can return the empty set, but it does that by discarding its arguments, and so is not really a multivariate function.) Anything else is not a true function in the mathematical sense, so let's be honest and mark the syntax a bit differently. Having said that, we understand the appeal of having  function arguments be a tuple, and the function return be a tuple: by choosing the empty tuple as the arguments yet `Void` as the return type we are being inconsistent between the way we declare inputs and outputs. 
+
+```
+fn thisIsClearlyGoingToSideEffect() -> Void
+```
+
+But the thing that really sticks in our craw is the 1-tuple. Recall that a function is a map from a set to a set. You only bother to use tuples if your functions are multivariate. Maths can afford to be a bit hazy about this, which is why people don't write `f((x,y))`, but as parser writers we need to be rather more precise.
+
+So this means, *really* our syntax for functions should look like this.
+
+```
+//This guy might be pure (it might be a const) or might be a side effect
+fn zeroArgFunction () -> Number {...}
+
+//let's call it
+let x = zeroArgFunction()
+
+//declare a single arg function
+fn singleArgFunction x: Number -> Number {...}
+
+//call it
+let y = singleArgFunction 4
+
+//multi args look the same, but are conceptually different -- all functions 
+//consume a single argument, and this is syntax for a tuple with named members
+fn multiArgFunction(x: Number, x: Number) -> Number {...}
+
+//construct a tuple, apply it to the function
+let z = multiArgFunction(5, 6)
+
+//this is a side effecting function. Maybe it logs
+fn zeroReturnFunction x: Number -> () {...}
+
+zeroReturnFunction 4
+```
+
+This is now completely, brutally honest (although we have a named tuple member syntax problem, but frankly that is for another day) even at the WASM level, and we have no more `Void`. But we think any JavaScript programmer who saw this syntax would run away screaming, so we will probably never do this.
+
+### Static member functions
+
+We rather flippantly say we don't have static member functions. This is actually a problem, because then our traits can only be polymorphic with an object instance. What does this mean?
+
+It means you can't write a function like this.
+
+```
+fn genericFn<T: SomeGeneric>(x: T) -> Whatever{
+    T.someStaticFunctionToDoWithT(x)
+}
+```
+
+This is actually pretty bad. You have to do trait-based polymorphism by passing an instance of `T` down. So we probably need a way of declaring static member functions.
+
+Can we just say, we hate the word 'static'. It came from C where it originally meant 'global variable that is local to the function'. C++ adopted it to mean the thing we are talking about, presumably to reduce the number of keywords; and then Java did the same from C++. We know nothing about C# but we think it made it there from Java, too. 
+
+We hate the name because it utterly fails to capture the intent, which is 'global variable or function within the namespace of a type'. In Java it is at least a bit more honest, because it also means 'function that conceptually doesn't use a vtable', but that is an implementation detail leaking into the language syntax in our arrogant opinion. We know we are not alone because Scala uses something completely different: the `object` syntax. We initially loved this but found that there was conversational ambiguity when you were talking about objects -- like, what sort of object? Rust is nice because by making `self` explicit in the function declaration it is easy to write both types of function. We would like to do that, but JavaScript `this` is so hysterically broken that we imagine programmers have a sort of wary expectation that `this` is always implicitly lurking, waiting to catch them in a pit trap, and we don't want to mess with that.
+
+So our very provisional syntax is something like this.
+
+```
+class heap Hello {
+    constructor(x: Bool) {}
+
+    //it's a global so it has let
+    shared let x = 300
+
+    shared fn staticFunction() -> Number { 
+        Hello.x + 4 
+    }
+}
+```
+
+`shared` is a nice keyword for a couple of reasons. Firstly, it is the same length as `static`. This is important! Secondly, it is descriptive. We worry slightly that we might regret not bagging the `shared` keyword for multi threaded stuff later.
 
 ### Lambdas that mutate variables
 
@@ -1549,6 +1705,8 @@ This makes the language feel even more scripty, and is therefore good: it requir
 ### Inlining
 
 ### Unions
+
+### Docs
 
 ## Things that WASM needs
 
