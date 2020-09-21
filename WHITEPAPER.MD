@@ -1,7 +1,7 @@
 
 # White paper: a design document for an untitled WebAssembly programing language <!-- omit in toc -->
 
-- [Introduction](#introduction)
+- [Introduction and motivation](#introduction-and-motivation)
 - [Defining philosophical principles](#defining-philosophical-principles)
   - [1 - Request-response](#1---request-response)
   - [2 - Development speed and runtime speed](#2---development-speed-and-runtime-speed)
@@ -93,18 +93,28 @@
   - [Laziness](#laziness)
   - [Matching](#matching)
   - [Docs](#docs)
+  - [A name](#a-name)
 - [Things that WASM needs](#things-that-wasm-needs)
   - [A garbage collector](#a-garbage-collector)
   - [A good string library](#a-good-string-library)
   - [A good way of shipping runtime](#a-good-way-of-shipping-runtime)
   - [Access to TZ](#access-to-tz)
-## Introduction 
+## Introduction and motivation
+
+This all started when we saw [Colin Eberhardt's talk](https://blog.scottlogic.com/2019/05/17/webassembly-compiler.html). Because we have a bit of experience with programming language implementation we thought it would be fun to try ourselves.
+
+But as we got more into it, we actually started to ask serious questions. What is the successor to JavaScript? We believe in the right tool for the right job, and the low-level languages available in WASM did not feel right for the kind of things we have seen JavaScript used for: quick to market, slow but simple, code bases littered with messy special cases. ([Messy is good, by the way.](https://www.researchgate.net/publication/220177662_Notes_on_postmodern_programming)) We firmly believe in Rust as an amazing systems language, but we wanted a slower, more accessible thing.
+
+We looked around at what was being built. AssemblyScript is an attempt to compile TypeScript down to WebAssembly. We respect this, but think it is a mistake because TypeScript exists only to tame the wild foaming beast that is JavaScript. (We also acknowledge it will probably be the winner, for good reasons.) 
+
+So we decided to take some ideas and follow them to see where they went, and when we didn't hate them we wrote them down. We did a lot of experimentation, both actual and thought: and we ended up with a thing that we think could be used for the wild, messy code bases we know and, well, know. This document is the result.
 
 This document defines the MVP for a proposed WebAssembly language. The WA1 prototype that it comes with implements some of this, and fails to implement others, but generally acts as a research project.
 
 This document is a white paper, because that sounds much better than 'random bag of terrible ideas'. We use the first person plural because Science! And it's a habit we got into when we were Queen Victoria. Also it means if we ever have a friend it will be easy to make it look like this was a group effort!
 
 We don't know what to call the language, by the way. WA1 is a terrible name, but it is better than all the others. We pronounce it 'Wah-won'.
+
 
 ## Defining philosophical principles 
 
@@ -1883,20 +1893,44 @@ Look this is hard. It took Scala a long time to get it right. We know we probabl
 
 ### Packing in data - option sizes
 
+TBD
+
 ### Inlining
+
+TBD
 
 ### Laziness
 
+TBD
+
 ### Matching
+
+TBD
 
 ### Docs
 
+TBD
+
+### A name
+
+Look, this is the hardest thing. All the good ones are gone. We liked Wasabi for a while but it doesn't quite work. (That's why the build files are called build-wsb.json, by the way.) We have wanted to call a programming language Copper since we were programming C (and particularly so when Microsoft made 'Iron' versions of loads of languages on the CLI -- 'Iron Copper' sounds so brilliantly stupid), but the name is too conceptually close to Rust. Wasp? Waggon? Water? We have actually got some opinions on this, but you have spent enough time in our company, so we shall move on.
+
 ## Things that WASM needs
+
+This section discusses things that need to be implemented for this language to exist. It is not yet finished.
 
 ### A garbage collector
 
+TBD
+
 ### A good string library
+
+TBD
 
 ### A good way of shipping runtime
 
+TBD
+
 ### Access to TZ
+
+TBD
