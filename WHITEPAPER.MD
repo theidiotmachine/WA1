@@ -519,7 +519,7 @@ It represents a pass by value datatype, which means that there will almost certa
 ##### Heap by-ref
 This is the scary one. After carefully making a pass-by-value language we throw it all away to make a pass-by-reference data type! This exists because we pragmatically acknowledge you will probably need it sometimes.
 
-This allocation type also lives on the heap, and is almost identical to heap by-value. However, it is passed by value, meaning a copy will mostly be shallow.
+This allocation type also lives on the heap, and is almost identical to heap by-value. However, it is passed by reference, meaning a copy will always be shallow.
 
 You can't use type guards on these things - literally every function you call could mutate them, so you can't make any provable assertions. (Note, this may change later. See research topics, below.) You can, however, store these things in globals and as members in other `ref ptr` objects. (This last still needs some design.)
 
