@@ -87,10 +87,11 @@
   - [Being honest about our type system and proofs](#being-honest-about-our-type-system-and-proofs)
   - [Run-time type information](#run-time-type-information)
   - [Boxing pushed down to the compiler](#boxing-pushed-down-to-the-compiler)
+  - [Unions](#unions)
   - [Packing in data - option sizes](#packing-in-data---option-sizes)
   - [Inlining](#inlining)
-  - [Unions](#unions)
   - [Laziness](#laziness)
+  - [Matching](#matching)
   - [Docs](#docs)
 - [Things that WASM needs](#things-that-wasm-needs)
   - [A garbage collector](#a-garbage-collector)
@@ -609,7 +610,7 @@ So... why would you ever use borrowed `mut ref` over heap by-ref? The type guard
 
 ### Class declarations
 
-Having armed ourselves with all the above, we can discus class declarations. 
+Having armed ourselves with all the above, we can discuss class declarations. 
 
 The language is a postmodern language: and so, as well as including functional elements, it includes object oriented elements. But we don't much care for full-blown OO, so we restrict it somewhat.
 
@@ -883,7 +884,7 @@ trait Wrapper<T> {
 }
 
 class heap Storer<T> {
-    var t: T
+    constructor(var t: T) {}
     fn get() -> T this.t
     mut fn set(t: T) -> this.t = t
 }
@@ -1703,9 +1704,9 @@ This feels like a very leaky abstraction, so we won't be doing this initially, a
 
 We went through the Option in some detail previously, and discussed how we can't hold `heap ptr`s in `enum`s. 
 
-This is actually a syntax issue, not a conceptual one: we don't have a way to show that the enum is *always* mutable: after all, we can happily have mutable stack classes. What we need is a way of enforcing that the 
+This is actually a syntax issue, not a conceptual one: we don't have a way to show that the enum is *always* mutable: after all, we can happily have mutable stack classes. What we need is a way of enforcing that the always mutability of the containing class.
 
-We think we could allow `heap ptr` classes in other classes and enums. When we do this, we will tag the class as being always mutable. This needs some syntax.
+So we think we could allow `heap ptr` classes in other classes and enums. When we do this, we will tag the class as being always mutable. This needs some syntax.
 
 ```
 class stack mut HoldsAnAlwaysMutableThing{
@@ -1793,15 +1794,100 @@ This is very hard (basically impossible - it means some deep understanding of th
 
 ### Run-time type information
 
+Our switch statement has the ability to match against types. All the syntax is there. But, actually, it can't do much, because the only type with run-time type information is the enum.
+
+Which seems wrong, no? So the proposal is that any class that implements an interface gets a uuid. The uuid is created by using a project uuid mingled with a hash of the `<file name>.<type name>`. It will be an entry available from the vtable, will need to be exported with the class definition in the 'quick' pass. This means it's stable but unique.
+
+Then, you can also switch on an interface type to get a derived type. The switch is implemented to get the uuid of the object and a match on the uuids in the code: and it will result in a type guard to narrow the type. Easy easy easy?
+
+No, actually. Generics cause problems here. Let's talk about an interesting but weird case.
+
+```
+interface SomeInterface {}
+
+class heap SomeClass<T> implements SomeInterface {
+    constructor(x: T) {}
+}
+
+fn hello(i: SomeInterface) -> Bool {
+    switch(i) {
+        x: SomeClass<Number> => x.val > 0
+        x: SomeClass<Bool> => x.val
+        _ => false
+    }
+}
+```
+
+Bonkers, right? But it's conceptually ok because each instance of `SomeClass` is a different class. But of course, this is really hard to do in the proposed scheme. 
+
+Our very very tentative suggestion is as well as `<file name>.<type name>` we throw either the names or uuids of the types of the generic arguments into the hash too. This is non-trivial because these guys could be templated themselves and in different projects; and we will need some sort of special casing for built ins and constant types. But there is the genesis of a workable scheme here, we think.
+
 ### Boxing pushed down to the compiler
+
+Boxing is done at a user level right now. We showed a box class. Let's look at another one.
+
+```
+class heap Box<T> {
+    constructor(v: T) {}
+}
+
+class heap mut MutBox<T> {
+    constructor(v: mut T) {}
+}
+```
+
+That's great and all, and we should have one in the standard library... but we might need boxes done by the compiler. We can't decide. But, while you are pondering that, let's look at the next topic.
+
+### Unions
+
+Union types are great. With all of the above, we think we can do them!
+
+Just quickly, though, let's talk about what a union type actually is.
+
+```
+let a: Number | Bool = if(someFun(x)) {
+    true
+} else {
+    4
+}
+```
+
+This seemingly easy piece of code hides a lot of details. The first is the union type itself.
+
+A union is clearly a thing very much like an enum. It contains a discriminator and some data. The first question is, what is the discriminator? We like the idea of using the uuids we defined for runtime typing, but, actually, that could be a problem: that is a solid 128 bits of data, and clearly the discriminator of the above type needs to be only one bit! Against that, though, it might be useful to have a shared language of unions. Imagine the following code.
+
+```
+fn widenAUnion(x: Bool | String) -> Bool | String | Array<Number> {
+    x
+}
+```
+
+This is completely legit. A union should be capable of being arbitrarily widened. If we have a different discriminator set per union, we must map discriminators at run time. If we share a universal discriminator language, that widening is free. So, we will probably not have a discriminator the way an enum does. Instead, we will have a vtable like an interface.
+
+Next, boxing. We think the the union can do that for us, but the fact is the union type size will vary if we have stack allocated classes. We think this is probably OK. It means that unions may get quite big, though.
+
+Casting. A switch on the union type is straightforward to narrow, but a cast into a union type from a non-union is not free - it is a creation of the discriminator plus potentially a huge amount of other data. As a result, we think we will probably only do it explicitly. This will stop bugs in user code, particularly around `if` and `return` statements. So this remains an error, rather than implicitly producing a union.
+
+```
+//is a of type 'true | 4'? Nope, it's an error.
+let a = if(someFun(x)) {
+    true
+} else {
+    4
+}
+```
+
+Sanitization. If we have a thing of type `true | false` what is the type of that? It's a `Bool` right? But that is hard. Similarly a thing of type `1 | 2 | 3` is what... an integer? But this requires some sort of conceptual type equivalence. Because our union type is relatively heavyweight, we can't just rebuild our boolean as the union of true and false.
+
+Look this is hard. It took Scala a long time to get it right. We know we probably won't.
 
 ### Packing in data - option sizes
 
 ### Inlining
 
-### Unions
-
 ### Laziness
+
+### Matching
 
 ### Docs
 
