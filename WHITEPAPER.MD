@@ -521,7 +521,7 @@ This is the scary one. After carefully making a pass-by-value language we throw 
 
 This allocation type also lives on the heap, and is almost identical to heap by-value. However, it is passed by reference, meaning a copy will always be shallow.
 
-You can't use type guards on these things - literally every function you call could mutate them, so you can't make any provable assertions. (Note, this may change later. See research topics, below.) You can, however, store these things in globals and as members in other `ref ptr` objects. (This last still needs some design.)
+You can't use type guards on these things - literally every function you call could mutate them, so you can't make any provable assertions. (Note, this may change later. See research topics, below.) You can, however, store these things in globals and as members in other `ref ptr` objects.
 
 #### Type qualifiers
 
