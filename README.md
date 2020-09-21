@@ -1,6 +1,8 @@
 # Hello WA1
 
-WA1 is the working name for a language that compiles down to Web Assembly. 
+WA1 is the working name for a language that compiles down to Web Assembly. It is a research project. From it has come two things: the prototype language that is implemented in this project and described in this document; and the design document [WHITEPAPER.MD](https://github.com/theidiotmachine/WA1/blob/master/WHITEPAPER.MD). This white paper contains the design for a much larger scope project. It couldn't have been written without the hard slog of putting this code in place.
+
+I would like to take the opportunity to thank the authors of all the open source libraries that I use. For a full attribution list, please see the [LICENSE.md](https://github.com/theidiotmachine/WA1/blob/master/LICENSE.md).
 
 Yes, it needs a fancy name. At some point it will get that.
 
